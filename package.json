@@ -1,6 +1,6 @@
 {
   "name": "hydro-js",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "A lightweight reactive library",
   "type": "module",
   "main": "dist/library.js",
@@ -32,5 +32,10 @@
     "typesync": "^0.8.0",
     "webpack": "^5.1.3",
     "webpack-cli": "^4.0.0"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Krutsch/hydro-js.git"
+  },
+  "bugs": "https://github.com/Krutsch/hydro-js"
 }
