@@ -13,7 +13,7 @@ Akternatively you can use a CDN
 
 ```html
 <script type="module">
-  import { render, html } from "https://unpkg.com/hydro-js?module";
+  import { render, html } from "https://unpkg.com/hydro-js";
 </script>
 ```
 
