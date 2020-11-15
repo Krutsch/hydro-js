@@ -12,7 +12,7 @@ import {
   internals,
   ternary,
   setInsertDiffing,
-} from "../framework.js";
+} from "../library.js";
 
 setGlobalSchedule(false); // Simplifies testing
 
