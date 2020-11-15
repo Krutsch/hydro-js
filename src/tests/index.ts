@@ -1310,21 +1310,17 @@ describe("library", () => {
     });
 
     test("promise handling", async () => {
-      let unmount: Function;
       const promise = reactive(
         new Promise((resolve) => setTimeout(() => resolve(777), 200))
       );
 
-      observe(promise, (promise: any) => {
-        unmount = render(
-          html` <p id="async">${promise ? promise : "Loading..."}</p> `,
-          "#async"
-        );
-      });
-
-      unmount = render(
-        html`<p id="async">${getValue(promise) ? promise : "Loading..."}</p> `
-      );
+      const unmount = render(html`<p id="async">
+        ${ternary(
+          promise,
+          html`<h2>${promise}</h2>`,
+          html`<h2>Loading...</h2>`
+        )}
+      </p>`);
 
       await sleep(201);
 
@@ -1439,7 +1435,6 @@ describe("library", () => {
     });
   });
 });
-
 // --------- TESTS END ------------
 
 document.body.addEventListener("done", () => {

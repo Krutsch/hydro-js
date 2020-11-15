@@ -221,7 +221,7 @@ function html(htmlArray, // The Input String, which is splitted by the template 
 function setReactivity(node, key) {
     let attr_OR_text, match;
     if (isTextNode(node)) {
-        attr_OR_text = node.nodeValue; // textContent is always defined on Text Nodes
+        attr_OR_text = node.nodeValue; // nodeValue is (always) defined on Text Nodes
     }
     else {
         attr_OR_text = node.getAttribute(key);
@@ -245,6 +245,12 @@ function setReactivity(node, key) {
         let lastProp = properties[properties.length - 1];
         const start = match.index;
         let end = start + String(resolvedValue).length;
+        if (isNode(resolvedValue)) {
+            node.nodeValue = attr_OR_text.replace(hydroMatch, "");
+            node.after(resolvedValue);
+            setTraces(start, end, resolvedValue, lastProp, resolvedObj, key);
+            return;
+        }
         // Set Text or set Attribute
         if (isTextNode(node)) {
             const textContent = isObject(resolvedValue)
@@ -695,7 +701,9 @@ function observe(reactiveHydro, fn) {
 function ternary(condition, trueVal, falseVal, reactiveHydro = condition) {
     const checkCondition = (cond) => (!Reflect.get(condition, "reactive" /* reactive */) && isFunction(condition)
         ? condition(cond)
-        : cond)
+        : isPromise(cond)
+            ? false
+            : cond)
         ? isFunction(trueVal)
             ? trueVal()
             : trueVal
@@ -795,8 +803,11 @@ function generateProxy(obj = {}) {
                     console.error(e);
                     receiver[key] = null;
                 });
-                returnSet = Reflect.set(target, key, void 0, receiver);
+                returnSet = Reflect.set(target, key, val, receiver);
                 return returnSet;
+            }
+            else if (isNode(val)) {
+                returnSet = Reflect.set(target, key, val, receiver);
             }
             else if (isObject(val) && !isProxy(val)) {
                 returnSet = Reflect.set(target, key, generateProxy(val), receiver);
@@ -959,7 +970,7 @@ function updateDOM(keyToNodeMap, key, val, oldVal) {
     nodeToChangeMap.forEach((entry) => {
         // Circular reference in order to keep Memory low
         if (isNode(entry)) {
-            if (!entry.isConnected) {
+            if (!entry.isConnected && !isPromise(oldVal)) {
                 const tmpChange = nodeToChangeMap.get(entry);
                 nodeToChangeMap.delete(entry);
                 nodeToChangeMap.delete(tmpChange);
@@ -971,7 +982,10 @@ function updateDOM(keyToNodeMap, key, val, oldVal) {
             const node = nodeToChangeMap.get(entry);
             const [start, end, key] = change;
             let useStartEnd = false;
-            if (isTextNode(node)) {
+            if (isNode(val)) {
+                replaceElement(val, node);
+            }
+            else if (isTextNode(node)) {
                 useStartEnd = true;
                 let text = node.nodeValue;
                 if (text === String(val))

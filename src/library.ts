@@ -337,7 +337,7 @@ function setReactivity(node: Element | Text, key?: string): void {
   let attr_OR_text: string, match: RegExpMatchArray | null;
 
   if (isTextNode(node)) {
-    attr_OR_text = node.nodeValue!; // textContent is always defined on Text Nodes
+    attr_OR_text = node.nodeValue!; // nodeValue is (always) defined on Text Nodes
   } else {
     attr_OR_text = (node as Element).getAttribute(key!)!;
     if (attr_OR_text! === "") {
@@ -363,6 +363,20 @@ function setReactivity(node: Element | Text, key?: string): void {
     let lastProp = properties[properties.length - 1];
     const start = match.index!;
     let end: number = start + String(resolvedValue).length;
+
+    if (isNode(resolvedValue)) {
+      node.nodeValue = attr_OR_text.replace(hydroMatch, "");
+      node.after(resolvedValue);
+      setTraces(
+        start,
+        end,
+        resolvedValue as Element | Text,
+        lastProp,
+        resolvedObj,
+        key
+      );
+      return;
+    }
 
     // Set Text or set Attribute
     if (isTextNode(node)) {
@@ -919,6 +933,8 @@ function ternary(
     (
       !Reflect.get(condition, Placeholder.reactive) && isFunction(condition)
         ? condition(cond)
+        : isPromise(cond)
+        ? false
         : cond
     )
       ? isFunction(trueVal)
@@ -1047,8 +1063,10 @@ function generateProxy(obj = {}): hydroObject {
             console.error(e);
             receiver[key] = null;
           });
-        returnSet = Reflect.set(target, key, void 0, receiver);
+        returnSet = Reflect.set(target, key, val, receiver);
         return returnSet;
+      } else if (isNode(val)) {
+        returnSet = Reflect.set(target, key, val, receiver);
       } else if (isObject(val) && !isProxy(val)) {
         returnSet = Reflect.set(target, key, generateProxy(val), receiver);
 
@@ -1230,7 +1248,7 @@ function updateDOM(
   nodeToChangeMap.forEach((entry) => {
     // Circular reference in order to keep Memory low
     if (isNode(entry as Text)) {
-      if (!(entry as Node).isConnected) {
+      if (!(entry as Node).isConnected && !isPromise(oldVal)) {
         const tmpChange = nodeToChangeMap.get(entry)!;
         nodeToChangeMap.delete(entry);
         nodeToChangeMap.delete(tmpChange);
@@ -1244,7 +1262,9 @@ function updateDOM(
       const [start, end, key] = change;
       let useStartEnd = false;
 
-      if (isTextNode(node)) {
+      if (isNode(val)) {
+        replaceElement(val, node as Element);
+      } else if (isTextNode(node)) {
         useStartEnd = true;
         let text = node.nodeValue!;
         if (text === String(val)) return;
