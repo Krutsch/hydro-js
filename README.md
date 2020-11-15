@@ -154,6 +154,7 @@ An object with internal data / functions for testing or deeper dives for develop
 
 ## Roadmap
 
+• Add GitHub Actions for Publishing
 • Snowpack Starter Project with Prerendering<br>
 • Add Broadcast channel or alike to sync updates over multiple tabs<br>
 • Experiment with Code in Worker<br>

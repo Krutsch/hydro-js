@@ -3,12 +3,12 @@
   "version": "1.0.0",
   "description": "A lightweight reactive library",
   "type": "module",
-  "main": "dist/main.js",
+  "main": "dist/framework.js",
   "scripts": {
     "build": "tsc",
-    "dev": "concurrently \"serve\" \"tsc -w\" \"webpack ./dist/src/tests/dev.js -o ./dist/dev --mode development -w\"",
-    "test": "tsc && webpack ./dist/src/tests/index.js -o ./dist/test --mode production && node ./dist/src/tests/results.js",
-    "test:watch": "concurrently \"tsc -w\" \"webpack ./dist/src/tests/index.js -o ./dist/test --mode production -w\" \"nodemon ./dist/src/tests/results.js\"",
+    "dev": "concurrently \"serve\" \"tsc -w\"",
+    "test": "tsc && webpack ./dist/tests/index.js -o ./dist/tests --mode production && node ./dist/tests/runner.js",
+    "test:watch": "concurrently \"tsc -w\" \"webpack ./dist/tests/index.js -o ./dist/tests --mode production -w\" \"nodemon ./dist/tests/runner.js\"",
     "update": "npm update && typesync && npm i && npm outdated"
   },
   "keywords": [
