@@ -19,13 +19,15 @@ Akternatively you can use a CDN
 
 ## Examples
 
-TODO after publishing
+- [Simple Counter](https://codesandbox.io/s/hydro-js-counter-mwpf4?file=/index.js)
+- [Destructure Attributes](https://codesandbox.io/s/hydro-js-destructure-attributes-zhcx7?file=/index.js)
+- [Nested Reactivity](https://codesandbox.io/s/hydro-js-nested-reactivity-6xy42?file=/index.js)
 
 ## Concept
 
-There are multiple things this library can use. The first thing is generating HTML from strings. This is mostly done by the `Range Web API`. There are already ways to do that, like `Element.insertAdjacentHTML()`, but this has some drawbacks, as it does not create some Table Elements, like `<colgroup>`, `<tbody>`, `<tfoot>`, `<thead>` and `<tr>`. Furthermore, the html function deals with inline events, objects, {{ Mustache }} etc. Using this function will feel like writing JSX without a build step.
+There are multiple things this library can do. The first thing is generating HTML from strings. This is mostly done by the `Range Web API`. There are already ways to do that, like `Element.insertAdjacentHTML()`, but this has some drawbacks, as it does not create some Table Elements, like `<colgroup>`, `<tbody>`, `<tfoot>`, `<thead>` and `<tr>`. Furthermore, the html function deals with inline events, objects, {{ Mustache }} etc. Using this function will feel like writing JSX without a build step.
 
-The render function is used for mounting and unmounting Elements to the DOM and for executing lifecycle Hooks. Optionally, it can diff both HTML Trees and reuse Elements (optionally too).
+The render function is used for mounting and unmounting Elements to the DOM and for executing lifecycle hooks. Optionally, it can diff both HTML Trees and reuse Elements (optionally too).
 
 The functions calls for `render` and <em>DOM Updates</em> are queued and worked on during a browser's idle periods.
 
@@ -97,7 +99,8 @@ Calls the passed in `function` with `...args`, after the Element is being diffed
 args: value: `any`<br>
 returns: unique Proxy object
 
-Returns a Proxy object that can be used in `html`. The Proxy is a layer over a function that can set the value. Interally, the hydro Proxy is used and this reactive Proxy hides it's complexity.
+Returns a Proxy object that can be used in `html`. The Proxy is a layer over a function that can set the value. If the argument is a function, then the argument of the passed in function will be provided as the current value for the Proxy.
+Interally, the hydro Proxy is used and this reactive Proxy hides it's complexity.
 
 ### observe
 

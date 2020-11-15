@@ -725,11 +725,12 @@ describe("library", () => {
         const time = window.$("video")!.currentTime;
 
         const unmount = render(video2, "#video");
+        setInsertDiffing(false);
+
         await sleep(150);
 
         setTimeout(() => {
           unmount();
-          setInsertDiffing(false);
         });
 
         return time <= window.$("video")!.currentTime;
