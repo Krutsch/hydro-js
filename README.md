@@ -155,6 +155,14 @@ args:
 
 Emits an event from the EventTarget <em>who</em>. This event bubbles by default.
 
+### \$
+
+Shortcut for `querySelector`. Set on window.
+
+### \$\$
+
+Shortcut for `querySelectorAll`. Set on window.
+
 ### internals
 
 An object with internal data / functions for testing or deeper dives for developers. This only includes a `compare` function for DOM Elements by at the moment.
