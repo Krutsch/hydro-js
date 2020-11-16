@@ -5,7 +5,7 @@
 ## Installation
 
 ```javascript
-$ npm install hydro.js
+$ npm install hydro-js
 import { render, html } from 'hydro-js';
 ```
 
