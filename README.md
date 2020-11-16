@@ -52,7 +52,7 @@ Takes a string and transforms it to HTML. Used for internal bookkeeping too.
 
 args:
 
-- new Element (`DocumentFragment | Element | Text`)
+- new Element (`DocumentFragment | Element | Text | reactive Proxy`)
 - old Element (`Element | string`)
 - ? shouldschedule: boolean (default: true)
 

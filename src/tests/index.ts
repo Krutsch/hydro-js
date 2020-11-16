@@ -551,6 +551,28 @@ describe("library", () => {
     });
 
     describe("render", () => {
+      test("can render elements wrapped in reactive", async () => {
+        const number = reactive(5);
+        const elem = reactive(html`<p>${number}</p>`);
+        const unmount = render(elem);
+        const cond = getValue(elem).textContent!.includes(
+          String(getValue(number))
+        );
+
+        setTimeout(() => number(6), 50);
+
+        setTimeout(() => {
+          unset(number);
+          unset(elem);
+          unmount();
+        }, 150);
+
+        await sleep(100);
+        return (
+          cond && getValue(elem).textContent!.includes(String(getValue(number)))
+        );
+      });
+
       test("where does not exist - no render", () => {
         const elemCount = document.body.querySelectorAll("*").length;
         const unmount = render(html`<p>what</p>`, "#doesNotExist");
@@ -1317,8 +1339,8 @@ describe("library", () => {
       const unmount = render(html`<p id="async">
         ${ternary(
           promise,
-          html`<h2>${promise}</h2>`,
-          html`<h2>Loading...</h2>`
+          () => html`<h2>${promise}</h2>`,
+          () => html`<h2>Loading...</h2>`
         )}
       </p>`);
 

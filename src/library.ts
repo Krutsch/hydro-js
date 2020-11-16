@@ -93,7 +93,7 @@ const allNodeChanges = new WeakMap<Text | Element, nodeChange>(); // Maps a Node
 const elemEventFunctions = new WeakMap<Element, Array<EventListener>>(); // Stores event functions in order to compare Elements against each other.
 const reactivityMap = new WeakMap<hydroObject, keyToNodeMap>(); // Maps Proxy Objects
 const tmpSwap = new WeakMap<hydroObject, keyToNodeMap>(); // Take over keyToNodeMap if new value is a hydro Proxy. Save old reactivityMap entry here, in case for a swap operation.
-const bindMap = new WeakMap<hydroObject, Array<Element>>(); // Take over keyToNodeMap if new value is a hydro Proxy. Save old reactivityMap entry here, in case for a swap operation.
+const bindMap = new WeakMap<hydroObject, Array<Element>>(); // Bind an Element to Data. If the Data is being unset, the DOM Element disappears too.
 const onRenderMap = new WeakMap<ReturnType<typeof html>, Function>(); // Lifecycle Hook that is being called after rendering
 const onCleanupMap = new WeakMap<ReturnType<typeof html>, Function>(); // Lifecycle Hook that is being called when unmount function is being called
 const _boundFunctions = Symbol("boundFunctions"); // Cache for bound functions in Proxy, so that we create the bound version of each function only once
@@ -617,7 +617,7 @@ function compare(elem: Element, where: Element): boolean {
 }
 
 function render(
-  elem: ReturnType<typeof html>,
+  elem: ReturnType<typeof html> | reactiveObject<any>,
   where: Element | string = "",
   shouldSchedule = globalSchedule
 ): ChildNode["remove"] {
@@ -625,6 +625,11 @@ function render(
     toSchedule.push([render, elem, where, false]);
     if (!isScheduling) window.requestIdleCallback(schedule);
     return unmount(elem);
+  }
+
+  // Get elem value if elem is reactiveObject
+  if (Reflect.get(elem, Placeholder.reactive)) {
+    elem = getValue(elem);
   }
 
   // Store Elements of DocumentFragment for later unmount
@@ -1248,7 +1253,7 @@ function updateDOM(
   nodeToChangeMap.forEach((entry) => {
     // Circular reference in order to keep Memory low
     if (isNode(entry as Text)) {
-      if (!(entry as Node).isConnected && !isPromise(oldVal)) {
+      if (!(entry as Node).isConnected) {
         const tmpChange = nodeToChangeMap.get(entry)!;
         nodeToChangeMap.delete(entry);
         nodeToChangeMap.delete(tmpChange);
