@@ -165,7 +165,7 @@ Shortcut for `querySelectorAll`. Set on window.
 
 ### internals
 
-An object with internal data / functions for testing or deeper dives for developers. This only includes a `compare` function for DOM Elements by at the moment.
+An object with internal data / functions for testing or deeper dives for developers. This only includes a `compare` function for DOM Elements at the moment.
 
 ## Roadmap
 
