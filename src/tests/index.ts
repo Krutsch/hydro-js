@@ -1459,6 +1459,27 @@ describe("library", () => {
 });
 // --------- TESTS END ------------
 
+// Check Garbage Collection
+// //@ts-ignore
+// window.hydro = hydro;
+// document.body.insertAdjacentHTML("beforeend", `<p id="gc">click</p>`);
+// //@ts-ignore
+// const elem = $("#gc");
+// elem.addEventListener("click", () => render(elem, elem));
+// // In Render
+// if (elem && "id" in elem && elem.id === "gc") {
+//   console.log(
+//     allNodeChanges,
+//     elemEventFunctions,
+//     reactivityMap,
+//     tmpSwap,
+//     bindMap,
+//     onRenderMap,
+//     onCleanupMap,
+//     hydro.getObservers()
+//   );
+// }
+
 document.body.addEventListener("done", () => {
   document.body.insertAdjacentHTML("beforeend", `<div id="results"></div>`);
   results.forEach((result) => {
