@@ -113,6 +113,35 @@ const numberRegex = /\d+/g;
 const propChainRegex = /[\.\[\]]/;
 const onEventRegex = /^on/;
 
+// https://html.spec.whatwg.org/#attributes-3
+// if value for bool attr is falsy, then remove attr
+const boolAttrList = [
+  "allowfullscreen",
+  "async",
+  "autofocus",
+  "autoplay",
+  "checked",
+  "controls",
+  "default",
+  "defer",
+  "disabled",
+  "formnovalidate",
+  "hidden",
+  "ismap",
+  "itemscope",
+  "loop",
+  "multiple",
+  "muted",
+  "nomodule",
+  "novalidate",
+  "open",
+  "playsinline",
+  "readonly",
+  "required",
+  "reversed",
+  "selected",
+];
+
 function isObject(obj: object | unknown): obj is Record<string, any> {
   return obj != null && typeof obj === "object";
 }
@@ -163,6 +192,15 @@ function setHydroRecursive(obj: hydroObject, willSchedule: boolean) {
 
 function randomText() {
   return Math.random().toString(32).slice(2, 16).replace(numberRegex, "");
+}
+function setAttribute(node: Element, key: string, val: any): boolean {
+  if (boolAttrList.includes(key) && !val) {
+    node.removeAttribute(key);
+    return false;
+  }
+
+  node.setAttribute(key, val);
+  return true;
 }
 function addEventListener(
   node: Element,
@@ -456,9 +494,13 @@ function setReactivity(node: Element | Text, key?: string): void {
           if (isFunction(subVal) || isEventObject(subVal)) {
             addEventListener(node, subKey.replace(onEventRegex, ""), subVal);
           } else {
-            node.setAttribute(subKey, subVal);
             lastProp = subKey;
-            end = start + String(subVal).length;
+
+            if (setAttribute(node, subKey, subVal)) {
+              end = start + String(subVal).length;
+            } else {
+              end = start;
+            }
           }
 
           setTraces(
@@ -474,7 +516,18 @@ function setReactivity(node: Element | Text, key?: string): void {
         return; // As we set all Mappings via subKeys
       } else {
         attr_OR_text = attr_OR_text.replace(hydroMatch, resolvedValue);
-        node.setAttribute(key!, attr_OR_text);
+
+        if (
+          !setAttribute(
+            node,
+            key!,
+            attr_OR_text === String(resolvedValue)
+              ? resolvedValue
+              : attr_OR_text
+          )
+        ) {
+          attr_OR_text = attr_OR_text.replace(resolvedValue, "");
+        }
       }
     }
 
@@ -1304,16 +1357,19 @@ function updateDOM(
               removeEventListener(node, eventName, subVal);
               addEventListener(node, eventName, subVal);
             } else {
-              node.setAttribute(subKey, subVal);
+              setAttribute(node, subKey, subVal);
             }
           });
         } else {
           useStartEnd = true;
-          let attr = node.getAttribute(key!)!;
-          if (attr === String(val)) return;
-
-          attr = attr.substring(0, start) + String(val) + attr.substring(end);
-          node.setAttribute(key!, attr);
+          let attr = node.getAttribute(key!);
+          if (attr) {
+            if (attr === String(val)) return;
+            attr = attr.substring(0, start) + String(val) + attr.substring(end);
+            setAttribute(node, key!, attr === String(val) ? val : attr);
+          } else {
+            setAttribute(node, key!, val);
+          }
         }
       }
 
@@ -1343,8 +1399,8 @@ function updateDOM(
 }
 
 const hydro = generateProxy();
-window.$ = document.querySelector.bind(document);
-window.$$ = document.querySelectorAll.bind(document);
+const $ = document.querySelector.bind(document);
+const $$ = document.querySelectorAll.bind(document);
 
 let wasHidden: boolean = false;
 document.addEventListener("visibilitychange", () => {
@@ -1378,4 +1434,6 @@ export {
   getValue,
   onRender,
   onCleanup,
+  $,
+  $$,
 };

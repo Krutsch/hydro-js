@@ -31,6 +31,34 @@ const newLineRegex = /\n/g;
 const numberRegex = /\d+/g;
 const propChainRegex = /[\.\[\]]/;
 const onEventRegex = /^on/;
+// https://html.spec.whatwg.org/#attributes-3
+// if value for bool attr is falsy, then remove attr
+const boolAttrList = [
+    "allowfullscreen",
+    "async",
+    "autofocus",
+    "autoplay",
+    "checked",
+    "controls",
+    "default",
+    "defer",
+    "disabled",
+    "formnovalidate",
+    "hidden",
+    "ismap",
+    "itemscope",
+    "loop",
+    "multiple",
+    "muted",
+    "nomodule",
+    "novalidate",
+    "open",
+    "playsinline",
+    "readonly",
+    "required",
+    "reversed",
+    "selected",
+];
 function isObject(obj) {
     return obj != null && typeof obj === "object";
 }
@@ -76,6 +104,14 @@ function setHydroRecursive(obj, willSchedule) {
 }
 function randomText() {
     return Math.random().toString(32).slice(2, 16).replace(numberRegex, "");
+}
+function setAttribute(node, key, val) {
+    if (boolAttrList.includes(key) && !val) {
+        node.removeAttribute(key);
+        return false;
+    }
+    node.setAttribute(key, val);
+    return true;
 }
 function addEventListener(node, eventName, obj) {
     node.addEventListener(eventName, isFunction(obj) ? obj : obj.event, isFunction(obj) ? {} : obj.options);
@@ -323,9 +359,13 @@ function setReactivity(node, key) {
                         addEventListener(node, subKey.replace(onEventRegex, ""), subVal);
                     }
                     else {
-                        node.setAttribute(subKey, subVal);
                         lastProp = subKey;
-                        end = start + String(subVal).length;
+                        if (setAttribute(node, subKey, subVal)) {
+                            end = start + String(subVal).length;
+                        }
+                        else {
+                            end = start;
+                        }
                     }
                     setTraces(start, end, node, lastProp, resolvedValue, subKey);
                 });
@@ -333,7 +373,11 @@ function setReactivity(node, key) {
             }
             else {
                 attr_OR_text = attr_OR_text.replace(hydroMatch, resolvedValue);
-                node.setAttribute(key, attr_OR_text);
+                if (!setAttribute(node, key, attr_OR_text === String(resolvedValue)
+                    ? resolvedValue
+                    : attr_OR_text)) {
+                    attr_OR_text = attr_OR_text.replace(resolvedValue, "");
+                }
             }
         }
         setTraces(start, end, node, lastProp, resolvedObj, key);
@@ -1025,17 +1069,22 @@ function updateDOM(keyToNodeMap, key, val, oldVal) {
                             addEventListener(node, eventName, subVal);
                         }
                         else {
-                            node.setAttribute(subKey, subVal);
+                            setAttribute(node, subKey, subVal);
                         }
                     });
                 }
                 else {
                     useStartEnd = true;
                     let attr = node.getAttribute(key);
-                    if (attr === String(val))
-                        return;
-                    attr = attr.substring(0, start) + String(val) + attr.substring(end);
-                    node.setAttribute(key, attr);
+                    if (attr) {
+                        if (attr === String(val))
+                            return;
+                        attr = attr.substring(0, start) + String(val) + attr.substring(end);
+                        setAttribute(node, key, attr === String(val) ? val : attr);
+                    }
+                    else {
+                        setAttribute(node, key, val);
+                    }
                 }
             }
             if (useStartEnd) {
@@ -1060,8 +1109,8 @@ function updateDOM(keyToNodeMap, key, val, oldVal) {
     isRendering = false;
 }
 const hydro = generateProxy();
-window.$ = document.querySelector.bind(document);
-window.$$ = document.querySelectorAll.bind(document);
+const $ = document.querySelector.bind(document);
+const $$ = document.querySelectorAll.bind(document);
 let wasHidden = false;
 document.addEventListener("visibilitychange", () => {
     // The schedule logic does not work well when the document is in the background. In this case, all the changes have to be rendered at once, if the User comes back
@@ -1076,4 +1125,4 @@ document.addEventListener("visibilitychange", () => {
 const internals = {
     compare,
 };
-export { render, html, hydro, setGlobalSchedule, setReuseElements, setInsertDiffing, reactive, unset, observe, ternary, emit, internals, getValue, onRender, onCleanup, };
+export { render, html, hydro, setGlobalSchedule, setReuseElements, setInsertDiffing, reactive, unset, observe, ternary, emit, internals, getValue, onRender, onCleanup, $, $$, };

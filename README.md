@@ -1,6 +1,6 @@
 # hydro-js
 
-> A lightweight (~3.7K <em>compressed</em>) reactive UI library via template literal tags.<br>
+> A lightweight (~3.9K <em>compressed</em>) reactive UI library via template literal tags.<br>
 
 ## Installation
 
@@ -118,6 +118,8 @@ Calls the function whenenver the value of reactive changes. This is only one lay
 ### getValue
 
 args: `ReturnType<typeof reactive>`<br>
+returns: currently set value
+
 Returns the value inside the the Proxy. getValue is needed because chaining properties returns a Proxy.
 
 ### ternary
@@ -144,6 +146,14 @@ Deletes the Proxy object. This is important to keep memory low.
 
 The actual Proxy in the library. This cannot be used with `getValue`, `observe`, `ternary` or `unset` but it offers the same functionality in a different manner.
 
+properties:<br>
+
+- isProxy: `boolean` (default: true)<br>
+- asyncUpdate: `boolean`, (default: true), <em>DOM Update</em><br>
+- observe: `function`, args: `string`<br> as key
+- getObservers: `function`, returns: Map with all observer <br>
+- unobserve: `function`, args: `string | undefined`, unobserve key or all
+
 ### emit
 
 args:
@@ -157,11 +167,11 @@ Emits an event from the EventTarget <em>who</em>. This event bubbles by default.
 
 ### \$
 
-Shortcut for `querySelector`. Set on window.
+Shortcut for `querySelector`.
 
 ### \$\$
 
-Shortcut for `querySelectorAll`. Set on window.
+Shortcut for `querySelectorAll`.
 
 ### internals
 

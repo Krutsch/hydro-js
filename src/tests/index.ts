@@ -12,6 +12,7 @@ import {
   internals,
   ternary,
   setInsertDiffing,
+  $,
 } from "../library.js";
 
 setGlobalSchedule(false); // Simplifies testing
@@ -455,19 +456,19 @@ describe("library", () => {
         );
         let cond =
           //@ts-ignore
-          window.$("#text").value === "text" &&
+          $("#text")!.value === "text" &&
           //@ts-ignore
-          window.$("textarea").value === "text" &&
+          $("textarea").value === "text" &&
           //@ts-ignore
-          window.$("#checkbox1").checked &&
+          $("#checkbox1").checked &&
           //@ts-ignore
-          window.$("#checkbox2").checked &&
+          $("#checkbox2").checked &&
           //@ts-ignore
-          window.$("#radio1").checked &&
+          $("#radio1").checked &&
           //@ts-ignore
-          !window.$("#radio2").checked &&
+          !$("#radio2").checked &&
           //@ts-ignore
-          window.$("select").value === "cat";
+          $("select").value === "cat";
 
         text("haha");
         checked([]);
@@ -485,19 +486,19 @@ describe("library", () => {
         return (
           cond &&
           //@ts-ignore
-          window.$("#text").value === "haha" &&
+          $("#text").value === "haha" &&
           //@ts-ignore
-          window.$("textarea").value === "haha" &&
+          $("textarea").value === "haha" &&
           //@ts-ignore
-          !window.$("#checkbox1").checked &&
+          !$("#checkbox1").checked &&
           //@ts-ignore
-          !window.$("#checkbox2").checked &&
+          !$("#checkbox2").checked &&
           //@ts-ignore
-          !window.$("#radio1").checked &&
+          !$("#radio1").checked &&
           //@ts-ignore
-          window.$("#radio2").checked &&
+          $("#radio2").checked &&
           //@ts-ignore
-          window.$("select").value === "dog"
+          $("select").value === "dog"
         );
       });
     });
@@ -588,8 +589,8 @@ describe("library", () => {
 
         setTimeout(unmount);
         return (
-          window.$("#first")!.textContent!.includes("1") &&
-          window.$("#second")!.textContent!.includes("2")
+          $("#first")!.textContent!.includes("1") &&
+          $("#second")!.textContent!.includes("2")
         );
       });
 
@@ -624,8 +625,7 @@ describe("library", () => {
 
         setTimeout(unmount);
         return (
-          elem.isConnected &&
-          window.$("#whatWhere")!.textContent!.includes("what")
+          elem.isConnected && $("#whatWhere")!.textContent!.includes("what")
         );
       });
 
@@ -637,8 +637,8 @@ describe("library", () => {
 
         setTimeout(unmount);
         return (
-          window.$("#firstOne")!.textContent!.includes("1") &&
-          window.$("#secondOne")!.textContent!.includes("2") &&
+          $("#firstOne")!.textContent!.includes("1") &&
+          $("#secondOne")!.textContent!.includes("2") &&
           !document.body.querySelector("#hello")
         );
       });
@@ -691,7 +691,7 @@ describe("library", () => {
         setTimeout(unmount);
         return (
           elem.isConnected &&
-          window.$("#testThisWhat")!.textContent!.includes("what") &&
+          $("#testThisWhat")!.textContent!.includes("what") &&
           !document.body.querySelector("#hello4")
         );
       });
@@ -744,7 +744,7 @@ describe("library", () => {
         render(video1);
 
         await sleep(300);
-        const time = window.$("video")!.currentTime;
+        const time = $("video")!.currentTime;
 
         const unmount = render(video2, "#video");
         setInsertDiffing(false);
@@ -755,7 +755,7 @@ describe("library", () => {
           unmount();
         });
 
-        return time <= window.$("video")!.currentTime;
+        return time <= $("video")!.currentTime;
       });
 
       test("calls lifecyle hooks on deep elements", () => {
@@ -817,14 +817,14 @@ describe("library", () => {
           `
         );
         //@ts-ignore
-        window.$("#reactClick").click();
+        $("#reactClick").click();
 
         setTimeout(() => {
           unmount();
           unset(counter);
         });
 
-        return window.$("#reactClick")!.textContent!.includes("1");
+        return $("#reactClick")!.textContent!.includes("1");
       });
 
       test("reactive (object)", () => {
@@ -858,17 +858,17 @@ describe("library", () => {
           `
         );
         //@ts-ignore
-        window.$("#reactiveObj1").click();
+        $("#reactiveObj1").click();
         //@ts-ignore
-        window.$("#reactiveObj2").click();
+        $("#reactiveObj2").click();
         setTimeout(() => {
           unmount();
           unset(obj1);
           unset(obj2);
         });
         return (
-          window.$("#reactiveObj1")!.textContent!.includes("777") &&
-          window.$("#reactiveObj2")!.textContent!.includes("777")
+          $("#reactiveObj1")!.textContent!.includes("777") &&
+          $("#reactiveObj2")!.textContent!.includes("777")
         );
       });
 
@@ -921,13 +921,13 @@ describe("library", () => {
           `
         );
         //@ts-ignore
-        window.$("#reactiveArr1").click();
+        $("#reactiveArr1").click();
         //@ts-ignore
-        window.$("#reactiveArr2").click();
+        $("#reactiveArr2").click();
         //@ts-ignore
-        window.$("#reactiveArr3").click();
+        $("#reactiveArr3").click();
         //@ts-ignore
-        window.$("#reactiveArr4").click();
+        $("#reactiveArr4").click();
 
         setTimeout(() => {
           unmount();
@@ -936,10 +936,10 @@ describe("library", () => {
         });
 
         return (
-          window.$("#reactiveArr1")!.textContent!.includes("2") &&
-          window.$("#reactiveArr2")!.textContent!.includes("3") &&
-          window.$("#reactiveArr3")!.textContent!.includes("4") &&
-          window.$("#reactiveArr4")!.textContent!.includes("5")
+          $("#reactiveArr1")!.textContent!.includes("2") &&
+          $("#reactiveArr2")!.textContent!.includes("3") &&
+          $("#reactiveArr3")!.textContent!.includes("4") &&
+          $("#reactiveArr4")!.textContent!.includes("5")
         );
       });
     });
@@ -1145,14 +1145,14 @@ describe("library", () => {
       );
 
       //@ts-ignore
-      window.$("#reRender").click();
+      $("#reRender").click();
 
       setTimeout(() => {
         unmount();
         unset(isToggleOn);
       });
 
-      return window.$("#reRender")!.textContent!.includes("ON");
+      return $("#reRender")!.textContent!.includes("ON");
     });
 
     test("re-renders component - function", () => {
@@ -1174,14 +1174,14 @@ describe("library", () => {
       );
 
       //@ts-ignore
-      window.$("#reRenderF").click();
+      $("#reRenderF").click();
 
       setTimeout(() => {
         unmount();
         unset(isToggleOn);
       });
 
-      return window.$("#reRenderF")!.textContent!.includes("ON");
+      return $("#reRenderF")!.textContent!.includes("ON");
     });
   });
 
@@ -1240,6 +1240,28 @@ describe("library", () => {
       return isProxy && asyncUpdate && asyncWritable;
     });
 
+    test("will not set falsy boolean attributes", () => {
+      const checked = reactive(0);
+      const elem = html`<input checked=${checked} />` as Element;
+      const unmount = render(elem);
+
+      let cond = elem.hasAttribute("checked") === false;
+      console.log(cond);
+      checked(1);
+      cond = cond && elem.hasAttribute("checked");
+      console.log(cond);
+      checked(false);
+      cond = cond && elem.hasAttribute("checked") === false;
+      console.log(cond);
+
+      setTimeout(() => {
+        unset(checked);
+        unmount();
+      });
+
+      return cond;
+    });
+
     test("updateDOM does not remove focus", () => {
       const count = reactive(0);
       const increment = () => count(1);
@@ -1256,15 +1278,15 @@ describe("library", () => {
       const unmount = render(elem);
       //@ts-ignore
       // needed for automation
-      window.$("#thisB").focus();
+      $("#thisB").focus();
       //@ts-ignore
-      window.$("#thisB").click();
+      $("#thisB").click();
 
       onCleanup(unset, elem, count);
 
       setTimeout(unmount);
 
-      return document.activeElement === window.$("#thisB");
+      return document.activeElement === $("#thisB");
     });
 
     test("using reactive variables in one variable - variable will be updated too", () => {
@@ -1276,27 +1298,27 @@ describe("library", () => {
       );
 
       let cond =
-        window.$("#classes")!.classList.contains(getValue(dynamicOne)) &&
-        window.$("#classes")!.classList.contains(getValue(dynamicTwo));
+        $("#classes")!.classList.contains(getValue(dynamicOne)) &&
+        $("#classes")!.classList.contains(getValue(dynamicTwo));
 
       dynamicOne("foo");
       dynamicTwo("bar");
 
       cond =
         cond &&
-        !window.$("#classes")!.classList.contains("classA") &&
-        !window.$("#classes")!.classList.contains("classA") &&
-        window.$("#classes")!.classList.contains(getValue(dynamicOne)) &&
-        window.$("#classes")!.classList.contains(getValue(dynamicTwo));
+        !$("#classes")!.classList.contains("classA") &&
+        !$("#classes")!.classList.contains("classA") &&
+        $("#classes")!.classList.contains(getValue(dynamicOne)) &&
+        $("#classes")!.classList.contains(getValue(dynamicTwo));
 
       classes("peter pan");
 
       cond =
         cond &&
-        !window.$("#classes")!.classList.contains(getValue(dynamicOne)) &&
-        !window.$("#classes")!.classList.contains(getValue(dynamicTwo)) &&
-        window.$("#classes")!.classList.contains("peter") &&
-        window.$("#classes")!.classList.contains("pan");
+        !$("#classes")!.classList.contains(getValue(dynamicOne)) &&
+        !$("#classes")!.classList.contains(getValue(dynamicTwo)) &&
+        $("#classes")!.classList.contains("peter") &&
+        $("#classes")!.classList.contains("pan");
 
       setTimeout(() => {
         unmount();
@@ -1351,7 +1373,7 @@ describe("library", () => {
         unset(promise);
       }, 201);
 
-      return window.$("#async")!.textContent!.includes("777");
+      return $("#async")!.textContent!.includes("777");
     });
   });
 
@@ -1373,10 +1395,7 @@ describe("library", () => {
       });
 
       const { id: id2, href: href2 } = getValue(props);
-      return (
-        window.$(`#${id2}`)! &&
-        window.$(`#${id2}`)!.getAttribute("href") === href2
-      );
+      return $(`#${id2}`)! && $(`#${id2}`)!.getAttribute("href") === href2;
     });
 
     test("event is reactive", () => {
@@ -1396,7 +1415,7 @@ describe("library", () => {
         unset(props);
       });
 
-      return window.$("#testREvent")!.textContent === "2";
+      return $("#testREvent")!.textContent === "2";
     });
 
     test("eventObject is reactive", () => {
@@ -1412,11 +1431,11 @@ describe("library", () => {
       );
 
       //@ts-ignore
-      window.$("#testEvent").click();
+      $("#testEvent").click();
       //@ts-ignore
-      window.$("#testEvent").click();
+      $("#testEvent").click();
 
-      let cond = window.$("#testEvent")!.textContent!.includes("5");
+      let cond = $("#testEvent")!.textContent!.includes("5");
 
       testEvent({
         event: (e: any) =>
@@ -1426,16 +1445,16 @@ describe("library", () => {
       });
 
       //@ts-ignore
-      window.$("#testEvent").click();
+      $("#testEvent").click();
       //@ts-ignore
-      window.$("#testEvent").click();
+      $("#testEvent").click();
 
       setTimeout(() => {
         unset(testEvent);
         unmount();
       });
 
-      return cond && window.$("#testEvent")!.textContent!.includes("47");
+      return cond && $("#testEvent")!.textContent!.includes("47");
     });
   });
 
