@@ -1,9 +1,16 @@
 {
   "name": "hydro-js",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "A lightweight reactive library",
   "type": "module",
-  "main": "dist/library.js",
+  "main": "./dist/library.js",
+  "module": "./dist/library.js",
+  "types": "./dist/library/index.d.ts",
+  "exports": {
+    "require": "./dist/library.cjs.js",
+    "import": "./dist/library.js",
+    "default": "./dist/library.js"
+  },
   "scripts": {
     "build": "tsc",
     "dev": "concurrently \"serve\" \"tsc -w\"",
