@@ -29,15 +29,15 @@ Alternatively you can use a CDN
 
 ## Concept
 
-There are multiple things this library can do. The first thing is generating HTML from strings. This is mostly done by the `Range Web API`. There are already ways to do that, like `Element.insertAdjacentHTML()`, but this has some drawbacks, as it does not create some Table Elements, like `<colgroup>`, `<tbody>`, `<tfoot>`, `<thead>` and `<tr>`. Furthermore, the html function deals with inline events, objects, {{ Mustache }} etc. Using this function will feel like writing JSX without a build step.
+There are multiple things this library can do. The first thing is generating HTML from strings. This is mostly done by the `Range Web API`. There are already ways to do that, like `Element.insertAdjacentHTML()`, but this has some drawbacks, as it does not create Table Elements, like `<colgroup>`, `<tbody>`, `<tfoot>`, `<thead>` and `<tr>`. Furthermore, the html function deals with inline events, objects, Handlebars / {{ Mustache }} etc. Using this function will feel like writing JSX without a build step.
 
-The render function is used for mounting and unmounting Elements to the DOM and for executing lifecycle hooks. Optionally, it can diff both HTML Trees and reuse Elements (optionally too).
+The render function is used for mounting and unmounting Elements to/from the DOM and for executing lifecycle hooks. Optionally, it can diff both HTML Trees and reuse Elements (optionally too). This is not using a virtual DOM.
 
 The functions calls for `render` and <em>DOM Updates</em> are queued and worked on during a browser's idle periods.
 
-In order to make the DOM reactive, `ES6 Proxy` objects are being used to map data against an array of DOM Elements. Whenever the <em>setter</em> is being called, the Proxy will check the mapping and update the DOM granularly.
+In order to make the DOM reactive, `ES6 Proxy` objects are being used to map data against an array of DOM Elements. Whenever the <em>setter</em> is being called, the Proxy will check the mapping and update the DOM granularly. No re-renders are needed!
 
-Almost all intern maps are using WeakMaps with DOM Elements or Proxy object as keys and memory is cleared efficiently.
+Almost all intern maps are using `WeakMap` with DOM Elements or Proxy objects as keys and thus memory is cleared efficiently.
 
 ## Documentation
 
@@ -54,29 +54,29 @@ args:
 
 - new Element (`DocumentFragment | Element | Text | reactive Proxy`)
 - old Element (`Element | string`)
-- ? shouldschedule: boolean (default: true)
+- ? shouldSchedule: `boolean` (default: true)
 
 returns: `function` that unmounts the new Element
 
-Accepts the return value of `html` and replaces it with the old Element. If old Element is a string, it will resolve it with `querySelector`.
+Accepts the return value of `html` and replaces it with <em>old Element</em>. If it is a string, it will be resolved with `querySelector`.
 
 ### setGlobalSchedule
 
 args: `boolean`<br>
 
-Will enable/disable the queue for `render` and <em>DOM Updates</em>. Defaults to `true`.
+Will enable/disable the schedule logic for `render` and <em>DOM Updates</em>. Intern value defaults to `true`.
 
 ### setReuseElements
 
 args: `boolean`<br>
 
-Will enable/disable the reuse of Elements in the diffing Phase of `render`. Defaults to `true`.
+Will enable/disable the reuse of Elements in the diffing phase of `render`. Intern value defaults to `true`.
 
 ### setInsertDiffing
 
 args: `boolean`<br>
 
-If enabled, it will insert the new Element to the DOM before diffing. This will asssure that reused Elements will not lose their state (e.g. `<video>` in <em>Chrome</em>. Defaults to `false`.
+If enabled, it will insert the new DOM Tree to the DOM before diffing. This will asssure that reused Elements will not lose their state (e.g. `<video>` in <em>Chrome</em>. Intern value defaults to `false`.
 
 ### onRender
 
@@ -101,10 +101,10 @@ Calls the passed in `function` with `...args`, after the Element is being diffed
 ### reactive
 
 args: value: `any`<br>
-returns: unique Proxy object
+returns: unique `Proxy`
 
-Returns a Proxy object that can be used in `html`. The Proxy is a layer over a function that can set the value. If the argument is a function, then the argument of the passed in function will be provided as the current value for the Proxy.
-Interally, the hydro Proxy is used and this reactive Proxy hides it's complexity.
+Returns a Proxy object that can be used within `html`. The Proxy is a wrapping a function that can set the value. If the setter is called with a function then the argument of the passed in function will be provided as the current value for the Proxy.
+The actual value will be set on the hydro Proxy, but this Proxy will hide the complexity.
 
 ### observe
 
@@ -113,14 +113,14 @@ args:
 - `ReturnType<typeof reactive>`<br>
 - `function`
 
-Calls the function whenenver the value of reactive changes. This is only one layer deep but chaining properties returns a Proxy too.
+Calls the function whenenver the value of reactive changes. This is only one layer deep but chaining properties on reactive Proxys will return a Proxy too. Observing a prop of an object will look like: `observe(person.name, ...)`
 
 ### getValue
 
 args: `ReturnType<typeof reactive>`<br>
 returns: currently set value
 
-Returns the value inside the the Proxy. getValue is needed because chaining properties returns a Proxy.
+Returns the value inside the the Proxy. getValue is needed because reactive Proxy does not have access to the value.
 
 ### ternary
 
@@ -133,14 +133,13 @@ args:
 
 returns: `ReturnType<typeof reactive>`
 
-In order to track a ternary, that is being used in a template literal, this function has to be used. The proxy parameter is optional if the first parameter is a Proxy. Otherwise, a function is being executed, whenever the Proxy value changes, which will update the DOM to either the trueVal or the falseVal
-(it will also execute truVal/falseVal, if it is a function).
+In order to track a ternary in a template literal, this function has to be used. The proxy parameter is optional if the first parameter is a reactive Proxy. Otherwise, a function is being executed, whenever the Proxy value changes, which will update the DOM to either the trueVal or the falseVal.
 
 ### unset
 
 args: ReturnType<typeof reactive>
 
-Deletes the Proxy object. This is important to keep memory low.
+Deletes the Proxy object and removes Observer. This is important to keep memory low.
 
 ### hydro
 
@@ -149,9 +148,9 @@ The actual Proxy in the library. This cannot be used with `getValue`, `observe`,
 properties:<br>
 
 - isProxy: `boolean` (default: true)<br>
-- asyncUpdate: `boolean`, (default: true), <em>DOM Update</em><br>
-- observe: `function`, args: `string`<br> as key
-- getObservers: `function`, returns: Map with all observer <br>
+- asyncUpdate: `boolean`, (default: true, derived from globalSchedule)<br>
+- observe: `function`, args: `string` as key<br>
+- getObservers: `function`, returns: map with all observer <br>
 - unobserve: `function`, args: `string | undefined`, unobserve key or all
 
 ### emit

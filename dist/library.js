@@ -127,7 +127,7 @@ function removeEventListener(node, eventName, obj) {
         }
     }
 }
-// This does create <html>, <body> or <head> Elements.
+// This does not create <html>, <body> or <head> Elements.
 // That is fine because the render function only renders within a body without a where parameter
 function html(htmlArray, // The Input String, which is splitted by the template variables
 ...variables) {
