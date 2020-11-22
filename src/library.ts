@@ -75,6 +75,7 @@ const enum Placeholder {
 // Safari Polyfills
 window.requestIdleCallback =
   window.requestIdleCallback ||
+  /* c8 ignore next 3 */
   ((cb: Function, _: any, start = performance.now()) =>
     window.setTimeout(cb, 0, {
       didTimeout: false,

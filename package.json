@@ -1,6 +1,6 @@
 {
   "name": "hydro-js",
-  "version": "1.0.9",
+  "version": "1.1.0",
   "description": "A lightweight reactive library",
   "type": "module",
   "main": "./dist/library.js",
@@ -12,9 +12,9 @@
     "default": "./dist/library.js"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node utils/esm2c.js",
     "dev": "concurrently \"serve\" \"tsc -w\"",
-    "test": "tsc && webpack ./dist/tests/index.js -o ./dist/tests --mode production && node ./dist/tests/runner.js",
+    "test": "tsc && wtr test.html --node-resolve --coverage --playwright --browsers chromium firefox webkit",
     "test:watch": "concurrently \"tsc -w\" \"webpack ./dist/tests/index.js -o ./dist/tests --mode production -w\" \"nodemon ./dist/tests/runner.js\"",
     "update": "npx npm-check-updates -u && npx typesync && npm i && npm outdated"
   },
@@ -29,19 +29,17 @@
   "author": "Fabian Krutsch <f.krutsch@gmx.de> (https://krutsch.netlify.app/)",
   "license": "MIT",
   "devDependencies": {
+    "@esm-bundle/chai": "^4.1.5",
     "@types/concurrently": "^5.2.1",
-    "@types/nodemon": "^1.19.0",
+    "@web/test-runner": "^0.9.13",
+    "@web/test-runner-playwright": "^0.6.6",
     "concurrently": "^5.3.0",
-    "nodemon": "^2.0.6",
-    "playwright": "^1.6.2",
     "serve": "^11.3.2",
-    "typescript": "^4.1.2",
-    "webpack": "^5.6.0",
-    "webpack-cli": "^4.2.0"
+    "typescript": "^4.1.2"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Krutsch/hydro-js.git"
   },
-  "bugs": "https://github.com/Krutsch/hydro-js"
+  "bugs": "https://github.com/Krutsch/hydro-js/issues"
 }

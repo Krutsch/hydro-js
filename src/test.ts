@@ -13,7 +13,7 @@ import {
   ternary,
   setInsertDiffing,
   $,
-} from "../library.js";
+} from "./library.js";
 
 setGlobalSchedule(false); // Simplifies testing
 
@@ -1105,122 +1105,122 @@ describe("library", () => {
         return result === 1;
       });
     });
-  });
 
-  describe("getValue", () => {
-    test("primitive value", () => {
-      const x = reactive(4);
-      setTimeout(unset, 0, x);
-      return getValue(x) === 4;
-    });
-
-    test("object", () => {
-      const obj = { test: 4 };
-      const x = reactive(obj);
-      setTimeout(unset, 0, x);
-      return getValue(x).test === obj.test;
-    });
-
-    test("array", () => {
-      const arr = [4];
-      const x = reactive(arr);
-      setTimeout(unset, 0, x);
-      return getValue(x)[0] === arr[0];
-    });
-  });
-
-  describe("ternary", () => {
-    test("re-renders component", () => {
-      const isToggleOn = reactive(false);
-      let unmount: Function;
-
-      const handleClick = () => isToggleOn((prev: Boolean) => !prev);
-
-      unmount = render(
-        html`
-          <button id="reRender" onclick=${handleClick}>
-            ${ternary(isToggleOn, "ON", "OFF")}
-          </button>
-        `
-      );
-
-      //@ts-ignore
-      $("#reRender").click();
-
-      setTimeout(() => {
-        unmount();
-        unset(isToggleOn);
+    describe("getValue", () => {
+      test("primitive value", () => {
+        const x = reactive(4);
+        setTimeout(unset, 0, x);
+        return getValue(x) === 4;
       });
 
-      return $("#reRender")!.textContent!.includes("ON");
-    });
-
-    test("re-renders component - function", () => {
-      const isToggleOn = reactive(false);
-      let unmount: Function;
-
-      const handleClick = () => isToggleOn((prev: Boolean) => !prev);
-
-      unmount = render(
-        html`
-          <button id="reRenderF" onclick=${handleClick}>
-            ${ternary(
-              isToggleOn,
-              () => "ON",
-              () => "OFF"
-            )}
-          </button>
-        `
-      );
-
-      //@ts-ignore
-      $("#reRenderF").click();
-
-      setTimeout(() => {
-        unmount();
-        unset(isToggleOn);
+      test("object", () => {
+        const obj = { test: 4 };
+        const x = reactive(obj);
+        setTimeout(unset, 0, x);
+        return getValue(x).test === obj.test;
       });
 
-      return $("#reRenderF")!.textContent!.includes("ON");
+      test("array", () => {
+        const arr = [4];
+        const x = reactive(arr);
+        setTimeout(unset, 0, x);
+        return getValue(x)[0] === arr[0];
+      });
     });
-  });
 
-  describe("onRender", () => {
-    test("onRender", () => {
-      let count = 0;
-      const x = reactive(4);
-      const elem = html` <p id="x">${x}</p> `;
+    describe("ternary", () => {
+      test("re-renders component", () => {
+        const isToggleOn = reactive(false);
+        let unmount: Function;
 
-      onRender(() => {
-        count++;
-      }, elem);
+        const handleClick = () => isToggleOn((prev: Boolean) => !prev);
 
-      const unmount = render(elem);
+        unmount = render(
+          html`
+            <button id="reRender" onclick=${handleClick}>
+              ${ternary(isToggleOn, "ON", "OFF")}
+            </button>
+          `
+        );
 
-      setTimeout(() => {
-        unset(x);
-        unmount();
+        //@ts-ignore
+        $("#reRender").click();
+
+        setTimeout(() => {
+          unmount();
+          unset(isToggleOn);
+        });
+
+        return $("#reRender")!.textContent!.includes("ON");
       });
 
-      return count === 1;
+      test("re-renders component - function", () => {
+        const isToggleOn = reactive(false);
+        let unmount: Function;
+
+        const handleClick = () => isToggleOn((prev: Boolean) => !prev);
+
+        unmount = render(
+          html`
+            <button id="reRenderF" onclick=${handleClick}>
+              ${ternary(
+                isToggleOn,
+                () => "ON",
+                () => "OFF"
+              )}
+            </button>
+          `
+        );
+
+        //@ts-ignore
+        $("#reRenderF").click();
+
+        setTimeout(() => {
+          unmount();
+          unset(isToggleOn);
+        });
+
+        return $("#reRenderF")!.textContent!.includes("ON");
+      });
     });
-  });
 
-  describe("onCleanup", () => {
-    test("onCleanup", () => {
-      let count = 0;
-      const x = reactive(4);
-      const elem = html` <p id="x">${x}</p> `;
+    describe("onRender", () => {
+      test("onRender", () => {
+        let count = 0;
+        const x = reactive(4);
+        const elem = html` <p id="x">${x}</p> `;
 
-      onCleanup(() => {
-        count++;
-        unset(x);
-      }, elem);
+        onRender(() => {
+          count++;
+        }, elem);
 
-      const unmount = render(elem);
-      unmount();
+        const unmount = render(elem);
 
-      return count === 1;
+        setTimeout(() => {
+          unset(x);
+          unmount();
+        });
+
+        return count === 1;
+      });
+    });
+
+    describe("onCleanup", () => {
+      test("onCleanup", () => {
+        let count = 0;
+        const x = reactive(4);
+        const elem = html` <p id="x">${x}</p> `;
+
+        onCleanup(() => {
+          count++;
+          unset(x);
+        }, elem);
+
+        const unmount = render(elem);
+        unmount();
+
+        return count === 1;
+      });
     });
   });
 

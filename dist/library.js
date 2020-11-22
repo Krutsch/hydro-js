@@ -1,6 +1,7 @@
 // Safari Polyfills
 window.requestIdleCallback =
     window.requestIdleCallback ||
+        /* c8 ignore next 3 */
         ((cb, _, start = performance.now()) => window.setTimeout(cb, 0, {
             didTimeout: false,
             timeRemaining: () => Math.max(0, 5 - (performance.now() - start)),

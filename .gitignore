@@ -1,3 +1,4 @@
 node_modules
-dist/screenshots
-dist/tests
+dist/test.d.ts
+dist/test.js
+coverage
