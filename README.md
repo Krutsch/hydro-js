@@ -1,15 +1,23 @@
 # hydro-js
 
-> A lightweight (~3.9K <em>compressed</em>) reactive UI library via template literal tags.<br>
+> A lightweight (~3.7K <em>compressed</em>) reactive UI library via template literal tags.<br>
 
 ## Installation
 
-```javascript
+To bootstrap a new app:
+
+```properties
+$ npx create-hydro-app@latest <project>
+```
+
+or integrate in an existing app:
+
+```properties
 $ npm install hydro-js
 import { render, html } from 'hydro-js';
 ```
 
-Alternatively you can use a CDN
+Alternatively you can use a CDN:
 
 ```html
 <script type="module">
@@ -179,8 +187,7 @@ An object with internal data / functions for testing or deeper dives for develop
 ## Roadmap
 
 • Add GitHub Actions for Publishing<br>
-• Snowpack Starter Project with Prerendering<br>
-• Add Broadcast channel or alike to sync updates over multiple tabs<br>
 • Experiment with Code in Worker<br>
 • Experiment if the above code can be replaced by wasm<br>
+• Add Broadcast channel or alike to sync updates over multiple tabs<br>
 • Refactor some code parts, once WeakRef is supported in Safari<br>
