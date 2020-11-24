@@ -1,7 +1,7 @@
 // Safari Polyfills
 window.requestIdleCallback =
+    /* c8 ignore next 4 */
     window.requestIdleCallback ||
-        /* c8 ignore next 3 */
         ((cb, _, start = performance.now()) => window.setTimeout(cb, 0, {
             didTimeout: false,
             timeRemaining: () => Math.max(0, 5 - (performance.now() - start)),
@@ -191,9 +191,7 @@ function html(htmlArray, // The Input String, which is splitted by the template 
     });
     const DOM = parser(finalHTMLString);
     // Insert HTML Elements, which were stored in insertNodes
-    DOM.querySelectorAll("template[id^=lbInsertNodes]").forEach((template) => {
-        replaceElement(insertNodes.shift(), template);
-    });
+    DOM.querySelectorAll("template[id^=lbInsertNodes]").forEach((template) => replaceElement(insertNodes.shift(), template, false));
     // Set events and reactive behaviour(checks for {{ key }} where key is on hydro)
     const root = document.createNodeIterator(DOM, NodeFilter.SHOW_ELEMENT);
     let elem;
@@ -526,7 +524,6 @@ function render(elem, where = "", shouldSchedule = globalSchedule) {
         if (reuseElements) {
             if (isTextNode(elem)) {
                 replaceElement(elem, where);
-                runLifecyle(where, onCleanupMap);
             }
             else if (!isDocumentFragment(elem) && compare(elem, where)) {
                 // No op for equal Trees -> where is being re-used
@@ -537,7 +534,6 @@ function render(elem, where = "", shouldSchedule = globalSchedule) {
         }
         else {
             replaceElement(elem, where);
-            runLifecyle(where, onCleanupMap);
         }
     }
     runLifecyle(isDocumentFragment(elem) ? elemChildren : elem, onRenderMap);
@@ -626,7 +622,6 @@ function treeDiff(elem, where) {
                 const whereElem = sameElements[index];
                 if (compare(subElem, whereElem)) {
                     replaceElement(whereElem, subElem);
-                    runLifecyle(subElem, onCleanupMap);
                     filterTag2Elements(tag2Elements, whereElem);
                     break;
                 }
@@ -637,12 +632,12 @@ function treeDiff(elem, where) {
         where.before(...(isDocumentFragment(elem) ? Array.from(template.childNodes) : [elem]));
         where.remove();
         template.remove();
+        runLifecyle(where, onCleanupMap);
     }
     else {
         replaceElement(elem, where);
     }
     tag2Elements.clear();
-    runLifecyle(where, onCleanupMap);
 }
 function unmount(elem) {
     if (Array.isArray(elem)) {
@@ -661,9 +656,11 @@ function removeElement(elem) {
         console.error(`Element ${elem} is not in the DOM anymore.`);
     }
 }
-function replaceElement(elem, where) {
+function replaceElement(elem, where, withLifecycle = true) {
     where.before(elem);
     where.remove();
+    if (withLifecycle)
+        runLifecyle(where, onCleanupMap);
 }
 function schedule(deadline) {
     isScheduling = true;
@@ -832,10 +829,16 @@ function generateProxy(obj = {}) {
                 if (isObject(oldVal) && isProxy(oldVal)) {
                     reactivityMap.delete(oldVal);
                     if (bindMap.has(oldVal)) {
-                        bindMap.get(oldVal).forEach((node) => node.remove());
+                        bindMap.get(oldVal).forEach(removeElement);
                         bindMap.delete(oldVal);
                     }
                     cleanProxy(oldVal);
+                }
+                else {
+                    if (bindMap.has(receiver)) {
+                        bindMap.get(receiver).forEach(removeElement);
+                        bindMap.delete(receiver);
+                    }
                 }
                 returnSet = Reflect.deleteProperty(receiver, key);
                 return returnSet;
@@ -1114,12 +1117,15 @@ const $ = document.querySelector.bind(document);
 const $$ = document.querySelectorAll.bind(document);
 let wasHidden = false;
 document.addEventListener("visibilitychange", () => {
+    /* c8 ignore next 10 */
     // The schedule logic does not work well when the document is in the background. In this case, all the changes have to be rendered at once, if the User comes back
     if (wasHidden === true && document.hidden === false) {
         while (toSchedule.length) {
             const [fn, ...args] = toSchedule.shift();
+            // TODO maybe raf?
             fn(...args);
         }
+        isScheduling = false;
     }
     wasHidden = document.hidden;
 });

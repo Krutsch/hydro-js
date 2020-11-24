@@ -3,8 +3,10 @@ import {
   hydro,
   render,
   setGlobalSchedule,
+  setReuseElements,
   reactive,
   unset,
+  emit,
   observe,
   getValue,
   onRender,
@@ -42,6 +44,29 @@ const results: Array<{ name: string; success: boolean }> = [];
 // --------- TESTS START ------------
 describe("library", () => {
   describe("functions", () => {
+    describe("setReuseElements", () => {
+      test("code coverage", () => {
+        setReuseElements(true);
+        return true;
+      });
+    });
+
+    describe("setGlobalSchedule", () => {
+      test("sets asnycUpdate on hydro objects", () => {
+        hydro.schedule = {};
+        let cond = hydro.schedule.asyncUpdate === false;
+        setGlobalSchedule(true);
+        cond = cond && hydro.schedule.asyncUpdate === true;
+        setGlobalSchedule(false);
+
+        setTimeout(() => {
+          hydro.schedule = null;
+        });
+
+        return cond && hydro.schedule.asyncUpdate === false;
+      });
+    });
+
     describe("html", () => {
       // Test all HTML Elements expect html, head and body
       // https://developer.mozilla.org/en-US/docs/Web/HTML/Element
@@ -470,6 +495,13 @@ describe("library", () => {
           //@ts-ignore
           $("select").value === "cat";
 
+        // Code Coverage
+        $("#radio1")!.dispatchEvent(new Event("change"));
+        //@ts-ignore
+        $("#checkbox1")!.click();
+        //@ts-ignore
+        $("#checkbox1")!.click();
+
         text("haha");
         checked([]);
         checkedRadio("B");
@@ -500,6 +532,48 @@ describe("library", () => {
           //@ts-ignore
           $("select").value === "dog"
         );
+      });
+
+      test("works with different events on one element", () => {
+        let a, b, c;
+        const elem = html`<p
+          ona=${() => (a = true)}
+          onb=${{ event: () => (b = true), options: {} }}
+          onc=${() => (c = true)}
+        >
+          test
+        </p>`;
+
+        emit("a", {}, elem);
+        emit("b", {}, elem);
+        emit("c", {}, elem);
+
+        return !!a && !!b && !!c;
+      });
+
+      test("stringifies object", () => {
+        hydro.x = { a: 3 };
+        const elem = html`<p>{{x}}</p>`;
+        setTimeout(() => (hydro.x = null));
+        return elem.textContent === '{"a":3}';
+      });
+
+      test("removes bind element", () => {
+        hydro.y = { a: 3 };
+        const elem = html`<p bind="{{y}}">asd</p>`;
+        render(elem);
+        hydro.y = null;
+        return !elem.isConnected;
+      });
+
+      test("removes bind element with multiple elements", () => {
+        hydro.z = 4;
+        const elem = html`<p bind="{{z}}">asd</p>`;
+        const elem2 = html`<p bind="{{z}}">asd2</p>`;
+        render(elem);
+        render(elem2);
+        hydro.z = null;
+        return !elem.isConnected && !elem2.isConnected;
       });
     });
 
@@ -1246,13 +1320,10 @@ describe("library", () => {
       const unmount = render(elem);
 
       let cond = elem.hasAttribute("checked") === false;
-      console.log(cond);
       checked(1);
       cond = cond && elem.hasAttribute("checked");
-      console.log(cond);
       checked(false);
       cond = cond && elem.hasAttribute("checked") === false;
-      console.log(cond);
 
       setTimeout(() => {
         unset(checked);
@@ -1260,6 +1331,21 @@ describe("library", () => {
       });
 
       return cond;
+    });
+
+    test("will not set falsy boolean attributes on obj", () => {
+      const checked = reactive({ disabled: "" });
+      const attr = reactive({ id: "boolAttr" });
+      const elem = html`<input ${checked} ${attr} />` as Element;
+      const unmount = render(elem);
+
+      setTimeout(() => {
+        unset(checked);
+        unset(attr);
+        unmount();
+      });
+
+      return !elem.hasAttribute("checked");
     });
 
     test("updateDOM does not remove focus", () => {
@@ -1522,6 +1608,7 @@ async function test(name: string, testFn: () => boolean | Promise<boolean>) {
   if (await testFn()) {
     results.push({ name, success: true });
   } else {
+    console.log(`Failed at: ${name}`);
     results.push({ name, success: false });
   }
 }

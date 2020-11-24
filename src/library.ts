@@ -74,8 +74,8 @@ const enum Placeholder {
 
 // Safari Polyfills
 window.requestIdleCallback =
+  /* c8 ignore next 4 */
   window.requestIdleCallback ||
-  /* c8 ignore next 3 */
   ((cb: Function, _: any, start = performance.now()) =>
     window.setTimeout(cb, 0, {
       didTimeout: false,
@@ -305,9 +305,9 @@ function html(
   const DOM = parser(finalHTMLString);
 
   // Insert HTML Elements, which were stored in insertNodes
-  DOM.querySelectorAll("template[id^=lbInsertNodes]").forEach((template) => {
-    replaceElement(insertNodes.shift()!, template);
-  });
+  DOM.querySelectorAll("template[id^=lbInsertNodes]").forEach((template) =>
+    replaceElement(insertNodes.shift()!, template, false)
+  );
 
   // Set events and reactive behaviour(checks for {{ key }} where key is on hydro)
   const root = document.createNodeIterator(DOM, NodeFilter.SHOW_ELEMENT);
@@ -707,7 +707,6 @@ function render(
     if (reuseElements) {
       if (isTextNode(elem)) {
         replaceElement(elem, where as Element);
-        runLifecyle(where as Element, onCleanupMap);
       } else if (!isDocumentFragment(elem) && compare(elem, where as Element)) {
         // No op for equal Trees -> where is being re-used
       } else {
@@ -715,7 +714,6 @@ function render(
       }
     } else {
       replaceElement(elem, where as Element);
-      runLifecyle(where as Element, onCleanupMap);
     }
   }
 
@@ -841,7 +839,6 @@ function treeDiff(elem: Element | DocumentFragment, where: Element) {
 
         if (compare(subElem, whereElem)) {
           replaceElement(whereElem, subElem);
-          runLifecyle(subElem, onCleanupMap);
           filterTag2Elements(tag2Elements, whereElem);
           break;
         }
@@ -855,11 +852,11 @@ function treeDiff(elem: Element | DocumentFragment, where: Element) {
     );
     where.remove();
     template!.remove();
+    runLifecyle(where, onCleanupMap);
   } else {
     replaceElement(elem, where);
   }
   tag2Elements.clear();
-  runLifecyle(where, onCleanupMap);
 }
 
 function unmount<T = ReturnType<typeof html> | Array<ChildNode>>(elem: T) {
@@ -879,9 +876,15 @@ function removeElement(elem: Text | Element) {
   }
 }
 
-function replaceElement(elem: Node, where: Element) {
+function replaceElement(
+  elem: Node,
+  where: Element,
+  withLifecycle: boolean = true
+) {
   where.before(elem);
   where.remove();
+
+  if (withLifecycle) runLifecyle(where, onCleanupMap);
 }
 
 function schedule(deadline: RequestIdleCallbackDeadline): void {
@@ -1100,10 +1103,15 @@ function generateProxy(obj = {}): hydroObject {
         if (isObject(oldVal) && isProxy(oldVal)) {
           reactivityMap.delete(oldVal);
           if (bindMap.has(oldVal)) {
-            bindMap.get(oldVal)!.forEach((node) => node.remove());
+            bindMap.get(oldVal)!.forEach(removeElement);
             bindMap.delete(oldVal);
           }
           cleanProxy(oldVal);
+        } else {
+          if (bindMap.has(receiver)) {
+            bindMap.get(receiver)!.forEach(removeElement);
+            bindMap.delete(receiver);
+          }
         }
 
         returnSet = Reflect.deleteProperty(receiver, key);
@@ -1405,14 +1413,16 @@ const $$ = document.querySelectorAll.bind(document);
 
 let wasHidden: boolean = false;
 document.addEventListener("visibilitychange", () => {
+  /* c8 ignore next 10 */
   // The schedule logic does not work well when the document is in the background. In this case, all the changes have to be rendered at once, if the User comes back
   if (wasHidden === true && document.hidden === false) {
     while (toSchedule.length) {
       const [fn, ...args] = toSchedule.shift()!;
+      // TODO maybe raf?
       fn(...args);
     }
+    isScheduling = false;
   }
-
   wasHidden = document.hidden;
 });
 
