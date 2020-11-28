@@ -214,21 +214,6 @@ function addEventListener(
     isFunction(obj) ? {} : obj.options
   );
 }
-function removeEventListener(
-  node: Element,
-  eventName: string,
-  obj: EventObject | EventListener
-) {
-  const _boundFunctionsMap = Reflect.get(hydro, _boundFunctions);
-
-  if (_boundFunctionsMap?.has(obj)) {
-    node.removeEventListener(eventName, _boundFunctionsMap.get(obj));
-  } else {
-    if (isFunction(obj) || isEventObject(obj)) {
-      node.removeEventListener(eventName, isFunction(obj) ? obj : obj.event);
-    }
-  }
-}
 // This does not create <html>, <body> or <head> Elements.
 // That is fine because the render function only renders within a body without a where parameter
 function html(
@@ -439,7 +424,7 @@ function setReactivity(node: Element | Text, key?: string): void {
         } else {
           bindMap.set(proxy, [node]);
         }
-        return;
+        continue;
       } else if (key === Placeholder.twoWay) {
         // Same behavior as v-model in https://v3.vuejs.org/guide/forms.html#basic-usage
         const changeAttrVal = (eventName: string) => {
@@ -514,7 +499,7 @@ function setReactivity(node: Element | Text, key?: string): void {
           );
         });
 
-        return; // As we set all Mappings via subKeys
+        continue; // As we set all Mappings via subKeys
       } else {
         attr_OR_text = attr_OR_text.replace(hydroMatch, resolvedValue);
 
@@ -605,16 +590,20 @@ function resolveObject(propertyArray: Array<keyof any>): [any, hydroObject] {
   return [value, prev];
 }
 
-function compareEvents(elem: Element | Text, where: Element | Text): boolean {
+function compareEvents(
+  elem: Element | Text,
+  where: Element | Text,
+  onlyTextChildren?: boolean
+): boolean {
   const elemFunctions = [];
   const whereFunctions = [];
 
   if (isTextNode(elem)) {
-    if (onCleanupMap.has(elem)) {
-      elemFunctions.push(onCleanupMap.get(elem)!);
-    }
     if (onRenderMap.has(elem)) {
       elemFunctions.push(onRenderMap.get(elem)!);
+    }
+    if (onCleanupMap.has(elem)) {
+      elemFunctions.push(onCleanupMap.get(elem)!);
     }
     if (onRenderMap.has(where)) {
       whereFunctions.push(onRenderMap.get(where)!);
@@ -653,26 +642,46 @@ function compareEvents(elem: Element | Text, where: Element | Text): boolean {
   if (String(elemFunctions) !== String(whereFunctions)) return false;
 
   for (let i = 0; i < elem.childNodes.length; i++) {
-    if (
-      !compareEvents(
-        elem.childNodes[i] as Element | Text,
-        where.childNodes[i] as Element | Text
-      )
-    ) {
-      return false;
+    if (onlyTextChildren) {
+      if (isTextNode(elem.childNodes[i])) {
+        if (
+          !compareEvents(
+            elem.childNodes[i] as Text,
+            where.childNodes[i] as Text,
+            onlyTextChildren
+          )
+        ) {
+          return false;
+        }
+      }
+    } else {
+      if (
+        !compareEvents(
+          elem.childNodes[i] as Element | Text,
+          where.childNodes[i] as Element | Text
+        )
+      ) {
+        return false;
+      }
     }
   }
 
   return true;
 }
 
-function compare(elem: Element, where: Element): boolean {
-  return elem.isEqualNode(where) && compareEvents(elem, where);
+function compare(
+  elem: Element,
+  where: Element,
+  onlyTextChildren?: boolean
+): boolean {
+  return (
+    elem.isEqualNode(where) && compareEvents(elem, where, onlyTextChildren)
+  );
 }
 
 function render(
   elem: ReturnType<typeof html> | reactiveObject<any>,
-  where: Element | string = "",
+  where: ReturnType<typeof html> | string = "",
   shouldSchedule = globalSchedule
 ): ChildNode["remove"] {
   if (shouldSchedule) {
@@ -704,32 +713,34 @@ function render(
       }
     }
 
-    if (reuseElements) {
+    if (!reuseElements) {
+      replaceElement(elem, where as Element);
+    } else {
       if (isTextNode(elem)) {
         replaceElement(elem, where as Element);
-      } else if (!isDocumentFragment(elem) && compare(elem, where as Element)) {
-        // No op for equal Trees -> where is being re-used
-      } else {
+      } else if (isDocumentFragment(elem) || !compare(elem, where as Element)) {
         treeDiff(elem, where as Element);
       }
-    } else {
-      replaceElement(elem, where as Element);
     }
   }
 
-  runLifecyle(isDocumentFragment(elem) ? elemChildren! : elem, onRenderMap);
+  runLifecyle(elem, onRenderMap);
+  elemChildren!?.forEach((subElem) => {
+    runLifecyle(subElem as Element | Text, onRenderMap);
+  });
 
   isRendering = false;
   return unmount(isDocumentFragment(elem) ? elemChildren! : elem);
 }
 
 function executeLifecycle(
-  node: Text | Element,
+  node: ReturnType<typeof html>,
   lifecyleMap: typeof onRenderMap | typeof onCleanupMap
 ) {
   if (lifecyleMap.has(node)) {
     const fn = lifecyleMap.get(node)!;
 
+    /* c8 ignore next 3 */
     if (globalSchedule) {
       window.requestIdleCallback(fn);
     } else {
@@ -740,7 +751,7 @@ function executeLifecycle(
   }
 }
 function runLifecyle(
-  node: Array<ChildNode> | Element | Text,
+  node: ReturnType<typeof html>,
   lifecyleMap: typeof onRenderMap | typeof onCleanupMap
 ) {
   if (
@@ -749,17 +760,7 @@ function runLifecyle(
   )
     return;
 
-  if (Array.isArray(node)) {
-    node.forEach((subNode) =>
-      runLifecyle(subNode as Element | Text, lifecyleMap)
-    );
-    return;
-  }
-
-  if (isTextNode(node as Text)) {
-    executeLifecycle(node as Text, lifecyleMap);
-    return;
-  }
+  executeLifecycle(node, lifecyleMap);
 
   const elements = document.createNodeIterator(
     node as Node,
@@ -837,7 +838,7 @@ function treeDiff(elem: Element | DocumentFragment, where: Element) {
       for (let index = 0; index < sameElements.length; index++) {
         const whereElem = sameElements[index];
 
-        if (compare(subElem, whereElem)) {
+        if (compare(subElem, whereElem, true)) {
           replaceElement(whereElem, subElem);
           filterTag2Elements(tag2Elements, whereElem);
           break;
@@ -871,6 +872,7 @@ function removeElement(elem: Text | Element) {
   if (elem.isConnected) {
     elem.remove();
     runLifecyle(elem, onCleanupMap);
+    /* c8 ignore next 4 */
   } else {
     console.error(`Element ${elem} is not in the DOM anymore.`);
   }
@@ -1037,16 +1039,7 @@ function onRender(
   ...args: Array<any>
 ) {
   calledOnRender = true;
-  if (isDocumentFragment(elem)) {
-    Array.from(elem.childNodes, (child) => {
-      onRenderMap.set(
-        child as Element | Text,
-        args.length ? fn.bind(fn, ...args) : fn
-      );
-    });
-  } else {
-    onRenderMap.set(elem, args.length ? fn.bind(fn, ...args) : fn);
-  }
+  onRenderMap.set(elem, args.length ? fn.bind(fn, ...args) : fn);
 }
 let calledOnCleanup = false;
 function onCleanup(
@@ -1055,16 +1048,7 @@ function onCleanup(
   ...args: Array<any>
 ) {
   calledOnCleanup = true;
-  if (isDocumentFragment(elem)) {
-    Array.from(elem.childNodes, (child) => {
-      onCleanupMap.set(
-        child as Element | Text,
-        args.length ? fn.bind(fn, ...args) : fn
-      );
-    });
-  } else {
-    onCleanupMap.set(elem, args.length ? fn.bind(fn, ...args) : fn);
-  }
+  onCleanupMap.set(elem, args.length ? fn.bind(fn, ...args) : fn);
 }
 
 // Core of the library
@@ -1357,13 +1341,23 @@ function updateDOM(
           }
         } else if (isFunction(val) || isEventObject(val)) {
           const eventName = key!.replace(onEventRegex, "");
-          removeEventListener(node, eventName, val);
+          if (isFunction(val) || isEventObject(val)) {
+            node.removeEventListener(
+              eventName,
+              isFunction(val) ? val : val.event
+            );
+          }
           addEventListener(node, eventName, val);
         } else if (isObject(val)) {
           Object.entries(val).forEach(([subKey, subVal]) => {
             if (isFunction(subVal) || isEventObject(subVal)) {
               const eventName = subKey.replace(onEventRegex, "");
-              removeEventListener(node, eventName, subVal);
+              if (isFunction(subVal) || isEventObject(subVal)) {
+                node.removeEventListener(
+                  eventName,
+                  isFunction(subVal) ? subVal : subVal.event
+                );
+              }
               addEventListener(node, eventName, subVal);
             } else {
               setAttribute(node, subKey, subVal);

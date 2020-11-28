@@ -35,8 +35,8 @@ declare function setReuseElements(willReuse: boolean): void;
 declare function setInsertDiffing(willInsert: boolean): void;
 declare function html(htmlArray: TemplateStringsArray, // The Input String, which is splitted by the template variables
 ...variables: Array<any>): Element | DocumentFragment | Text;
-declare function compare(elem: Element, where: Element): boolean;
-declare function render(elem: ReturnType<typeof html> | reactiveObject<any>, where?: Element | string, shouldSchedule?: boolean): ChildNode["remove"];
+declare function compare(elem: Element, where: Element, onlyTextChildren?: boolean): boolean;
+declare function render(elem: ReturnType<typeof html> | reactiveObject<any>, where?: ReturnType<typeof html> | string, shouldSchedule?: boolean): ChildNode["remove"];
 declare function reactive<T>(initial: T): reactiveObject<T>;
 declare function unset(reactiveHydro: reactiveObject<any>): void;
 declare function observe(reactiveHydro: reactiveObject<any>, fn: Function): void;

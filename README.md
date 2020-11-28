@@ -1,6 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="104" height="20" role="img" aria-label="coverage: 100%"><title>coverage: 100%</title><linearGradient id="s" x2="0" y2="100%"><stop offset="0" stop-color="#bbb" stop-opacity=".1"/><stop offset="1" stop-opacity=".1"/></linearGradient><clipPath id="r"><rect width="104" height="20" rx="3" fill="#fff"/></clipPath><g clip-path="url(#r)"><rect width="61" height="20" fill="#555"/><rect x="61" width="43" height="20" fill="#4c1"/><rect width="104" height="20" fill="url(#s)"/></g><g fill="#fff" text-anchor="middle" font-family="Verdana,Geneva,DejaVu Sans,sans-serif" text-rendering="geometricPrecision" font-size="110"><text aria-hidden="true" x="315" y="150" fill="#010101" fill-opacity=".3" transform="scale(.1)" textLength="510">coverage</text><text x="315" y="140" transform="scale(.1)" fill="#fff" textLength="510">coverage</text><text aria-hidden="true" x="815" y="150" fill="#010101" fill-opacity=".3" transform="scale(.1)" textLength="330">100%</text><text x="815" y="140" transform="scale(.1)" fill="#fff" textLength="330">100%</text></g></svg>
+
 # hydro-js
 
-> A lightweight (~3.7K <em>compressed</em>) reactive UI library via template literal tags.<br>
+> A lightweight (~3.7K <em>compressed</em>) reactive UI library via template literal tags.<br> Support in all modern Browsers.
 
 ## Installation
 
@@ -60,8 +62,8 @@ Takes a string and transforms it to HTML. Used for internal bookkeeping too.
 
 args:
 
-- new Element (`DocumentFragment | Element | Text | reactive Proxy`)
-- old Element (`Element | string`)
+- new Element (`ReturnType<typeof html> | reactive Proxy`)
+- old Element (`ReturnType<typeof html> | string`)
 - ? shouldSchedule: `boolean` (default: true)
 
 returns: `function` that unmounts the new Element
@@ -91,7 +93,7 @@ If enabled, it will insert the new DOM Tree to the DOM before diffing. This will
 args:
 
 - `function`
-- elem (`DocumentFragment | Element | Text`)
+- elem (`ReturnType<typeof html>`)
 - ...args for passed `function`
 
 Calls the passed in `function` with `...args`, after the Element is being inserted by `render`;
@@ -101,7 +103,7 @@ Calls the passed in `function` with `...args`, after the Element is being insert
 args:
 
 - `function`
-- elem (`DocumentFragment | Element | Text`)
+- elem (`ReturnType<typeof html>`)
 - ...args for passed `function`
 
 Calls the passed in `function` with `...args`, after the Element is being diffed out by `render` or removed by `unmount`;

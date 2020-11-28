@@ -17,6 +17,12 @@ import {
   $,
 } from "./library.js";
 
+// Local debugging
+//@ts-ignore
+window.html = html;
+//@ts-ignore
+window.render = render;
+
 setGlobalSchedule(false); // Simplifies testing
 
 const sleep = (time: number) =>
@@ -575,9 +581,94 @@ describe("library", () => {
         hydro.z = null;
         return !elem.isConnected && !elem2.isConnected;
       });
+
+      test("super rare manipulation of DOM Element", () => {
+        hydro.abc = { id: "jja", href: "cool" };
+        const elem = html`<a id="{{abc.id}}" href="{{abc.href}}"
+          >asdad</a
+        >` as HTMLAnchorElement;
+        elem.id = "{{abc.id}}";
+        elem.href = "{{abc.href}}";
+        html`<p>${elem}</p>`;
+        setTimeout(() => (hydro.abc = null));
+        return true;
+      });
     });
 
     describe("compare", () => {
+      test("lifecycle hooks and text Nodes - false - length", () => {
+        const renderFn1 = () => 2;
+        const renderFn2 = () => 3;
+        const cleanFn1 = () => 3;
+
+        const elem1 = html`a` as Element;
+        const elem2 = html`a` as Element;
+
+        onRender(renderFn1, elem1);
+        onRender(renderFn2, elem2);
+        onCleanup(cleanFn1, elem1);
+
+        return internals.compare(elem1, elem2) === false;
+      });
+
+      test("lifecycle hooks and text Nodes - false - string", () => {
+        const renderFn1 = () => 2;
+        const renderFn2 = () => 3;
+        const cleanFn1 = () => 3;
+        const cleanFn2 = () => 3;
+
+        const elem1 = html`a` as Element;
+        const elem2 = html`a` as Element;
+
+        onRender(renderFn1, elem1);
+        onRender(renderFn2, elem2);
+        onCleanup(cleanFn1, elem1);
+        onCleanup(cleanFn2, elem2);
+
+        return internals.compare(elem1, elem2) === false;
+      });
+
+      test("returns false if child has different lifecycle hooks - onlyTextChildren", () => {
+        const subelem1 = html`hello`;
+        onRender(() => 2, subelem1);
+        const elem1 = html`<p>${subelem1}</p>` as Element;
+
+        const subelem2 = html`hello`;
+        onRender(() => 3, subelem2);
+        const elem2 = html`<p>${subelem2}</p>` as Element;
+
+        return internals.compare(elem1, elem2, true) === false;
+      });
+
+      test("returns false if child has different lifecycle hooks", () => {
+        const subelem1 = html`hello`;
+        onRender(() => 2, subelem1);
+        const elem1 = html`<p>${subelem1}</p>` as Element;
+
+        const subelem2 = html`hello`;
+        onRender(() => 3, subelem2);
+        const elem2 = html`<p>${subelem2}</p>` as Element;
+
+        return internals.compare(elem1, elem2) === false;
+      });
+
+      test("lifecycle hooks and text Nodes - true", () => {
+        const renderFn1 = () => 2;
+        const renderFn2 = () => 2;
+        const cleanFn1 = () => 3;
+        const cleanFn2 = () => 3;
+
+        const elem1 = html`a` as Element;
+        const elem2 = html`a` as Element;
+
+        onRender(renderFn1, elem1);
+        onRender(renderFn2, elem2);
+        onCleanup(cleanFn1, elem1);
+        onCleanup(cleanFn2, elem2);
+
+        return internals.compare(elem1, elem2) === true;
+      });
+
       test("same functions return true", () => {
         const fn1 = () => 2;
         const fn2 = () => 2;
@@ -626,6 +717,64 @@ describe("library", () => {
     });
 
     describe("render", () => {
+      test("does diffing with documentFragment", () => {
+        setInsertDiffing(true);
+        const elem1 = html`it`;
+        const elem2 = html`<p>hello</p>
+          <p>world</p>`;
+        render(elem1);
+        const unmount = render(elem2, elem1);
+        setInsertDiffing(false);
+
+        setTimeout(unmount);
+
+        return (
+          !document.body.textContent!.includes("hi") &&
+          document.body.textContent!.includes("hello") &&
+          document.body.textContent!.includes("world")
+        );
+      });
+
+      test("do not reuseElements", () => {
+        setReuseElements(false);
+        const elem1 = html`a`;
+        const elem2 = html`a`;
+        render(elem1);
+        const unmount = render(elem2, elem1 as Element);
+
+        setTimeout(unmount);
+        setReuseElements(true);
+        return !elem1.isConnected && elem2.isConnected;
+      });
+
+      test("async behavior", async () => {
+        // Code Coverage
+        setGlobalSchedule(true);
+
+        const text = reactive("hello");
+        const elem = html`<p>${text}</p>` as Element;
+        onRender(() => 1, elem);
+        const unmount = render(elem);
+
+        const waitForElement = (elem: Element) =>
+          new Promise(async (resolve) => {
+            while (!elem.isConnected) {
+              await sleep(50);
+              if (elem.isConnected) resolve(true);
+            }
+          });
+
+        setGlobalSchedule(false);
+        await waitForElement(elem);
+
+        setTimeout(() => {
+          unset(text);
+          unmount();
+        });
+
+        return true;
+      });
+
       test("can render elements wrapped in reactive", async () => {
         const number = reactive(5);
         const elem = reactive(html`<p>${number}</p>`);
@@ -800,6 +949,7 @@ describe("library", () => {
                 src="https://www.w3schools.com/html/mov_bbb.mp4"
                 type="video/mp4"
               />
+              <p>code coverage</p>
             </video>
           </div>
         `;
@@ -811,6 +961,7 @@ describe("library", () => {
                 src="https://www.w3schools.com/html/mov_bbb.mp4"
                 type="video/mp4"
               />
+              <p>code coverage</p>
             </video>
           </div>
         `;
@@ -1202,7 +1353,35 @@ describe("library", () => {
       });
     });
 
+    describe("unset", () => {
+      test("works chained", () => {
+        const abc = reactive({ a: { b: 4 } });
+        unset(abc.a);
+        setTimeout(unset, 0, abc);
+        return !getValue(abc).a;
+      });
+    });
+
     describe("ternary", () => {
+      test("condition as function", () => {
+        const isTrue = reactive(true);
+
+        let wasSetTrue = false;
+        ternary(
+          () => getValue(isTrue),
+          () => (wasSetTrue = false),
+          () => (wasSetTrue = true),
+          isTrue
+        );
+
+        isTrue(false);
+
+        setTimeout(unset, 0, isTrue);
+
+        //@ts-ignore
+        return wasSetTrue === true;
+      });
+
       test("re-renders component", () => {
         const isToggleOn = reactive(false);
         let unmount: Function;
@@ -1259,6 +1438,17 @@ describe("library", () => {
     });
 
     describe("onRender", () => {
+      test("works with DocumentFragment", () => {
+        const elem = html`<p>1</p>
+          <p>2</p>`;
+        let count = 0;
+        onRender(() => count++, elem, 1);
+        const unmount = render(elem);
+
+        setTimeout(unmount);
+        return count === 1;
+      });
+
       test("onRender", () => {
         let count = 0;
         const x = reactive(4);
