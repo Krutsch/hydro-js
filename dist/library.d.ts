@@ -39,7 +39,9 @@ declare function compare(elem: Element, where: Element, onlyTextChildren?: boole
 declare function render(elem: ReturnType<typeof html> | reactiveObject<any>, where?: ReturnType<typeof html> | string, shouldSchedule?: boolean): ChildNode["remove"];
 declare function reactive<T>(initial: T): reactiveObject<T>;
 declare function unset(reactiveHydro: reactiveObject<any>): void;
+declare function setAsyncUpdate(reactiveHydro: reactiveObject<any>, asyncUpdate: boolean): void;
 declare function observe(reactiveHydro: reactiveObject<any>, fn: Function): void;
+declare function unobserve(reactiveHydro: reactiveObject<any>): void;
 declare function ternary(condition: Function | reactiveObject<any>, trueVal: any, falseVal: any, reactiveHydro?: reactiveObject<any>): any;
 declare function emit(eventName: string, data: any, who: EventTarget, options?: object): void;
 declare function getValue<T>(reactiveHydro: T): T;
@@ -59,4 +61,4 @@ declare const $$: {
 declare const internals: {
     compare: typeof compare;
 };
-export { render, html, hydro, setGlobalSchedule, setReuseElements, setInsertDiffing, reactive, unset, observe, ternary, emit, internals, getValue, onRender, onCleanup, $, $$, };
+export { render, html, hydro, setGlobalSchedule, setReuseElements, setInsertDiffing, reactive, unset, setAsyncUpdate, unobserve, observe, ternary, emit, internals, getValue, onRender, onCleanup, $, $$, };

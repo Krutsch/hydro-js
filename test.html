@@ -24,6 +24,8 @@
         ternary,
         setInsertDiffing,
         $,
+        unobserve,
+        setAsyncUpdate,
       } from "./dist/library.js";
 
       runTests(async () => {
@@ -48,6 +50,20 @@
                 setGlobalSchedule(false);
                 expect(hydro.schedule.asyncUpdate).to.be.false;
                 hydro.schedule = null;
+              });
+            });
+
+            describe("setAsyncUpdate", () => {
+              it("sets asnycUpdate on reactive object", () => {
+                const schedule = reactive({});
+                setAsyncUpdate(schedule, false);
+                setTimeout(unset, 0, schedule);
+              });
+
+              it("works chained", () => {
+                const abc = reactive({ a: { b: 4 } });
+                setAsyncUpdate(abc.a, false);
+                setTimeout(unset, 0, abc);
               });
             });
 
@@ -1190,6 +1206,7 @@
                 test(1);
 
                 setTimeout(() => {
+                  unobserve(test);
                   unset(test);
                 });
 
@@ -1345,6 +1362,14 @@
               });
             });
 
+            describe("unobserve", () => {
+              it("works chained", () => {
+                const abc = reactive({ a: { b: 4 } });
+                unobserve(abc.a);
+                setTimeout(unset, 0, abc);
+              });
+            });
+
             describe("unset", () => {
               it("works chained", () => {
                 const abc = reactive({ a: { b: 4 } });
@@ -1477,6 +1502,59 @@
             });
 
             describe("generateProxy", () => {
+              it("add observer to observers", () => {
+                hydro.x = 7;
+                let firstObserver = false;
+                let secondObserver = false;
+                hydro.observe("x", () => {
+                  firstObserver = true;
+                });
+                hydro.observe("x", () => {
+                  secondObserver = true;
+                });
+
+                hydro.x = 777;
+
+                setTimeout(() => {
+                  hydro.x = null;
+                });
+
+                expect(firstObserver && secondObserver).to.be.true;
+              });
+
+              it("handles swapping data correctly", () => {
+                hydro.data = [{ name: "Sebastian" }, { name: "Peter" }];
+
+                const unmount = render(
+                  html`<div>
+                    ${hydro.data.map(
+                      (_, i) =>
+                        html`<p id="data-${i}">Name: {{data[${i}].name}}</p>`
+                    )}
+                  </div>`
+                );
+
+                [hydro.data[0], hydro.data[1]] = [hydro.data[1], hydro.data[0]];
+
+                setTimeout(() => {
+                  unmount();
+                  hydro.data = null;
+                });
+
+                expect(
+                  $("#data-0").textContent.includes("Peter") &&
+                    $("#data-1").textContent.includes("Sebastian")
+                ).to.be.true;
+              });
+
+              it("handles rejecting promise as expected", async () => {
+                hydro.prom = Promise.reject(
+                  "This is a Test for a rejected Promise"
+                );
+                await sleep(1);
+                expect(hydro.prom).to.be.undefined;
+              });
+
               it("intern properties", () => {
                 hydro.obj = {};
 
@@ -1687,6 +1765,31 @@
               expect($("#testREvent").textContent === "2").to.be.true;
             });
 
+            it("event is reactive with eventobject", () => {
+              const props = reactive({
+                onclick: (e) => (e.currentTarget.textContent = 1),
+              });
+              const elem = html` <p id="testREvent" ${props}>0</p> `;
+              const unmount = render(elem);
+
+              props({
+                onclick: {
+                  event: (e) => (e.currentTarget.textContent = 2),
+                  options: {},
+                },
+                id: "testREvent2",
+              });
+
+              elem.click();
+
+              setTimeout(() => {
+                unmount();
+                unset(props);
+              });
+
+              expect($("#testREvent2").textContent === "2").to.be.true;
+            });
+
             it("eventObject is reactive", () => {
               const testEvent = reactive({
                 event: (e) =>
@@ -1722,6 +1825,44 @@
               });
 
               expect(cond && $("#testEvent").textContent.includes("47")).to.be
+                .true;
+            });
+
+            it("eventObject can be replaced by normal fn", () => {
+              const testEvent2 = reactive({
+                event: (e) =>
+                  (e.currentTarget.textContent =
+                    Number(e.currentTarget.textContent) + 5),
+                options: { once: true },
+              });
+
+              const unmount = render(
+                html` <p id="testEvent2" onclick=${testEvent2}>0</p> `
+              );
+
+              //@ts-ignore
+              $("#testEvent2").click();
+              //@ts-ignore
+              $("#testEvent2").click();
+
+              let cond = $("#testEvent2").textContent.includes("5");
+
+              testEvent2((x) => (e) =>
+                (e.currentTarget.textContent =
+                  Number(e.currentTarget.textContent) + 10)
+              );
+
+              //@ts-ignore
+              $("#testEvent2").click();
+              //@ts-ignore
+              $("#testEvent2").click();
+
+              setTimeout(() => {
+                unset(testEvent2);
+                unmount();
+              });
+
+              expect(cond && $("#testEvent2").textContent.includes("25")).to.be
                 .true;
             });
           });

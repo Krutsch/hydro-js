@@ -15,6 +15,8 @@ import {
   ternary,
   setInsertDiffing,
   $,
+  unobserve,
+  setAsyncUpdate,
 } from "./library.js";
 
 // Local debugging
@@ -70,6 +72,22 @@ describe("library", () => {
         });
 
         return cond && hydro.schedule.asyncUpdate === false;
+      });
+    });
+
+    describe("setAsyncUpdate", () => {
+      test("sets asnycUpdate on reactive object", () => {
+        const schedule = reactive({});
+        setAsyncUpdate(schedule, false);
+        setTimeout(unset, 0, schedule);
+        return true;
+      });
+
+      test("works chained", () => {
+        const abc = reactive({ a: { b: 4 } });
+        setAsyncUpdate(abc.a, false);
+        setTimeout(unset, 0, abc);
+        return true;
       });
     });
 
@@ -1198,6 +1216,7 @@ describe("library", () => {
         test(1);
 
         setTimeout(() => {
+          unobserve(test);
           unset(test);
         });
 
@@ -1353,6 +1372,15 @@ describe("library", () => {
       });
     });
 
+    describe("unobserve", () => {
+      test("works chained", () => {
+        const abc = reactive({ a: { b: 4 } });
+        unobserve(abc.a);
+        setTimeout(unset, 0, abc);
+        return true;
+      });
+    });
+
     describe("unset", () => {
       test("works chained", () => {
         const abc = reactive({ a: { b: 4 } });
@@ -1486,170 +1514,221 @@ describe("library", () => {
         return count === 1;
       });
     });
-  });
 
-  describe("generateProxy", () => {
-    test("intern properties", () => {
-      hydro.obj = {};
+    describe("generateProxy", () => {
+      test("add observer to observers", () => {
+        hydro.x = 7;
+        let firstObserver = false;
+        let secondObserver = false;
+        hydro.observe("x", () => {
+          firstObserver = true;
+        });
+        hydro.observe("x", () => {
+          secondObserver = true;
+        });
 
-      const isProxy = hydro.obj.isProxy === true;
-      const asyncUpdate = hydro.obj.asyncUpdate === false;
-      hydro.obj.asyncUpdate = true;
-      const asyncWritable = hydro.obj.asyncUpdate === true;
+        hydro.x = 777;
 
-      setTimeout(() => {
-        hydro.obj = null;
+        setTimeout(() => {
+          hydro.x = null;
+        });
+
+        return firstObserver && secondObserver;
       });
 
-      return isProxy && asyncUpdate && asyncWritable;
-    });
+      test("handles swapping data correctly", () => {
+        hydro.data = [{ name: "Sebastian" }, { name: "Peter" }];
 
-    test("will not set falsy boolean attributes", () => {
-      const checked = reactive(0);
-      const elem = html`<input checked=${checked} />` as Element;
-      const unmount = render(elem);
+        const unmount = render(
+          html`<div>
+            ${hydro.data.map(
+              (_: unknown, i: number) =>
+                html`<p id="data-${i}">Name: {{data[${i}].name}}</p>`
+            )}
+          </div>`
+        );
 
-      let cond = elem.hasAttribute("checked") === false;
-      checked(1);
-      cond = cond && elem.hasAttribute("checked");
-      checked(false);
-      cond = cond && elem.hasAttribute("checked") === false;
+        [hydro.data[0], hydro.data[1]] = [hydro.data[1], hydro.data[0]];
 
-      setTimeout(() => {
-        unset(checked);
-        unmount();
+        setTimeout(() => {
+          unmount();
+          hydro.data = null;
+        });
+
+        return (
+          $("#data-0")!.textContent!.includes("Peter") &&
+          $("#data-1")!.textContent!.includes("Sebastian")
+        );
       });
 
-      return cond;
-    });
-
-    test("will not set falsy boolean attributes on obj", () => {
-      const checked = reactive({ disabled: "" });
-      const attr = reactive({ id: "boolAttr" });
-      const elem = html`<input ${checked} ${attr} />` as Element;
-      const unmount = render(elem);
-
-      setTimeout(() => {
-        unset(checked);
-        unset(attr);
-        unmount();
+      test("handles rejecting promise as expected", async () => {
+        hydro.prom = Promise.reject("This is a Test for a rejected Promise");
+        await sleep(1);
+        return hydro.prom === void 0;
       });
 
-      return !elem.hasAttribute("checked");
-    });
+      test("intern properties", () => {
+        hydro.obj = {};
 
-    test("updateDOM does not remove focus", () => {
-      const count = reactive(0);
-      const increment = () => count(1);
+        const isProxy = hydro.obj.isProxy === true;
+        const asyncUpdate = hydro.obj.asyncUpdate === false;
+        hydro.obj.asyncUpdate = true;
+        const asyncWritable = hydro.obj.asyncUpdate === true;
 
-      const elem = html`
-        <div>
-          <span>${count}</span>
-          <button type="button" id="thisB" onclick=${increment}>
-            Increment
-          </button>
-        </div>
-      `;
+        setTimeout(() => {
+          hydro.obj = null;
+        });
 
-      const unmount = render(elem);
-      //@ts-ignore
-      // needed for automation
-      $("#thisB").focus();
-      //@ts-ignore
-      $("#thisB").click();
-
-      onCleanup(unset, elem, count);
-
-      setTimeout(unmount);
-
-      return document.activeElement === $("#thisB");
-    });
-
-    test("using reactive variables in one variable - variable will be updated too", () => {
-      const dynamicOne = reactive("classA");
-      const dynamicTwo = reactive("classB");
-      const classes = reactive(`${dynamicOne} ${dynamicTwo}`);
-      const unmount = render(
-        html` <div id="classes" class=${classes}>test</div> `
-      );
-
-      let cond =
-        $("#classes")!.classList.contains(getValue(dynamicOne)) &&
-        $("#classes")!.classList.contains(getValue(dynamicTwo));
-
-      dynamicOne("foo");
-      dynamicTwo("bar");
-
-      cond =
-        cond &&
-        !$("#classes")!.classList.contains("classA") &&
-        !$("#classes")!.classList.contains("classA") &&
-        $("#classes")!.classList.contains(getValue(dynamicOne)) &&
-        $("#classes")!.classList.contains(getValue(dynamicTwo));
-
-      classes("peter pan");
-
-      cond =
-        cond &&
-        !$("#classes")!.classList.contains(getValue(dynamicOne)) &&
-        !$("#classes")!.classList.contains(getValue(dynamicTwo)) &&
-        $("#classes")!.classList.contains("peter") &&
-        $("#classes")!.classList.contains("pan");
-
-      setTimeout(() => {
-        unmount();
-        unset(classes);
-        unset(dynamicOne);
-        unset(dynamicTwo);
+        return isProxy && asyncUpdate && asyncWritable;
       });
 
-      return cond;
-    });
+      test("will not set falsy boolean attributes", () => {
+        const checked = reactive(0);
+        const elem = html`<input checked=${checked} />` as Element;
+        const unmount = render(elem);
 
-    test("swap operation (hydro)", () => {
-      hydro.array = ["x", "y"];
-      [hydro.array[0], hydro.array[1]] = [hydro.array[1], hydro.array[0]];
+        let cond = elem.hasAttribute("checked") === false;
+        checked(1);
+        cond = cond && elem.hasAttribute("checked");
+        checked(false);
+        cond = cond && elem.hasAttribute("checked") === false;
 
-      setTimeout(() => {
-        hydro.array = null;
+        setTimeout(() => {
+          unset(checked);
+          unmount();
+        });
+
+        return cond;
       });
 
-      return hydro.array[0] === "y";
-    });
+      test("will not set falsy boolean attributes on obj", () => {
+        const checked = reactive({ disabled: "" });
+        const attr = reactive({ id: "boolAttr" });
+        const elem = html`<input ${checked} ${attr} />` as Element;
+        const unmount = render(elem);
 
-    test("swap operation (reactive)", () => {
-      const array = reactive(["x", "y"]);
+        setTimeout(() => {
+          unset(checked);
+          unset(attr);
+          unmount();
+        });
 
-      array((arr: typeof array) => {
-        [arr[0], arr[1]] = [arr[1], arr[0]];
+        return !elem.hasAttribute("checked");
       });
 
-      setTimeout(unset, 0, array);
+      test("updateDOM does not remove focus", () => {
+        const count = reactive(0);
+        const increment = () => count(1);
 
-      return getValue(array)[0] === "y";
-    });
+        const elem = html`
+          <div>
+            <span>${count}</span>
+            <button type="button" id="thisB" onclick=${increment}>
+              Increment
+            </button>
+          </div>
+        `;
 
-    test("promise handling", async () => {
-      const promise = reactive(
-        new Promise((resolve) => setTimeout(() => resolve(777), 200))
-      );
+        const unmount = render(elem);
+        //@ts-ignore
+        // needed for automation
+        $("#thisB").focus();
+        //@ts-ignore
+        $("#thisB").click();
 
-      const unmount = render(html`<p id="async">
-        ${ternary(
-          promise,
-          () => html`<h2>${promise}</h2>`,
-          () => html`<h2>Loading...</h2>`
-        )}
-      </p>`);
+        onCleanup(unset, elem, count);
 
-      await sleep(201);
+        setTimeout(unmount);
 
-      setTimeout(() => {
-        unmount();
-        unset(promise);
-      }, 201);
+        return document.activeElement === $("#thisB");
+      });
 
-      return $("#async")!.textContent!.includes("777");
+      test("using reactive variables in one variable - variable will be updated too", () => {
+        const dynamicOne = reactive("classA");
+        const dynamicTwo = reactive("classB");
+        const classes = reactive(`${dynamicOne} ${dynamicTwo}`);
+        const unmount = render(
+          html` <div id="classes" class=${classes}>test</div> `
+        );
+
+        let cond =
+          $("#classes")!.classList.contains(getValue(dynamicOne)) &&
+          $("#classes")!.classList.contains(getValue(dynamicTwo));
+
+        dynamicOne("foo");
+        dynamicTwo("bar");
+
+        cond =
+          cond &&
+          !$("#classes")!.classList.contains("classA") &&
+          !$("#classes")!.classList.contains("classA") &&
+          $("#classes")!.classList.contains(getValue(dynamicOne)) &&
+          $("#classes")!.classList.contains(getValue(dynamicTwo));
+
+        classes("peter pan");
+
+        cond =
+          cond &&
+          !$("#classes")!.classList.contains(getValue(dynamicOne)) &&
+          !$("#classes")!.classList.contains(getValue(dynamicTwo)) &&
+          $("#classes")!.classList.contains("peter") &&
+          $("#classes")!.classList.contains("pan");
+
+        setTimeout(() => {
+          unmount();
+          unset(classes);
+          unset(dynamicOne);
+          unset(dynamicTwo);
+        });
+
+        return cond;
+      });
+
+      test("swap operation (hydro)", () => {
+        hydro.array = ["x", "y"];
+        [hydro.array[0], hydro.array[1]] = [hydro.array[1], hydro.array[0]];
+
+        setTimeout(() => {
+          hydro.array = null;
+        });
+
+        return hydro.array[0] === "y";
+      });
+
+      test("swap operation (reactive)", () => {
+        const array = reactive(["x", "y"]);
+
+        array((arr: typeof array) => {
+          [arr[0], arr[1]] = [arr[1], arr[0]];
+        });
+
+        setTimeout(unset, 0, array);
+
+        return getValue(array)[0] === "y";
+      });
+
+      test("promise handling", async () => {
+        const promise = reactive(
+          new Promise((resolve) => setTimeout(() => resolve(777), 200))
+        );
+
+        const unmount = render(html`<p id="async">
+          ${ternary(
+            promise,
+            () => html`<h2>${promise}</h2>`,
+            () => html`<h2>Loading...</h2>`
+          )}
+        </p>`);
+
+        await sleep(201);
+
+        setTimeout(() => {
+          unmount();
+          unset(promise);
+        }, 201);
+
+        return $("#async")!.textContent!.includes("777");
+      });
     });
   });
 
@@ -1694,6 +1773,32 @@ describe("library", () => {
       return $("#testREvent")!.textContent === "2";
     });
 
+    test("event is reactive with eventobject", () => {
+      const props = reactive({
+        onclick: (e: any) => (e.currentTarget.textContent = 1),
+      });
+      const elem = html` <p id="testREvent" ${props}>0</p> `;
+      const unmount = render(elem);
+
+      props({
+        onclick: {
+          event: (e: any) => (e.currentTarget.textContent = 2),
+          options: {},
+        },
+        id: "testREvent2",
+      });
+
+      //@ts-ignore
+      elem.click();
+
+      setTimeout(() => {
+        unmount();
+        unset(props);
+      });
+
+      return $("#testREvent2")!.textContent === "2";
+    });
+
     test("eventObject is reactive", () => {
       const testEvent = reactive({
         event: (e: any) =>
@@ -1731,6 +1836,42 @@ describe("library", () => {
       });
 
       return cond && $("#testEvent")!.textContent!.includes("47");
+    });
+
+    test("eventObject can be replaced by normal fn", () => {
+      const testEvent2 = reactive({
+        event: (e: any) =>
+          (e.currentTarget.textContent =
+            Number(e.currentTarget.textContent) + 5),
+        options: { once: true },
+      });
+
+      const unmount = render(
+        html` <p id="testEvent2" onclick=${testEvent2}>0</p> `
+      );
+
+      //@ts-ignore
+      $("#testEvent2").click();
+      //@ts-ignore
+      $("#testEvent2").click();
+
+      let cond = $("#testEvent2")!.textContent!.includes("5");
+
+      testEvent2((x: any) => (e: any) =>
+        (e.currentTarget.textContent = Number(e.currentTarget.textContent) + 10)
+      );
+
+      //@ts-ignore
+      $("#testEvent2").click();
+      //@ts-ignore
+      $("#testEvent2").click();
+
+      setTimeout(() => {
+        unset(testEvent2);
+        unmount();
+      });
+
+      return cond && $("#testEvent2")!.textContent!.includes("25");
     });
   });
 

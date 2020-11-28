@@ -115,6 +115,7 @@ returns: unique `Proxy`
 
 Returns a Proxy object that can be used within `html`. The Proxy is a wrapping a function that can set the value. If the setter is called with a function then the argument of the passed in function will be provided as the current value for the Proxy.
 The actual value will be set on the hydro Proxy, but this Proxy will hide the complexity.
+<br><em> Special behaviour for promises: the library will await promises and will set its value to the unwrapped value. If the Promise rejects, the value will be unset.</em>
 
 ### observe
 
@@ -125,12 +126,35 @@ args:
 
 Calls the function whenenver the value of reactive changes. This is only one layer deep but chaining properties on reactive Proxys will return a Proxy too. Observing a prop of an object will look like: `observe(person.name, ...)`
 
+### unobserve
+
+args:
+
+- `ReturnType<typeof reactive>`
+
+Removes all observer from the reactive Proxy. This will not unobserve observer on properties.
+
 ### getValue
 
 args: `ReturnType<typeof reactive>`<br>
 returns: currently set value
 
 Returns the value inside the the Proxy. getValue is needed because reactive Proxy does not have access to the value.
+
+### asyncUpdate
+
+args:
+
+- `ReturnType<typeof reactive>`<br>
+- `boolean`
+
+Sets the schedule behavior for DOM Updates that are bound to this Proxy.
+
+### unset
+
+args: ReturnType<typeof reactive>
+
+Deletes the Proxy object and removes Observer. This is important for keeping memory low.
 
 ### ternary
 
@@ -145,12 +169,6 @@ returns: `ReturnType<typeof reactive>`
 
 In order to track a ternary in a template literal, this function has to be used. The proxy parameter is optional if the first parameter is a reactive Proxy. Otherwise, a function is being executed, whenever the Proxy value changes, which will update the DOM to either the trueVal or the falseVal.
 
-### unset
-
-args: ReturnType<typeof reactive>
-
-Deletes the Proxy object and removes Observer. This is important to keep memory low.
-
 ### hydro
 
 The actual Proxy in the library. This cannot be used with `getValue`, `observe`, `ternary` or `unset` but it offers the same functionality in a different manner.
@@ -160,8 +178,8 @@ properties:<br>
 - isProxy: `boolean` (default: true)<br>
 - asyncUpdate: `boolean`, (default: true, derived from globalSchedule)<br>
 - observe: `function`, args: `string` as key<br>
-- getObservers: `function`, returns: map with all observer <br>
-- unobserve: `function`, args: `string | undefined`, unobserve key or all
+- unobserve: `function`, args: `string | undefined`, unobserve key or all<br>
+- getObservers: `function`, returns: map with all observer
 
 ### emit
 

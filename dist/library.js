@@ -727,6 +727,16 @@ function unset(reactiveHydro) {
         Reflect.set(resolvedObj, lastProp, null);
     }
 }
+function setAsyncUpdate(reactiveHydro, asyncUpdate) {
+    const [_, oneKey] = getReactiveKeys(reactiveHydro);
+    if (oneKey) {
+        hydro.asyncUpdate = asyncUpdate;
+    }
+    else {
+        const [_, resolvedObj] = resolveObject(reactiveHydro["__keys__" /* keys */]);
+        resolvedObj.asyncUpdate = asyncUpdate;
+    }
+}
 function observe(reactiveHydro, fn) {
     const [lastProp, oneKey] = getReactiveKeys(reactiveHydro);
     if (oneKey) {
@@ -735,6 +745,16 @@ function observe(reactiveHydro, fn) {
     else {
         const [_, resolvedObj] = resolveObject(reactiveHydro["__keys__" /* keys */]);
         resolvedObj.observe(lastProp, fn);
+    }
+}
+function unobserve(reactiveHydro) {
+    const [lastProp, oneKey] = getReactiveKeys(reactiveHydro);
+    if (oneKey) {
+        hydro.unobserve(lastProp);
+    }
+    else {
+        const [_, resolvedObj] = resolveObject(reactiveHydro["__keys__" /* keys */]);
+        resolvedObj.unobserve(lastProp);
     }
 }
 function ternary(condition, trueVal, falseVal, reactiveHydro = condition) {
@@ -971,6 +991,7 @@ function cleanProxy(oldProxy, currentProxy) {
 function checkReactivityMap(obj, key, val, oldVal) {
     const keyToNodeMap = reactivityMap.get(obj);
     if (keyToNodeMap.has(String(key))) {
+        /* c8 ignore next 5 */
         if (Reflect.get(obj, "asyncUpdate" /* asyncUpdate */)) {
             toSchedule.push([updateDOM, keyToNodeMap, String(key), val, oldVal]);
             if (!isScheduling)
@@ -984,6 +1005,7 @@ function checkReactivityMap(obj, key, val, oldVal) {
         Object.entries(val).forEach(([subKey, subVal]) => {
             const subOldVal = (isObject(oldVal) && Reflect.get(oldVal, subKey)) || oldVal;
             if (keyToNodeMap.has(subKey)) {
+                /* c8 ignore next 5 */
                 if (Reflect.get(obj, "asyncUpdate" /* asyncUpdate */)) {
                     toSchedule.push([updateDOM, keyToNodeMap, subKey, subVal, subOldVal]);
                     if (!isScheduling)
@@ -1001,6 +1023,7 @@ function updateDOM(keyToNodeMap, key, val, oldVal) {
     nodeToChangeMap.forEach((entry) => {
         // Circular reference in order to keep Memory low
         if (isNode(entry)) {
+            /* c8 ignore next 5 */
             if (!entry.isConnected) {
                 const tmpChange = nodeToChangeMap.get(entry);
                 nodeToChangeMap.delete(entry);
@@ -1019,8 +1042,6 @@ function updateDOM(keyToNodeMap, key, val, oldVal) {
             else if (isTextNode(node)) {
                 useStartEnd = true;
                 let text = node.nodeValue;
-                if (text === String(val))
-                    return;
                 node.nodeValue =
                     text.substring(0, start) + String(val) + text.substring(end);
             }
@@ -1041,18 +1062,14 @@ function updateDOM(keyToNodeMap, key, val, oldVal) {
                 }
                 else if (isFunction(val) || isEventObject(val)) {
                     const eventName = key.replace(onEventRegex, "");
-                    if (isFunction(val) || isEventObject(val)) {
-                        node.removeEventListener(eventName, isFunction(val) ? val : val.event);
-                    }
+                    node.removeEventListener(eventName, isFunction(val) ? val : val.event);
                     addEventListener(node, eventName, val);
                 }
                 else if (isObject(val)) {
                     Object.entries(val).forEach(([subKey, subVal]) => {
                         if (isFunction(subVal) || isEventObject(subVal)) {
                             const eventName = subKey.replace(onEventRegex, "");
-                            if (isFunction(subVal) || isEventObject(subVal)) {
-                                node.removeEventListener(eventName, isFunction(subVal) ? subVal : subVal.event);
-                            }
+                            node.removeEventListener(eventName, isFunction(subVal) ? subVal : subVal.event);
                             addEventListener(node, eventName, subVal);
                         }
                         else {
@@ -1064,8 +1081,6 @@ function updateDOM(keyToNodeMap, key, val, oldVal) {
                     useStartEnd = true;
                     let attr = node.getAttribute(key);
                     if (attr) {
-                        if (attr === String(val))
-                            return;
                         attr = attr.substring(0, start) + String(val) + attr.substring(end);
                         setAttribute(node, key, attr === String(val) ? val : attr);
                     }
@@ -1100,19 +1115,17 @@ const $ = document.querySelector.bind(document);
 const $$ = document.querySelectorAll.bind(document);
 let wasHidden = false;
 document.addEventListener("visibilitychange", () => {
-    /* c8 ignore next 10 */
+    /* c8 ignore next 9 */
     // The schedule logic does not work well when the document is in the background. In this case, all the changes have to be rendered at once, if the User comes back
     if (wasHidden === true && document.hidden === false) {
         while (toSchedule.length) {
             const [fn, ...args] = toSchedule.shift();
-            // TODO maybe raf?
-            fn(...args);
+            requestAnimationFrame(() => fn(...args));
         }
-        isScheduling = false;
     }
     wasHidden = document.hidden;
 });
 const internals = {
     compare,
 };
-export { render, html, hydro, setGlobalSchedule, setReuseElements, setInsertDiffing, reactive, unset, observe, ternary, emit, internals, getValue, onRender, onCleanup, $, $$, };
+export { render, html, hydro, setGlobalSchedule, setReuseElements, setInsertDiffing, reactive, unset, setAsyncUpdate, unobserve, observe, ternary, emit, internals, getValue, onRender, onCleanup, $, $$, };
