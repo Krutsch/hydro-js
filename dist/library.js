@@ -672,7 +672,7 @@ function reactive(initial) {
     while (Reflect.has(hydro, key));
     Reflect.set(hydro, key, initial);
     Reflect.set(setter, "reactive" /* reactive */, true);
-    const chainKeysProxy = chainKeys(setter);
+    const chainKeysProxy = chainKeys(setter, [key]);
     return chainKeysProxy;
     function setter(val) {
         // @ts-ignore
@@ -689,21 +689,21 @@ function reactive(initial) {
             Reflect.set(resolvedObj, lastProp, val);
         }
     }
-    function chainKeys(initial, keys = [key]) {
-        return new Proxy(initial, {
-            get(target, subKey, _receiver) {
-                if (subKey === "reactive" /* reactive */)
-                    return true;
-                if (subKey === "__keys__" /* keys */) {
-                    return keys;
-                }
-                if (subKey === Symbol.toPrimitive) {
-                    return () => `{{${keys.join(".")}}}`;
-                }
-                return chainKeys(target, [...keys, subKey]);
-            },
-        });
-    }
+}
+function chainKeys(initial, keys) {
+    return new Proxy(initial, {
+        get(target, subKey, _receiver) {
+            if (subKey === "reactive" /* reactive */)
+                return true;
+            if (subKey === "__keys__" /* keys */) {
+                return keys;
+            }
+            if (subKey === Symbol.toPrimitive) {
+                return () => `{{${keys.join(".")}}}`;
+            }
+            return chainKeys(target, [...keys, subKey]);
+        },
+    });
 }
 function getReactiveKeys(reactiveHydro) {
     const keys = reactiveHydro["__keys__" /* keys */];

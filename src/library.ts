@@ -911,7 +911,7 @@ function reactive<T>(initial: T): reactiveObject<T> {
   Reflect.set(hydro, key, initial);
   Reflect.set(setter, Placeholder.reactive, true);
 
-  const chainKeysProxy = chainKeys(setter);
+  const chainKeysProxy = chainKeys(setter, [key]);
   return chainKeysProxy;
 
   function setter<U>(val: U) {
@@ -931,28 +931,23 @@ function reactive<T>(initial: T): reactiveObject<T> {
       Reflect.set(resolvedObj, lastProp, val);
     }
   }
+}
+function chainKeys(initial: Function | any, keys: Array<keyof any>): any {
+  return new Proxy(initial, {
+    get(target, subKey, _receiver) {
+      if (subKey === Placeholder.reactive) return true;
+      if (subKey === Placeholder.keys) {
+        return keys;
+      }
 
-  function chainKeys(
-    initial: Function | any,
-    keys: Array<keyof any> = [key]
-  ): any {
-    return new Proxy(initial, {
-      get(target, subKey, _receiver) {
-        if (subKey === Placeholder.reactive) return true;
-        if (subKey === Placeholder.keys) {
-          return keys;
-        }
+      if (subKey === Symbol.toPrimitive) {
+        return () => `{{${keys.join(".")}}}`;
+      }
 
-        if (subKey === Symbol.toPrimitive) {
-          return () => `{{${keys.join(".")}}}`;
-        }
-
-        return chainKeys(target, [...keys, subKey]) as T &
-          hydroObject &
-          ((setter: any) => void);
-      },
-    });
-  }
+      return chainKeys(target, [...keys, subKey]) as hydroObject &
+        ((setter: any) => void);
+    },
+  });
 }
 function getReactiveKeys(reactiveHydro: reactiveObject<any>) {
   const keys = reactiveHydro[Placeholder.keys];

@@ -1,6 +1,10 @@
 # Changelog
 
-## 1.2.1- 2020-11-24
+## 1.2.2- 2020-11-29
+
+- Improve performance
+
+## 1.2.1- 2020-11-29
 
 - Add deleted .cjs file
 - Add CHANGELOG.md
