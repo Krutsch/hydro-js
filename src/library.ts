@@ -103,8 +103,6 @@ const toSchedule: Array<[Function, ...any[]]> = []; // functions that will be ex
 let globalSchedule = true; // Decides whether to schedule rendering and updating (async)
 let reuseElements = true; // Reuses Elements when rendering
 let insertBeforeDiffing = false;
-
-let isRendering = false; // Helper - changes per requestAnimationFrame(render or update) - https://developer.mozilla.org/en-US/docs/Web/API/Background_Tasks_API
 let isScheduling = false; // Helper - checks if code is already in requestIdleCallback
 
 const reactivityRegex = /\{\{((\s|.)*?)\}\}/;
@@ -729,7 +727,6 @@ function render(
     runLifecyle(subElem as Element | Text, onRenderMap);
   });
 
-  isRendering = false;
   return unmount(isDocumentFragment(elem) ? elemChildren! : elem);
 }
 
@@ -892,18 +889,13 @@ function replaceElement(
 function schedule(deadline: RequestIdleCallbackDeadline): void {
   isScheduling = true;
 
-  while (deadline.timeRemaining() > 0 && toSchedule.length) {
-    if (!isRendering) {
-      // isRendering - don't paint the frame if the last one did not finish
-      isRendering = true;
-      requestAnimationFrame(() => {
-        const [fn, ...args] = toSchedule.shift()!;
-        fn(...args);
-      });
-    }
+  while (deadline.timeRemaining() > 0 && toSchedule.length > 0) {
+    const [fn, ...args] = toSchedule.shift()!;
+    fn(...args);
   }
 
-  if (toSchedule.length) {
+  /* c8 ignore next 3 */
+  if (toSchedule.length > 0) {
     window.requestIdleCallback(schedule);
   }
 
@@ -1417,8 +1409,6 @@ function updateDOM(
       }
     });
   });
-
-  isRendering = false;
 }
 
 const hydro = generateProxy();
@@ -1427,13 +1417,24 @@ const $$ = document.querySelectorAll.bind(document);
 
 let wasHidden: boolean = false;
 document.addEventListener("visibilitychange", () => {
-  /* c8 ignore next 9 */
-  // The schedule logic does not work well when the document is in the background. In this case, all the changes have to be rendered at once, if the User comes back
+  /* c8 ignore next 19 */
+  // The schedule logic does not work well when the document is in the background. Ideally all the changes have to be rendered at once, if the User comes back
+  // This could block the UI however, and it makes sense to only render the last updates < 50ms
   if (wasHidden === true && document.hidden === false) {
-    while (toSchedule.length) {
-      const [fn, ...args] = toSchedule.shift()!;
-      requestAnimationFrame(() => fn(...args));
+    const start = performance.now();
+    // 1 frame if 24fps, 18 frames if 360fps
+    const lastFrames = toSchedule.splice(toSchedule.length - 18, 18);
+    while (lastFrames.length > 0 && performance.now() < start + 50) {
+      const [fn, ...args] = lastFrames.shift()!;
+      fn(...args);
     }
+    // Render the latest update, just in case
+    if (lastFrames.length > 0) {
+      const [fn, ...args] = lastFrames.pop()!;
+      fn(...args);
+    }
+    // Empty toSchedule
+    toSchedule.splice(0, toSchedule.length);
   }
   wasHidden = document.hidden;
 });
