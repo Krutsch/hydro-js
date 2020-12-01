@@ -293,7 +293,7 @@ function html(
   );
 
   // Set events and reactive behaviour(checks for {{ key }} where key is on hydro)
-  const root = document.createNodeIterator(DOM, NodeFilter.SHOW_ELEMENT);
+  const root = document.createNodeIterator(DOM, window.NodeFilter.SHOW_ELEMENT);
   let elem: Element;
   //@ts-ignore
   while ((elem = root.nextNode())) {
@@ -761,7 +761,7 @@ function runLifecyle(
 
   const elements = document.createNodeIterator(
     node as Node,
-    NodeFilter.SHOW_ELEMENT
+    window.NodeFilter.SHOW_ELEMENT
   );
 
   let subElem;
@@ -799,11 +799,11 @@ function filterTag2Elements(
 function treeDiff(elem: Element | DocumentFragment, where: Element) {
   const elemElements = document.createNodeIterator(
     elem,
-    NodeFilter.SHOW_ELEMENT
+    window.NodeFilter.SHOW_ELEMENT
   );
   const whereElements = document.createNodeIterator(
     where,
-    NodeFilter.SHOW_ELEMENT
+    window.NodeFilter.SHOW_ELEMENT
   );
 
   let template: HTMLTemplateElement;

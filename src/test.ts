@@ -24,6 +24,8 @@ import {
 window.html = html;
 //@ts-ignore
 window.render = render;
+//@ts-ignore
+window.hydro = hydro;
 
 setGlobalSchedule(false); // Simplifies testing
 
@@ -1895,12 +1897,10 @@ describe("library", () => {
 });
 // --------- TESTS END ------------
 
-// Check Garbage Collection
-// //@ts-ignore
-// window.hydro = hydro;
+// // Check Garbage Collection
+// // @ts-ignore
 // document.body.insertAdjacentHTML("beforeend", `<p id="gc">click</p>`);
-// //@ts-ignore
-// const elem = $("#gc");
+// const elem = $("#gc")!;
 // elem.addEventListener("click", () => render(elem, elem));
 // // In Render
 // if (elem && "id" in elem && elem.id === "gc") {
