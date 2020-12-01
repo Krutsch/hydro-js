@@ -3,6 +3,7 @@
 ## [WIP] 1.2.3- 2020-12-01
 
 - Remove Broadcast Channel goal, because this is something that the App Developer has to take care of. Structured cloning will fail for the most important calls.
+- Add MIT License
 
 ## 1.2.2- 2020-11-29
 
