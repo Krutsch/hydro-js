@@ -108,7 +108,6 @@ let isScheduling = false; // Helper - checks if code is already in requestIdleCa
 const reactivityRegex = /\{\{((\s|.)*?)\}\}/;
 const eventListenerRegex = /on(\w+)=/;
 const newLineRegex = /\n/g;
-const numberRegex = /\d+/g;
 const propChainRegex = /[\.\[\]]/;
 const onEventRegex = /^on/;
 
@@ -190,7 +189,7 @@ function setHydroRecursive(obj: hydroObject, willSchedule: boolean) {
 }
 
 function randomText() {
-  return Math.random().toString(32).slice(2, 16).replace(numberRegex, "");
+  return Math.random().toString(32).slice(2);
 }
 function setAttribute(node: Element, key: string, val: any): boolean {
   if (boolAttrList.includes(key) && !val) {
@@ -869,9 +868,6 @@ function removeElement(elem: Text | Element) {
   if (elem.isConnected) {
     elem.remove();
     runLifecyle(elem, onCleanupMap);
-    /* c8 ignore next 4 */
-  } else {
-    console.error(`Element ${elem} is not in the DOM anymore.`);
   }
 }
 

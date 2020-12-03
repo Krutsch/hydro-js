@@ -181,7 +181,7 @@ function html(htmlArray, // The Input String, which is splitted by the template 
     // Insert HTML Elements, which were stored in insertNodes
     DOM.querySelectorAll("template[id^=lbInsertNodes]").forEach((template) => replaceElement(insertNodes.shift(), template, false));
     // Set events and reactive behaviour(checks for {{ key }} where key is on hydro)
-    const root = document.createNodeIterator(DOM, NodeFilter.SHOW_ELEMENT);
+    const root = document.createNodeIterator(DOM, window.NodeFilter.SHOW_ELEMENT);
     let elem;
     //@ts-ignore
     while ((elem = root.nextNode())) {
@@ -554,7 +554,7 @@ function runLifecyle(node, lifecyleMap) {
         (lifecyleMap === onCleanupMap && !calledOnCleanup))
         return;
     executeLifecycle(node, lifecyleMap);
-    const elements = document.createNodeIterator(node, NodeFilter.SHOW_ELEMENT);
+    const elements = document.createNodeIterator(node, window.NodeFilter.SHOW_ELEMENT);
     let subElem;
     while ((subElem = elements.nextNode())) {
         executeLifecycle(subElem, lifecyleMap);
@@ -582,8 +582,8 @@ function filterTag2Elements(tag2Elements, root) {
     }
 }
 function treeDiff(elem, where) {
-    const elemElements = document.createNodeIterator(elem, NodeFilter.SHOW_ELEMENT);
-    const whereElements = document.createNodeIterator(where, NodeFilter.SHOW_ELEMENT);
+    const elemElements = document.createNodeIterator(elem, window.NodeFilter.SHOW_ELEMENT);
+    const whereElements = document.createNodeIterator(where, window.NodeFilter.SHOW_ELEMENT);
     let template;
     if (insertBeforeDiffing) {
         template = document.createElement("template" /* template */);
