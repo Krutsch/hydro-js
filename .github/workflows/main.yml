@@ -21,6 +21,3 @@ jobs:
         with:
           repo-token: "${{ secrets.GITHUB_TOKEN }}"
           pattern: "./dist/*.{js,ts}"
-      - uses: "pascalgn/automerge-action@v0.12.0"
-        env:
-          GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
