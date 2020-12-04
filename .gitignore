@@ -2,3 +2,4 @@ node_modules
 dist/test.d.ts
 dist/test.js
 coverage
+act
