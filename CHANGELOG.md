@@ -1,7 +1,11 @@
 # Changelog
 
-## [WIP] 1.2.3- 2020-12-01
+## 1.2.3- 2020-12-04
 
+- Remove Web Worker goal - tried options:
+  - `@ampproject/worker-dom` does not cover enough APIs to make it possible
+  - `via.js` does not really make it possible to use the windows object
+  - `DOM-Proxy` made it possible to run ~50% of the code but was not efficient enough to make it worthwhile
 - Remove Broadcast Channel goal, because this is something that the App Developer has to take care of. Structured cloning will fail for the most important calls.
 - Add MIT License
 
