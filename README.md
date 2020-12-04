@@ -206,7 +206,6 @@ An object with internal data / functions for testing or deeper dives for develop
 
 ## Roadmap
 
-• Add GitHub Actions for Publishing<br>
 • Experiment with Code in Worker<br>
 • Experiment if the above code can be replaced by wasm<br>
 • Refactor some code parts, once WeakRef is supported in Safari<br>
