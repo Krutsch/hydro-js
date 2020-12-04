@@ -8,16 +8,17 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - uses: actions/setup-node@v1
-      - uses: actions/checkout@v2
-      - uses: preactjs/compressed-size-action@v2
-        with:
-          pattern: "dist/library.js"
       - name: Install
         run: npm install
       - name: Compiles
         run: npm run build
       - name: Test w/ Coverage
         run: npm t
+      - uses: actions/checkout@v2
+      - uses: preactjs/compressed-size-action@v2
+        with:
+          repo-token: "${{ secrets.GITHUB_TOKEN }}"
+          pattern: "dist/library.js"
       - uses: "pascalgn/automerge-action@v0.12.0"
         env:
           GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
