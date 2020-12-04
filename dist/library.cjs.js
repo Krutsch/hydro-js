@@ -28,7 +28,6 @@ let isScheduling = false; // Helper - checks if code is already in requestIdleCa
 const reactivityRegex = /\{\{((\s|.)*?)\}\}/;
 const eventListenerRegex = /on(\w+)=/;
 const newLineRegex = /\n/g;
-const numberRegex = /\d+/g;
 const propChainRegex = /[\.\[\]]/;
 const onEventRegex = /^on/;
 // https://html.spec.whatwg.org/#attributes-3
@@ -103,7 +102,7 @@ function setHydroRecursive(obj, willSchedule) {
     });
 }
 function randomText() {
-    return Math.random().toString(32).slice(2, 16).replace(numberRegex, "");
+    return Math.random().toString(32).slice(2);
 }
 function setAttribute(node, key, val) {
     if (boolAttrList.includes(key) && !val) {
@@ -641,10 +640,6 @@ function removeElement(elem) {
     if (elem.isConnected) {
         elem.remove();
         runLifecyle(elem, onCleanupMap);
-        /* c8 ignore next 4 */
-    }
-    else {
-        console.error(`Element ${elem} is not in the DOM anymore.`);
     }
 }
 function replaceElement(elem, where, withLifecycle = true) {
