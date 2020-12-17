@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.4- 2020-12-17
+
+- Export setReactivity
+
 ## 1.2.3- 2020-12-04
 
 - Remove Web Worker goal - tried options:

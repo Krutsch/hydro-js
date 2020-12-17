@@ -43,13 +43,14 @@ type nodeToChangeMap = Map<
   Element | Text | nodeChange,
   Element | Text | nodeChange
 >;
-// TODO Change to WeakValue
+// TODO: Change to WeakValue
 interface keyToNodeMap extends Map<string, nodeToChangeMap> {}
 interface EventObject {
   event: EventListener;
   options: AddEventListenerOptions;
 }
 type reactiveObject<T> = T & hydroObject & ((setter: any) => void);
+type eventFunctions = Record<string, EventListener | EventObject>;
 
 const enum Placeholder {
   attribute = "attribute",
@@ -217,7 +218,7 @@ function html(
   htmlArray: TemplateStringsArray, // The Input String, which is splitted by the template variables
   ...variables: Array<any>
 ): Element | DocumentFragment | Text {
-  const eventFunctions: Record<string, EventListener | EventObject> = {}; // Temporarily store a mapping for string -> function, because eventListener have to be registered after the Element's creation
+  const eventFunctions: eventFunctions = {}; // Temporarily store a mapping for string -> function, because eventListener have to be registered after the Element's creation
   let finalHTMLString = variables.length ? "" : htmlArray.join("").trim(); // The HTML string to parse
   let insertNodes: Node[] = []; // Array of Nodes, that have to be added after the parsing
 
@@ -291,6 +292,25 @@ function html(
     replaceElement(insertNodes.shift()!, template, false)
   );
 
+  setReactivity(DOM, eventFunctions);
+
+  // Set reactive Behavior if only a Text Node is present
+  if (DOM.childElementCount === 0 && DOM.firstChild) {
+    setReactivitySingle(DOM.firstChild as Text);
+    // Return Text Node
+    return DOM.firstChild as Text;
+  }
+
+  // Return DocumentFragment
+  if (DOM.childNodes.length > 1) return DOM;
+
+  // Return Text Node
+  if (!DOM.firstChild) return document.createTextNode("");
+
+  // Return Element
+  return DOM.firstChild as Element;
+}
+function setReactivity(DOM: Node, eventFunctions?: eventFunctions) {
   // Set events and reactive behaviour(checks for {{ key }} where key is on hydro)
   const root = document.createNodeIterator(DOM, window.NodeFilter.SHOW_ELEMENT);
   let elem: Element;
@@ -299,7 +319,7 @@ function html(
     // Check Attributes
     elem.getAttributeNames().forEach((key) => {
       // Set functions
-      if (key in eventFunctions) {
+      if (eventFunctions && key in eventFunctions) {
         const event = eventFunctions[key];
         const eventName = elem.getAttribute(key)!;
         elem.removeAttribute(key);
@@ -320,7 +340,7 @@ function html(
           }
         }
       } else {
-        setReactivity(elem, key);
+        setReactivitySingle(elem, key);
       }
     });
 
@@ -330,31 +350,15 @@ function html(
     let childNode = elem.firstChild;
     while (childNode) {
       if (isTextNode(childNode)) {
-        setReactivity(childNode);
+        setReactivitySingle(childNode);
       }
       childNode = childNode.nextSibling;
     }
   }
-
-  // Set reactive Behavior if only a Text Node is present
-  if (DOM.childElementCount === 0 && DOM.firstChild) {
-    setReactivity(DOM.firstChild as Text);
-    // Return Text Node
-    return DOM.firstChild as Text;
-  }
-
-  // Return DocumentFragment
-  if (DOM.childNodes.length > 1) return DOM;
-
-  // Return Text Node
-  if (!DOM.firstChild) return document.createTextNode("");
-
-  // Return Element
-  return DOM.firstChild as Element;
 }
-function setReactivity(node: Text): void; // TS function overload
-function setReactivity(node: Element, key: string): void; // TS function overload
-function setReactivity(node: Element | Text, key?: string): void {
+function setReactivitySingle(node: Text): void; // TS function overload
+function setReactivitySingle(node: Element, key: string): void; // TS function overload
+function setReactivitySingle(node: Element | Text, key?: string): void {
   let attr_OR_text: string, match: RegExpMatchArray | null;
 
   if (isTextNode(node)) {
@@ -1200,7 +1204,7 @@ function generateProxy(obj = {}): hydroObject {
     writable: true,
   });
   Reflect.defineProperty(proxy, handlers, {
-    //TODO should be WeakValue in future
+    //TODO: should be WeakValue in future
     value: new Map(),
   });
   Reflect.defineProperty(proxy, Placeholder.observe, {
@@ -1451,6 +1455,7 @@ export {
   getValue,
   onRender,
   onCleanup,
+  setReactivity,
   $,
   $$,
 };

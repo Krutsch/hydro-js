@@ -17,6 +17,7 @@ import {
   $,
   unobserve,
   setAsyncUpdate,
+  setReactivity,
 } from "./library.js";
 
 // Local debugging

@@ -29,12 +29,18 @@ interface hydroObject extends Record<keyof any, any> {
     getObservers: () => Map<string, Set<Function>>;
     unobserve: (key?: keyof any) => undefined;
 }
+interface EventObject {
+    event: EventListener;
+    options: AddEventListenerOptions;
+}
 declare type reactiveObject<T> = T & hydroObject & ((setter: any) => void);
+declare type eventFunctions = Record<string, EventListener | EventObject>;
 declare function setGlobalSchedule(willSchedule: boolean): void;
 declare function setReuseElements(willReuse: boolean): void;
 declare function setInsertDiffing(willInsert: boolean): void;
 declare function html(htmlArray: TemplateStringsArray, // The Input String, which is splitted by the template variables
 ...variables: Array<any>): Element | DocumentFragment | Text;
+declare function setReactivity(DOM: Node, eventFunctions?: eventFunctions): void;
 declare function compare(elem: Element, where: Element, onlyTextChildren?: boolean): boolean;
 declare function render(elem: ReturnType<typeof html> | reactiveObject<any>, where?: ReturnType<typeof html> | string, shouldSchedule?: boolean): ChildNode["remove"];
 declare function reactive<T>(initial: T): reactiveObject<T>;
@@ -61,4 +67,4 @@ declare const $$: {
 declare const internals: {
     compare: typeof compare;
 };
-export { render, html, hydro, setGlobalSchedule, setReuseElements, setInsertDiffing, reactive, unset, setAsyncUpdate, unobserve, observe, ternary, emit, internals, getValue, onRender, onCleanup, $, $$, };
+export { render, html, hydro, setGlobalSchedule, setReuseElements, setInsertDiffing, reactive, unset, setAsyncUpdate, unobserve, observe, ternary, emit, internals, getValue, onRender, onCleanup, setReactivity, $, $$, };

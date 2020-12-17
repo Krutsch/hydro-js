@@ -88,6 +88,12 @@ args: `boolean`<br>
 
 If enabled, it will insert the new DOM Tree to the DOM before diffing. This will asssure that reused Elements will not lose their state (e.g. `<video>` in <em>Chrome</em>. Intern value defaults to `false`.
 
+### setReactivity
+
+args: `Node`<br>
+
+Inserts Proxy values in the template HTML.
+
 ### onRender
 
 args:
