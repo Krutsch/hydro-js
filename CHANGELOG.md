@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.5- 2020-12-22
+
+- feat: diplay empty string instead of undefined for undefined reactive values
+- Bump deps
+
 ## 1.2.4- 2020-12-17
 
 - Export setReactivity

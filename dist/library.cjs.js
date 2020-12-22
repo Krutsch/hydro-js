@@ -179,6 +179,23 @@ function html(htmlArray, // The Input String, which is splitted by the template 
     const DOM = parser(finalHTMLString);
     // Insert HTML Elements, which were stored in insertNodes
     DOM.querySelectorAll("template[id^=lbInsertNodes]").forEach((template) => replaceElement(insertNodes.shift(), template, false));
+    setReactivity(DOM, eventFunctions);
+    // Set reactive Behavior if only a Text Node is present
+    if (DOM.childElementCount === 0 && DOM.firstChild) {
+        setReactivitySingle(DOM.firstChild);
+        // Return Text Node
+        return DOM.firstChild;
+    }
+    // Return DocumentFragment
+    if (DOM.childNodes.length > 1)
+        return DOM;
+    // Return Text Node
+    if (!DOM.firstChild)
+        return document.createTextNode("");
+    // Return Element
+    return DOM.firstChild;
+}
+function setReactivity(DOM, eventFunctions) {
     // Set events and reactive behaviour(checks for {{ key }} where key is on hydro)
     const root = document.createNodeIterator(DOM, window.NodeFilter.SHOW_ELEMENT);
     let elem;
@@ -187,7 +204,7 @@ function html(htmlArray, // The Input String, which is splitted by the template 
         // Check Attributes
         elem.getAttributeNames().forEach((key) => {
             // Set functions
-            if (key in eventFunctions) {
+            if (eventFunctions && key in eventFunctions) {
                 const event = eventFunctions[key];
                 const eventName = elem.getAttribute(key);
                 elem.removeAttribute(key);
@@ -211,7 +228,7 @@ function html(htmlArray, // The Input String, which is splitted by the template 
                 }
             }
             else {
-                setReactivity(elem, key);
+                setReactivitySingle(elem, key);
             }
         });
         // Check Text Nodes
@@ -220,27 +237,13 @@ function html(htmlArray, // The Input String, which is splitted by the template 
         let childNode = elem.firstChild;
         while (childNode) {
             if (isTextNode(childNode)) {
-                setReactivity(childNode);
+                setReactivitySingle(childNode);
             }
             childNode = childNode.nextSibling;
         }
     }
-    // Set reactive Behavior if only a Text Node is present
-    if (DOM.childElementCount === 0 && DOM.firstChild) {
-        setReactivity(DOM.firstChild);
-        // Return Text Node
-        return DOM.firstChild;
-    }
-    // Return DocumentFragment
-    if (DOM.childNodes.length > 1)
-        return DOM;
-    // Return Text Node
-    if (!DOM.firstChild)
-        return document.createTextNode("");
-    // Return Element
-    return DOM.firstChild;
 }
-function setReactivity(node, key) {
+function setReactivitySingle(node, key) {
     let attr_OR_text, match;
     if (isTextNode(node)) {
         attr_OR_text = node.nodeValue; // nodeValue is (always) defined on Text Nodes
@@ -277,9 +280,11 @@ function setReactivity(node, key) {
         if (isTextNode(node)) {
             const textContent = isObject(resolvedValue)
                 ? JSON.stringify(resolvedValue)
-                : resolvedValue;
+                : resolvedValue ?? "";
             attr_OR_text = attr_OR_text.replace(hydroMatch, textContent);
-            node.nodeValue = attr_OR_text;
+            if (attr_OR_text != null) {
+                node.nodeValue = attr_OR_text;
+            }
         }
         else {
             if (key === "bind") {
@@ -677,8 +682,9 @@ function reactive(initial) {
         if (isFunction(val)) {
             const returnVal = val(resolvedValue);
             const sameObject = resolvedValue === returnVal;
-            const setValue = sameObject || returnVal === undefined ? resolvedValue : returnVal;
-            Reflect.set(resolvedObj, lastProp, setValue);
+            if (sameObject)
+                return;
+            Reflect.set(resolvedObj, lastProp, returnVal ?? resolvedValue);
         }
         else {
             Reflect.set(resolvedObj, lastProp, val);
@@ -915,7 +921,7 @@ function generateProxy(obj = {}) {
         writable: true,
     });
     Reflect.defineProperty(proxy, handlers, {
-        //TODO should be WeakValue in future
+        //TODO: should be WeakValue in future
         value: new Map(),
     });
     Reflect.defineProperty(proxy, "observe" /* observe */, {
@@ -1126,4 +1132,4 @@ document.addEventListener("visibilitychange", () => {
 const internals = {
     compare,
 };
-module.exports = { render, html, hydro, setGlobalSchedule, setReuseElements, setInsertDiffing, reactive, unset, setAsyncUpdate, unobserve, observe, ternary, emit, internals, getValue, onRender, onCleanup, $, $$, };
+module.exports = { render, html, hydro, setGlobalSchedule, setReuseElements, setInsertDiffing, reactive, unset, setAsyncUpdate, unobserve, observe, ternary, emit, internals, getValue, onRender, onCleanup, setReactivity, $, $$, };

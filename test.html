@@ -232,11 +232,19 @@
               });
 
               it("variable input (hydro)", () => {
-                const elem = html`<div>{{ test}}</div>`;
+                hydro.testValue = "test";
+                const elem = html`<div>{{ testValue }}</div>`;
                 setTimeout(() => {
-                  hydro.test = null;
+                  hydro.testValue = null;
                 });
-                expect(elem.textContent.includes(hydro.test)).to.be.true;
+                expect(elem.textContent.includes(hydro.testValue)).to.be.true;
+              });
+
+              it("variable input (reactive) - does not include undefined", () => {
+                const data = reactive({});
+                const elem = html`<div>${data.test}</div>`;
+                setTimeout(unset, 0, data);
+                expect(elem.textContent.includes(undefined)).to.be.false;
               });
 
               it("variable input (reactive)", () => {

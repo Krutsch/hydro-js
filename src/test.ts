@@ -56,14 +56,14 @@ const results: Array<{ name: string; success: boolean }> = [];
 describe("library", () => {
   describe("functions", () => {
     describe("setReuseElements", () => {
-      test("code coverage", () => {
+      it("code coverage", () => {
         setReuseElements(true);
         return true;
       });
     });
 
     describe("setGlobalSchedule", () => {
-      test("sets asnycUpdate on hydro objects", () => {
+      it("sets asnycUpdate on hydro objects", () => {
         hydro.schedule = {};
         let cond = hydro.schedule.asyncUpdate === false;
         setGlobalSchedule(true);
@@ -79,14 +79,14 @@ describe("library", () => {
     });
 
     describe("setAsyncUpdate", () => {
-      test("sets asnycUpdate on reactive object", () => {
+      it("sets asnycUpdate on reactive object", () => {
         const schedule = reactive({});
         setAsyncUpdate(schedule, false);
         setTimeout(unset, 0, schedule);
         return true;
       });
 
-      test("works chained", () => {
+      it("works chained", () => {
         const abc = reactive({ a: { b: 4 } });
         setAsyncUpdate(abc.a, false);
         setTimeout(unset, 0, abc);
@@ -211,21 +211,21 @@ describe("library", () => {
         "slot",
         "template",
       ].forEach((tag) => {
-        test(`is able to create element ${tag}`, () => {
+        it(`is able to create element ${tag}`, () => {
           const elem = html`<${tag} />` as Element;
           return elem.localName === tag;
         });
       });
 
-      test("returns empty text node", () => {
+      it("returns empty text node", () => {
         return document.createTextNode("").isEqualNode(html``);
       });
 
-      test("returns text node", () => {
+      it("returns text node", () => {
         return document.createTextNode("hello").isEqualNode(html`hello`);
       });
 
-      test("returns document fragment", () => {
+      it("returns document fragment", () => {
         const node = html`<div><p>hi</p></div>
           <div><span>ho</span></div>` as DocumentFragment;
         return (
@@ -235,39 +235,47 @@ describe("library", () => {
         );
       });
 
-      test("returns element", () => {
+      it("returns element", () => {
         const elem = html`<p>hello</p>` as Element;
         return elem.localName === "p" && elem.textContent!.includes("hello");
       });
 
-      test("variable input (node)", () => {
+      it("variable input (node)", () => {
         const p = html`<p>hi</p>`;
         const elem = html`<div>${p}</div>`;
         return elem.contains(p) && elem.textContent!.includes("hi");
       });
 
-      test("variable input (primitive value)", () => {
+      it("variable input (primitive value)", () => {
         const test = "test";
         const elem = html`<div>${test}</div>`;
         return elem.textContent!.includes(test);
       });
 
-      test("variable input (hydro)", () => {
-        const elem = html`<div>{{ test}}</div>`;
+      it("variable input (hydro)", () => {
+        hydro.testValue = "test";
+        const elem = html`<div>{{ testValue }}</div>`;
         setTimeout(() => {
-          hydro.test = null;
+          hydro.testValue = null;
         });
-        return elem.textContent!.includes(hydro.test);
+        return elem.textContent!.includes(hydro.testValue);
       });
 
-      test("variable input (reactive)", () => {
+      it("variable input (reactive) - does not include undefined", () => {
+        const data = reactive({});
+        const elem = html`<div>${data.test}</div>`;
+        setTimeout(unset, 0, data);
+        return !elem.textContent!.includes(String(undefined));
+      });
+
+      it("variable input (reactive)", () => {
         const test = reactive("test");
         const elem = html`<div>${test}</div>`;
         setTimeout(unset, 0, test);
         return elem.textContent!.includes(getValue(test));
       });
 
-      test("variable input (eventListener)", () => {
+      it("variable input (eventListener)", () => {
         const onClick = (e: any) => (e.currentTarget.textContent = 1);
         const elem = html`<div onclick=${onClick}>0</div>`;
         //@ts-ignore
@@ -275,7 +283,7 @@ describe("library", () => {
         return elem.textContent!.includes("1");
       });
 
-      test("variable input (array - normal)", () => {
+      it("variable input (array - normal)", () => {
         const arr = [42, "test"];
         const elem = html`<div>${arr}</div>`;
         return (
@@ -283,7 +291,7 @@ describe("library", () => {
         );
       });
 
-      test("variable input (function)", () => {
+      it("variable input (function)", () => {
         const onClick = (e: any) =>
           (e.currentTarget.textContent =
             Number(e.currentTarget.textContent) + 1);
@@ -293,7 +301,7 @@ describe("library", () => {
         return elem.textContent!.includes("1");
       });
 
-      test("variable input (eventListener as object)", () => {
+      it("variable input (eventListener as object)", () => {
         const onClick = {
           event: (e: any) =>
             (e.currentTarget.textContent =
@@ -310,7 +318,7 @@ describe("library", () => {
         return elem.textContent!.includes("1");
       });
 
-      test("variable input (array - node)", () => {
+      it("variable input (array - node)", () => {
         const p = html`<p>test</p>`;
         const arr = [42, p];
         const elem = html`<div>${arr}</div>`;
@@ -321,7 +329,7 @@ describe("library", () => {
         );
       });
 
-      test("variable input (object)", () => {
+      it("variable input (object)", () => {
         const props = {
           id: "test",
           onclick: (e: any) =>
@@ -339,7 +347,7 @@ describe("library", () => {
         );
       });
 
-      test("variable input (object - with eventListenerObject)", () => {
+      it("variable input (object - with eventListenerObject)", () => {
         const props = {
           id: "test",
           onclick: {
@@ -364,7 +372,7 @@ describe("library", () => {
         );
       });
 
-      test("resolves deep reactive", () => {
+      it("resolves deep reactive", () => {
         const person = reactive({
           firstname: "Fabian",
           lastname: "Krutsch",
@@ -400,7 +408,7 @@ describe("library", () => {
         );
       });
 
-      test("nested reactive", () => {
+      it("nested reactive", () => {
         const list = reactive([
           { text: "Lorem", success: true },
           { text: "ipsum", success: true },
@@ -428,7 +436,7 @@ describe("library", () => {
         );
       });
 
-      test("removes {{..}}) from html attribute", () => {
+      it("removes {{..}}) from html attribute", () => {
         const attr = reactive({ id: "test" });
         const elem = html`<p ${attr}></p>` as Element;
         const unmount = render(elem);
@@ -441,7 +449,7 @@ describe("library", () => {
         return elem.id === "test" && !elem.hasAttribute("{{attr}}");
       });
 
-      test("two-way attribute", () => {
+      it("two-way attribute", () => {
         const text = reactive("text");
         const checked = reactive(["John", "Mike"]);
         const checkedRadio = reactive("A");
@@ -561,7 +569,7 @@ describe("library", () => {
         );
       });
 
-      test("works with different events on one element", () => {
+      it("works with different events on one element", () => {
         let a, b, c;
         const elem = html`<p
           ona=${() => (a = true)}
@@ -578,14 +586,14 @@ describe("library", () => {
         return !!a && !!b && !!c;
       });
 
-      test("stringifies object", () => {
+      it("stringifies object", () => {
         hydro.x = { a: 3 };
         const elem = html`<p>{{x}}</p>`;
         setTimeout(() => (hydro.x = null));
         return elem.textContent === '{"a":3}';
       });
 
-      test("removes bind element", () => {
+      it("removes bind element", () => {
         hydro.y = { a: 3 };
         const elem = html`<p bind="{{y}}">asd</p>`;
         render(elem);
@@ -593,7 +601,7 @@ describe("library", () => {
         return !elem.isConnected;
       });
 
-      test("removes bind element with multiple elements", () => {
+      it("removes bind element with multiple elements", () => {
         hydro.z = 4;
         const elem = html`<p bind="{{z}}">asd</p>`;
         const elem2 = html`<p bind="{{z}}">asd2</p>`;
@@ -603,7 +611,7 @@ describe("library", () => {
         return !elem.isConnected && !elem2.isConnected;
       });
 
-      test("super rare manipulation of DOM Element", () => {
+      it("super rare manipulation of DOM Element", () => {
         hydro.abc = { id: "jja", href: "cool" };
         const elem = html`<a id="{{abc.id}}" href="{{abc.href}}"
           >asdad</a
@@ -617,7 +625,7 @@ describe("library", () => {
     });
 
     describe("compare", () => {
-      test("lifecycle hooks and text Nodes - false - length", () => {
+      it("lifecycle hooks and text Nodes - false - length", () => {
         const renderFn1 = () => 2;
         const renderFn2 = () => 3;
         const cleanFn1 = () => 3;
@@ -632,7 +640,7 @@ describe("library", () => {
         return internals.compare(elem1, elem2) === false;
       });
 
-      test("lifecycle hooks and text Nodes - false - string", () => {
+      it("lifecycle hooks and text Nodes - false - string", () => {
         const renderFn1 = () => 2;
         const renderFn2 = () => 3;
         const cleanFn1 = () => 3;
@@ -649,7 +657,7 @@ describe("library", () => {
         return internals.compare(elem1, elem2) === false;
       });
 
-      test("returns false if child has different lifecycle hooks - onlyTextChildren", () => {
+      it("returns false if child has different lifecycle hooks - onlyTextChildren", () => {
         const subelem1 = html`hello`;
         onRender(() => 2, subelem1);
         const elem1 = html`<p>${subelem1}</p>` as Element;
@@ -661,7 +669,7 @@ describe("library", () => {
         return internals.compare(elem1, elem2, true) === false;
       });
 
-      test("returns false if child has different lifecycle hooks", () => {
+      it("returns false if child has different lifecycle hooks", () => {
         const subelem1 = html`hello`;
         onRender(() => 2, subelem1);
         const elem1 = html`<p>${subelem1}</p>` as Element;
@@ -673,7 +681,7 @@ describe("library", () => {
         return internals.compare(elem1, elem2) === false;
       });
 
-      test("lifecycle hooks and text Nodes - true", () => {
+      it("lifecycle hooks and text Nodes - true", () => {
         const renderFn1 = () => 2;
         const renderFn2 = () => 2;
         const cleanFn1 = () => 3;
@@ -690,7 +698,7 @@ describe("library", () => {
         return internals.compare(elem1, elem2) === true;
       });
 
-      test("same functions return true", () => {
+      it("same functions return true", () => {
         const fn1 = () => 2;
         const fn2 = () => 2;
         const elem1 = html`<p onclick=${fn1}></p>` as Element;
@@ -698,7 +706,7 @@ describe("library", () => {
         return internals.compare(elem1, elem2) === true;
       });
 
-      test("same lifecycle hooks return true", () => {
+      it("same lifecycle hooks return true", () => {
         const fn1 = () => 2;
         const fn2 = () => 2;
 
@@ -713,7 +721,7 @@ describe("library", () => {
         return internals.compare(elem1, elem2) === true;
       });
 
-      test("different function return false", () => {
+      it("different function return false", () => {
         const fn1 = () => 2;
         const fn2 = () => 3;
         const elem1 = html`<p onclick=${fn1}></p>` as Element;
@@ -721,7 +729,7 @@ describe("library", () => {
         return internals.compare(elem1, elem2) === false;
       });
 
-      test("different lifecycle hooks return false", () => {
+      it("different lifecycle hooks return false", () => {
         const fn1 = () => 2;
         const fn2 = () => 3;
 
@@ -738,7 +746,7 @@ describe("library", () => {
     });
 
     describe("render", () => {
-      test("does diffing with documentFragment", () => {
+      it("does diffing with documentFragment", () => {
         setInsertDiffing(true);
         const elem1 = html`it`;
         const elem2 = html`<p>hello</p>
@@ -756,7 +764,7 @@ describe("library", () => {
         );
       });
 
-      test("do not reuseElements", () => {
+      it("do not reuseElements", () => {
         setReuseElements(false);
         const elem1 = html`a`;
         const elem2 = html`a`;
@@ -768,7 +776,7 @@ describe("library", () => {
         return !elem1.isConnected && elem2.isConnected;
       });
 
-      test("async behavior", async () => {
+      it("async behavior", async () => {
         // Code Coverage
         setGlobalSchedule(true);
 
@@ -796,7 +804,7 @@ describe("library", () => {
         return true;
       });
 
-      test("can render elements wrapped in reactive", async () => {
+      it("can render elements wrapped in reactive", async () => {
         const number = reactive(5);
         const elem = reactive(html`<p>${number}</p>`);
         const unmount = render(elem);
@@ -818,7 +826,7 @@ describe("library", () => {
         );
       });
 
-      test("where does not exist - no render", () => {
+      it("where does not exist - no render", () => {
         const elemCount = document.body.querySelectorAll("*").length;
         const unmount = render(html`<p>what</p>`, "#doesNotExist");
 
@@ -826,7 +834,7 @@ describe("library", () => {
         return document.body.querySelectorAll("*").length === elemCount;
       });
 
-      test("elem is DocumentFragment, no where", () => {
+      it("elem is DocumentFragment, no where", () => {
         const elem = html`<div id="first">1</div>
           <div id="second">2</div>`;
         const unmount = render(elem);
@@ -838,7 +846,7 @@ describe("library", () => {
         );
       });
 
-      test("elem is svg, no where", () => {
+      it("elem is svg, no where", () => {
         const elem = html`<svg height="100" width="100">
           <circle
             cx="50"
@@ -855,7 +863,7 @@ describe("library", () => {
         return elem.isConnected && !!document.body.querySelector("circle");
       });
 
-      test("elem is textNode, no where", () => {
+      it("elem is textNode, no where", () => {
         const elem = html`what`;
         const unmount = render(elem);
 
@@ -863,7 +871,7 @@ describe("library", () => {
         return elem.isConnected && document.body.textContent!.includes("what");
       });
 
-      test("elem is Element, no where", () => {
+      it("elem is Element, no where", () => {
         const elem = html`<p id="whatWhere">what</p>`;
         const unmount = render(elem);
 
@@ -873,7 +881,7 @@ describe("library", () => {
         );
       });
 
-      test("elem is DocumentFragment, with where", () => {
+      it("elem is DocumentFragment, with where", () => {
         document.body.insertAdjacentHTML("beforeend", '<p id="hello">here</p>');
         const elem = html`<div id="firstOne">1</div>
           <div id="secondOne">2</div>`;
@@ -887,7 +895,7 @@ describe("library", () => {
         );
       });
 
-      test("elem is svg, with where", () => {
+      it("elem is svg, with where", () => {
         document.body.insertAdjacentHTML(
           "beforeend",
           '<p id="hello2">here</p>'
@@ -908,7 +916,7 @@ describe("library", () => {
         return elem.isConnected && !!document.body.querySelector("circle");
       });
 
-      test("elem is textNode, with where", () => {
+      it("elem is textNode, with where", () => {
         document.body.insertAdjacentHTML(
           "beforeend",
           '<p id="hello3">here</p>'
@@ -924,7 +932,7 @@ describe("library", () => {
         );
       });
 
-      test("elem is Element, with where", () => {
+      it("elem is Element, with where", () => {
         document.body.insertAdjacentHTML(
           "beforeend",
           '<p id="hello4">here</p>'
@@ -940,7 +948,7 @@ describe("library", () => {
         );
       });
 
-      test("replace an element will replace the event", () => {
+      it("replace an element will replace the event", () => {
         const click1 = (e: any) => (e.currentTarget.textContent = 1);
         const click2 = (e: any) => (e.currentTarget.textContent = 2);
         let elem = html` <div id="event" onclick=${click1}>0</div> `;
@@ -960,7 +968,7 @@ describe("library", () => {
         return cond && elem.textContent!.includes("2");
       });
 
-      test("replacing elements will not stop their state", async () => {
+      it("replacing elements will not stop their state", async () => {
         setInsertDiffing(true);
         const video1 = html`
           <div id="video">
@@ -1004,7 +1012,7 @@ describe("library", () => {
         return time <= $("video")!.currentTime;
       });
 
-      test("calls lifecyle hooks on deep elements", () => {
+      it("calls lifecyle hooks on deep elements", () => {
         let subOnRender = false;
         let subOnCleanup = false;
         let elemOnRender = false;
@@ -1028,7 +1036,7 @@ describe("library", () => {
         return subOnRender && subOnCleanup && elemOnRender && elemOnCleanup;
       });
 
-      test("calls the correct lifecyle hooks when replacing elements", () => {
+      it("calls the correct lifecyle hooks when replacing elements", () => {
         let subOnRender = false;
         let subOnCleanup = false;
         let elemOnRender = false;
@@ -1050,7 +1058,7 @@ describe("library", () => {
     });
 
     describe("reactive", () => {
-      test("primitive value", () => {
+      it("primitive value", () => {
         const counter = reactive(0);
         const unmount = render(
           html`
@@ -1073,7 +1081,7 @@ describe("library", () => {
         return $("#reactClick")!.textContent!.includes("1");
       });
 
-      test("reactive (object)", () => {
+      it("reactive (object)", () => {
         let obj1 = reactive({ a: { b: 5 } });
         let obj2 = reactive({ a: { b: 5 } });
 
@@ -1118,7 +1126,7 @@ describe("library", () => {
         );
       });
 
-      test("reactive (array)", () => {
+      it("reactive (array)", () => {
         const arr1 = reactive([1, [2]]);
         const arr2 = reactive([3, [4]]);
 
@@ -1191,7 +1199,7 @@ describe("library", () => {
     });
 
     describe("observe", () => {
-      test("observe hydro", () => {
+      it("observe hydro", () => {
         let test = 0;
         hydro.test = 0;
 
@@ -1208,7 +1216,7 @@ describe("library", () => {
         return test === 1;
       });
 
-      test("observe reactive", () => {
+      it("observe reactive", () => {
         let result = 0;
         const test = reactive(0);
 
@@ -1226,7 +1234,7 @@ describe("library", () => {
         return result === 1;
       });
 
-      test("observe primitive - function", () => {
+      it("observe primitive - function", () => {
         let result = 0;
         const test = reactive(0);
 
@@ -1243,7 +1251,7 @@ describe("library", () => {
         return result === 1;
       });
 
-      test("observe not working for primitive with function and no return", () => {
+      it("observe not working for primitive with function and no return", () => {
         let result = 0;
         const test = reactive(0);
 
@@ -1262,7 +1270,7 @@ describe("library", () => {
         return result === 0;
       });
 
-      test("observe object", () => {
+      it("observe object", () => {
         let result = 0;
         const test = reactive({ value: 0 });
 
@@ -1278,7 +1286,7 @@ describe("library", () => {
 
         return result === 1;
       });
-      test("observe object (return another) function", () => {
+      it("observe object (return another) function", () => {
         let result = 0;
         const test = reactive({ value: 0 });
 
@@ -1296,7 +1304,7 @@ describe("library", () => {
 
         return result === 1;
       });
-      test("observe object (modified arg)", () => {
+      it("observe object (modified arg)", () => {
         let result = 0;
         const test = reactive({ value: 0 });
 
@@ -1316,7 +1324,7 @@ describe("library", () => {
         return result === 1;
       });
 
-      test("observe object and modify arg plus no return", () => {
+      it("observe object and modify arg plus no return", () => {
         let result = 0;
         const test = reactive({ value: 0 });
 
@@ -1335,7 +1343,7 @@ describe("library", () => {
         return result === 1;
       });
 
-      test("observe object and modify arg plus no return - new syntax", () => {
+      it("observe object and modify arg plus no return - new syntax", () => {
         let result = 0;
         const test = reactive({ value: 0 });
 
@@ -1354,20 +1362,20 @@ describe("library", () => {
     });
 
     describe("getValue", () => {
-      test("primitive value", () => {
+      it("primitive value", () => {
         const x = reactive(4);
         setTimeout(unset, 0, x);
         return getValue(x) === 4;
       });
 
-      test("object", () => {
+      it("object", () => {
         const obj = { test: 4 };
         const x = reactive(obj);
         setTimeout(unset, 0, x);
         return getValue(x).test === obj.test;
       });
 
-      test("array", () => {
+      it("array", () => {
         const arr = [4];
         const x = reactive(arr);
         setTimeout(unset, 0, x);
@@ -1376,7 +1384,7 @@ describe("library", () => {
     });
 
     describe("unobserve", () => {
-      test("works chained", () => {
+      it("works chained", () => {
         const abc = reactive({ a: { b: 4 } });
         unobserve(abc.a);
         setTimeout(unset, 0, abc);
@@ -1385,7 +1393,7 @@ describe("library", () => {
     });
 
     describe("unset", () => {
-      test("works chained", () => {
+      it("works chained", () => {
         const abc = reactive({ a: { b: 4 } });
         unset(abc.a);
         setTimeout(unset, 0, abc);
@@ -1394,7 +1402,7 @@ describe("library", () => {
     });
 
     describe("ternary", () => {
-      test("condition as function", () => {
+      it("condition as function", () => {
         const isTrue = reactive(true);
 
         let wasSetTrue = false;
@@ -1413,7 +1421,7 @@ describe("library", () => {
         return wasSetTrue === true;
       });
 
-      test("re-renders component", () => {
+      it("re-renders component", () => {
         const isToggleOn = reactive(false);
         let unmount: Function;
 
@@ -1438,7 +1446,7 @@ describe("library", () => {
         return $("#reRender")!.textContent!.includes("ON");
       });
 
-      test("re-renders component - function", () => {
+      it("re-renders component - function", () => {
         const isToggleOn = reactive(false);
         let unmount: Function;
 
@@ -1469,7 +1477,7 @@ describe("library", () => {
     });
 
     describe("onRender", () => {
-      test("works with DocumentFragment", () => {
+      it("works with DocumentFragment", () => {
         const elem = html`<p>1</p>
           <p>2</p>`;
         let count = 0;
@@ -1480,7 +1488,7 @@ describe("library", () => {
         return count === 1;
       });
 
-      test("onRender", () => {
+      it("onRender", () => {
         let count = 0;
         const x = reactive(4);
         const elem = html` <p id="x">${x}</p> `;
@@ -1501,7 +1509,7 @@ describe("library", () => {
     });
 
     describe("onCleanup", () => {
-      test("onCleanup", () => {
+      it("onCleanup", () => {
         let count = 0;
         const x = reactive(4);
         const elem = html` <p id="x">${x}</p> `;
@@ -1519,7 +1527,7 @@ describe("library", () => {
     });
 
     describe("generateProxy", () => {
-      test("add observer to observers", () => {
+      it("add observer to observers", () => {
         hydro.x = 7;
         let firstObserver = false;
         let secondObserver = false;
@@ -1539,7 +1547,7 @@ describe("library", () => {
         return firstObserver && secondObserver;
       });
 
-      test("handles swapping data correctly", () => {
+      it("handles swapping data correctly", () => {
         hydro.data = [{ name: "Sebastian" }, { name: "Peter" }];
 
         const unmount = render(
@@ -1564,13 +1572,13 @@ describe("library", () => {
         );
       });
 
-      test("handles rejecting promise as expected", async () => {
+      it("handles rejecting promise as expected", async () => {
         hydro.prom = Promise.reject("This is a Test for a rejected Promise");
         await sleep(1);
         return hydro.prom === void 0;
       });
 
-      test("intern properties", () => {
+      it("intern properties", () => {
         hydro.obj = {};
 
         const isProxy = hydro.obj.isProxy === true;
@@ -1585,7 +1593,7 @@ describe("library", () => {
         return isProxy && asyncUpdate && asyncWritable;
       });
 
-      test("will not set falsy boolean attributes", () => {
+      it("will not set falsy boolean attributes", () => {
         const checked = reactive(0);
         const elem = html`<input checked=${checked} />` as Element;
         const unmount = render(elem);
@@ -1604,7 +1612,7 @@ describe("library", () => {
         return cond;
       });
 
-      test("will not set falsy boolean attributes on obj", () => {
+      it("will not set falsy boolean attributes on obj", () => {
         const checked = reactive({ disabled: "" });
         const attr = reactive({ id: "boolAttr" });
         const elem = html`<input ${checked} ${attr} />` as Element;
@@ -1619,7 +1627,7 @@ describe("library", () => {
         return !elem.hasAttribute("checked");
       });
 
-      test("updateDOM does not remove focus", () => {
+      it("updateDOM does not remove focus", () => {
         const count = reactive(0);
         const increment = () => count(1);
 
@@ -1646,7 +1654,7 @@ describe("library", () => {
         return document.activeElement === $("#thisB");
       });
 
-      test("using reactive variables in one variable - variable will be updated too", () => {
+      it("using reactive variables in one variable - variable will be updated too", () => {
         const dynamicOne = reactive("classA");
         const dynamicTwo = reactive("classB");
         const classes = reactive(`${dynamicOne} ${dynamicTwo}`);
@@ -1687,7 +1695,7 @@ describe("library", () => {
         return cond;
       });
 
-      test("swap operation (hydro)", () => {
+      it("swap operation (hydro)", () => {
         hydro.array = ["x", "y"];
         [hydro.array[0], hydro.array[1]] = [hydro.array[1], hydro.array[0]];
 
@@ -1698,7 +1706,7 @@ describe("library", () => {
         return hydro.array[0] === "y";
       });
 
-      test("swap operation (reactive)", () => {
+      it("swap operation (reactive)", () => {
         const array = reactive(["x", "y"]);
 
         array((arr: typeof array) => {
@@ -1710,7 +1718,7 @@ describe("library", () => {
         return getValue(array)[0] === "y";
       });
 
-      test("promise handling", async () => {
+      it("promise handling", async () => {
         const promise = reactive(
           new Promise((resolve) => setTimeout(() => resolve(777), 200))
         );
@@ -1736,7 +1744,7 @@ describe("library", () => {
   });
 
   describe("integration", () => {
-    test("attributes are reactive", () => {
+    it("attributes are reactive", () => {
       const id = "firstId";
       const href = "https://www.google.com/";
 
@@ -1756,7 +1764,7 @@ describe("library", () => {
       return $(`#${id2}`)! && $(`#${id2}`)!.getAttribute("href") === href2;
     });
 
-    test("event is reactive", () => {
+    it("event is reactive", () => {
       const props = reactive({
         onclick: (e: any) => (e.currentTarget.textContent = 1),
       });
@@ -1776,7 +1784,7 @@ describe("library", () => {
       return $("#testREvent")!.textContent === "2";
     });
 
-    test("event is reactive with eventobject", () => {
+    it("event is reactive with eventobject", () => {
       const props = reactive({
         onclick: (e: any) => (e.currentTarget.textContent = 1),
       });
@@ -1802,7 +1810,7 @@ describe("library", () => {
       return $("#testREvent2")!.textContent === "2";
     });
 
-    test("eventObject is reactive", () => {
+    it("eventObject is reactive", () => {
       const testEvent = reactive({
         event: (e: any) =>
           (e.currentTarget.textContent =
@@ -1841,7 +1849,7 @@ describe("library", () => {
       return cond && $("#testEvent")!.textContent!.includes("47");
     });
 
-    test("eventObject can be replaced by normal fn", () => {
+    it("eventObject can be replaced by normal fn", () => {
       const testEvent2 = reactive({
         event: (e: any) =>
           (e.currentTarget.textContent =
@@ -1879,17 +1887,17 @@ describe("library", () => {
   });
 
   describe("data handling check", () => {
-    test("hydro is {}", async () => {
+    it("hydro is {}", async () => {
       await sleep(700);
       return JSON.stringify(hydro) === JSON.stringify({});
     });
 
-    test("hydro does not have any observers", async () => {
+    it("hydro does not have any observers", async () => {
       await sleep(700);
       return hydro.getObservers().size === 0;
     });
 
-    test("body has DOM Elements - unmount", async () => {
+    it("body has DOM Elements - unmount", async () => {
       await sleep(700);
       setTimeout(() => document.body.dispatchEvent(new CustomEvent("done")));
       return document.body.querySelectorAll("*").length === 0;
@@ -1936,7 +1944,7 @@ document.body.addEventListener("done", () => {
   );
 });
 
-async function test(name: string, testFn: () => boolean | Promise<boolean>) {
+async function it(name: string, testFn: () => boolean | Promise<boolean>) {
   if (await testFn()) {
     results.push({ name, success: true });
   } else {

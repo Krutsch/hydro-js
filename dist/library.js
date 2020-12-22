@@ -280,9 +280,11 @@ function setReactivitySingle(node, key) {
         if (isTextNode(node)) {
             const textContent = isObject(resolvedValue)
                 ? JSON.stringify(resolvedValue)
-                : resolvedValue;
+                : resolvedValue ?? "";
             attr_OR_text = attr_OR_text.replace(hydroMatch, textContent);
-            node.nodeValue = attr_OR_text;
+            if (attr_OR_text != null) {
+                node.nodeValue = attr_OR_text;
+            }
         }
         else {
             if (key === "bind") {
@@ -680,8 +682,9 @@ function reactive(initial) {
         if (isFunction(val)) {
             const returnVal = val(resolvedValue);
             const sameObject = resolvedValue === returnVal;
-            const setValue = sameObject || returnVal === undefined ? resolvedValue : returnVal;
-            Reflect.set(resolvedObj, lastProp, setValue);
+            if (sameObject)
+                return;
+            Reflect.set(resolvedObj, lastProp, returnVal ?? resolvedValue);
         }
         else {
             Reflect.set(resolvedObj, lastProp, val);
