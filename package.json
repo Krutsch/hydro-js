@@ -1,6 +1,6 @@
 {
   "name": "hydro-js",
-  "version": "1.2.5",
+  "version": "1.2.6",
   "description": "A lightweight reactive library",
   "type": "module",
   "main": "./dist/library.js",
@@ -13,8 +13,8 @@
   },
   "scripts": {
     "build": "tsc && node utils/esm2c.js",
-    "dev": "concurrently \"serve\" \"tsc -w\"",
-    "test": "tsc && wtr test.html --node-resolve --coverage --playwright --browsers chromium firefox webkit",
+    "dev": "concurrently \"serve dist\" \"tsc -w\"",
+    "test": "tsc && wtr src/test.html --node-resolve --coverage --playwright --browsers chromium firefox webkit",
     "update": "npx npm-check-updates -u && npx typesync && npm i && npm outdated"
   },
   "keywords": [
@@ -30,8 +30,8 @@
   "devDependencies": {
     "@esm-bundle/chai": "^4.1.5",
     "@types/concurrently": "^5.2.1",
-    "@web/test-runner": "^0.11.0",
-    "@web/test-runner-playwright": "^0.7.0",
+    "@web/test-runner": "^0.11.7",
+    "@web/test-runner-playwright": "^0.7.2",
     "concurrently": "^5.3.0",
     "serve": "^11.3.2",
     "typescript": "^4.1.3"

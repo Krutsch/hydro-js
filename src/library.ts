@@ -87,7 +87,7 @@ window.requestIdleCallback =
 // Parser to create HTML elements from strings
 const parser = ((range = document.createRange()) => {
   range.selectNodeContents(
-    range.createContextualFragment("<template>").lastChild!
+    range.createContextualFragment(`<${Placeholder.template}>`).lastChild!
   );
   return range.createContextualFragment.bind(range);
 })();
@@ -1142,12 +1142,14 @@ function generateProxy(obj = {}): hydroObject {
         returnSet = Reflect.set(target, key, val, receiver);
       }
 
+      const newVal = Reflect.get(target, key, receiver);
+
       // Check if DOM needs to be updated
       // oldVal can be Proxy value too
       if (reactivityMap.has(oldVal)) {
-        checkReactivityMap(oldVal, key, val, oldVal);
+        checkReactivityMap(oldVal, key, newVal, oldVal);
       } else if (reactivityMap.has(receiver)) {
-        checkReactivityMap(receiver, key, val, oldVal);
+        checkReactivityMap(receiver, key, newVal, oldVal);
       }
 
       // current val (before setting) is a proxy - take over its keyToNodeMap
@@ -1169,15 +1171,13 @@ function generateProxy(obj = {}): hydroObject {
       if (returnSet) {
         Reflect.get(target, handlers, receiver)
           .get(key)
-          ?.forEach((handler: Function) =>
-            handler(Reflect.get(hydro, key), oldVal)
-          );
+          ?.forEach((handler: Function) => handler(newVal, oldVal));
       }
 
       // Setting oldVal to null does not work because the prop has already been updated.
       // Hence, the reset Path will not be triggered. GC it here instead.
       if (isObject(oldVal) && isProxy(oldVal)) {
-        cleanProxy(oldVal, Reflect.get(target, key, receiver));
+        cleanProxy(oldVal, newVal);
       }
 
       return returnSet;

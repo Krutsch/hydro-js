@@ -9,7 +9,7 @@ window.requestIdleCallback =
 // Safari Polyfills END
 // Parser to create HTML elements from strings
 const parser = ((range = document.createRange()) => {
-    range.selectNodeContents(range.createContextualFragment("<template>").lastChild);
+    range.selectNodeContents(range.createContextualFragment(`<${"template" /* template */}>`).lastChild);
     return range.createContextualFragment.bind(range);
 })();
 const allNodeChanges = new WeakMap(); // Maps a Node against a change. This is necessary for nodes that have multiple changes for one text / attribute.
@@ -866,13 +866,14 @@ function generateProxy(obj = {}) {
             else {
                 returnSet = Reflect.set(target, key, val, receiver);
             }
+            const newVal = Reflect.get(target, key, receiver);
             // Check if DOM needs to be updated
             // oldVal can be Proxy value too
             if (reactivityMap.has(oldVal)) {
-                checkReactivityMap(oldVal, key, val, oldVal);
+                checkReactivityMap(oldVal, key, newVal, oldVal);
             }
             else if (reactivityMap.has(receiver)) {
-                checkReactivityMap(receiver, key, val, oldVal);
+                checkReactivityMap(receiver, key, newVal, oldVal);
             }
             // current val (before setting) is a proxy - take over its keyToNodeMap
             if (isObject(val) && isProxy(val)) {
@@ -892,12 +893,12 @@ function generateProxy(obj = {}) {
             if (returnSet) {
                 Reflect.get(target, handlers, receiver)
                     .get(key)
-                    ?.forEach((handler) => handler(Reflect.get(hydro, key), oldVal));
+                    ?.forEach((handler) => handler(newVal, oldVal));
             }
             // Setting oldVal to null does not work because the prop has already been updated.
             // Hence, the reset Path will not be triggered. GC it here instead.
             if (isObject(oldVal) && isProxy(oldVal)) {
-                cleanProxy(oldVal, Reflect.get(target, key, receiver));
+                cleanProxy(oldVal, newVal);
             }
             return returnSet;
         },

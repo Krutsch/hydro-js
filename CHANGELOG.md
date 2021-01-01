@@ -1,8 +1,14 @@
 # Changelog
 
+## 1.2.6- 2021-01-01
+
+- Add examples for README.md
+- Move test file to dist
+- Fix newValue bug in 'observe'
+
 ## 1.2.5- 2020-12-22
 
-- feat: diplay empty string instead of undefined for undefined reactive values
+- Add feat: display empty string instead of undefined for undefined reactive values
 - Bump deps
 
 ## 1.2.4- 2020-12-17

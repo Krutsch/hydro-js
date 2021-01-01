@@ -35,7 +35,7 @@ Alternatively you can use a CDN:
 - [Ternary](https://codesandbox.io/s/hydro-js-ternary-c01h2?file=/index.js)
 - [Promise Handling](https://codesandbox.io/s/hydro-js-promise-handling-eo90f?file=/index.js)
 - [Nested Reactivity](https://codesandbox.io/s/hydro-js-nested-reactivity-myjpt?file=/index.js)
-- [Nested Reactivity 2](https://codesandbox.io/s/hydro-js-nested-reactivity-6xy42?file=/index.js)
+- [Nested Reactivity 2](https://codesandbox.io/s/hydro-js-nested-reactivity-2-6xy42?file=/index.js)
 
 ## Concept
 
@@ -58,17 +58,29 @@ returns: `DocumentFragment | Element | Text`
 
 Takes a string and transforms it to HTML. Used for internal bookkeeping too.
 
+#### Example
+
+```js
+html`<p>Text</p>`;
+```
+
 ### render
 
 args:
 
 - new Element (`ReturnType<typeof html> | reactive Proxy`)
 - old Element (`ReturnType<typeof html> | string`)
-- ? shouldSchedule: `boolean` (default: true)
+- shouldSchedule?: `boolean` (default: true)
 
 returns: `function` that unmounts the new Element
 
-Accepts the return value of `html` and replaces it with <em>old Element</em>. If it is a string, it will be resolved with `querySelector`.
+Accepts the return value of `html` and replaces it with <em>old Element</em>. If it is a string, it will be resolved with `querySelector`. If there is no second parameter, the Element will be appended to the `body`.
+
+#### Example
+
+```js
+render(html`<p>Text</p>`);
+```
 
 ### setGlobalSchedule
 
@@ -92,7 +104,26 @@ If enabled, it will insert the new DOM Tree to the DOM before diffing. This will
 
 args: `Node`<br>
 
-Inserts Proxy values in the template HTML.
+Inserts Proxy values in the template HTML. This is useful, when HTML already exists, i.e. in a HTML file and you want to set the hydro Proxy Objects for the handlebars. Also, this can set event listener and remove the inline listener. This is a good way to send HTML over the wire.
+
+#### Example 1
+
+```js
+// <p id="value">{{value}}</p> in HTML
+const template = $("#value");
+hydro.value = "Hello World";
+setReactivity(template);
+render(template);
+```
+
+#### Example 2 (with event)
+
+````js
+// <p id="value" placeholder="click">{{value}}</p> in HTML
+const template = $("#value")!;
+hydro.value = "Hello World";
+setReactivity(template, { placeholder: () => console.log("clicked") });
+render(template);
 
 ### onRender
 
@@ -104,6 +135,14 @@ args:
 
 Calls the passed in `function` with `...args`, after the Element is being inserted by `render`;
 
+#### Example
+
+```js
+const elem = html`<p>Hello World</p>`;
+onRender(() => console.log("rendered elem"), elem);
+render(elem);
+````
+
 ### onCleanup
 
 args:
@@ -114,14 +153,31 @@ args:
 
 Calls the passed in `function` with `...args`, after the Element is being diffed out by `render` or removed by `unmount`;
 
+#### Example
+
+```js
+const elem = html`<p>Hello World</p>`;
+onCleanup(() => console.log("removed elem"), elem);
+const unmount = render(elem);
+unmount();
+```
+
 ### reactive
 
 args: value: `any`<br>
 returns: unique `Proxy`
 
-Returns a Proxy object that can be used within `html`. The Proxy is a wrapping a function that can set the value. If the setter is called with a function then the argument of the passed in function will be provided as the current value for the Proxy.
-The actual value will be set on the hydro Proxy, but this Proxy will hide the complexity.
+Returns a Proxy object that can be used within `html`. The Proxy is wrapping a function that can set the value. There are two ways to call the function (see `Nested Reactivity 2`. If the Proxy will be called with a function, then the argument of the passed in function will be provided as the current value for the Proxy, otherwise it will take the new argument as new value.
+The actual value will be set on the hydro Proxy.
 <br><em> Special behaviour for promises: the library will await promises and will set its value to the unwrapped value. If the Promise rejects, the value will be unset.</em>
+
+#### Example
+
+```js
+const data = reactive({ value: 42 });
+render(html`<p>${data.value} €</p>`);
+data((prev) => (prev.value = 21)); // Change the value
+```
 
 ### observe
 
@@ -130,7 +186,19 @@ args:
 - `ReturnType<typeof reactive>`<br>
 - `function`
 
-Calls the function whenenver the value of reactive changes. This is only one layer deep but chaining properties on reactive Proxys will return a Proxy too. Observing a prop of an object will look like: `observe(person.name, ...)`
+Calls the function whenever the value of reactive Proxy changes. This is only one layer deep but chaining properties on reactive Proxys will return a Proxy too. Observing a prop of an object will look like:
+
+```js
+observe(person.name, ...)
+```
+
+#### Example
+
+```js
+const person = reactive({ name: "Steve" });
+observe(person.name, (newValue) => console.log(`Name changed to ${newValue}`));
+person.name.setter("Definitely not Steve"); // Change the value
+```
 
 ### unobserve
 
@@ -138,29 +206,36 @@ args:
 
 - `ReturnType<typeof reactive>`
 
-Removes all observer from the reactive Proxy. This will not unobserve observer on properties.
+Removes all observers from the reactive Proxy. This will not be called recursively for properties.
 
 ### getValue
 
 args: `ReturnType<typeof reactive>`<br>
 returns: currently set value
 
-Returns the value inside the the Proxy. getValue is needed because reactive Proxy does not have access to the value.
+Returns the value inside the the Proxy. getValue is needed because a reactive Proxy does not have access to the value.
 
-### asyncUpdate
+#### Example
+
+```js
+const person = reactive({ name: "Steve" });
+console.log(getValue(person.name)); // Get curent name
+```
+
+### setAsyncUpdate
 
 args:
 
 - `ReturnType<typeof reactive>`<br>
 - `boolean`
 
-Sets the schedule behavior for DOM Updates that are bound to this Proxy.
+Sets the schedule behavior for DOM Updates that are connected to this Proxy. This will not be called recursively for properties.
 
 ### unset
 
 args: ReturnType<typeof reactive>
 
-Deletes the Proxy object and removes Observer. This is important for keeping memory low.
+Deletes the Proxy object and removes all observers (both recursively). This is important for keeping memory low.
 
 ### ternary
 
@@ -169,11 +244,19 @@ args:
 - condition: `function | ReturnType<typeof reactive>`
 - trueVal: `any`
 - falseVal: `any`
-- ? proxy: `ReturnType<typeof reactive>`
+- proxy?: `ReturnType<typeof reactive>`
 
 returns: `ReturnType<typeof reactive>`
 
-In order to track a ternary in a template literal, this function has to be used. The proxy parameter is optional if the first parameter is a reactive Proxy. Otherwise, a function is being executed, whenever the Proxy value changes, which will update the DOM to either the trueVal or the falseVal.
+In order to track a ternary in a template literal, this function has to be used. The proxy parameter (4th) is optional, if the first parameter is a reactive Proxy. Otherwise, the condition function is being executed, whenever the Proxy value changes, which will update the DOM to either the trueVal or the falseVal, depening on the return value. If trueVal is a function, then it will be executed. The same applies for falseVal.
+
+#### Example
+
+```js
+const toggleValue = reactive(true);
+render(html` <button>${ternary(toggleValue, "ON", "OFF")}</button> `);
+setTimeout(() => toggleValue(false), 1e3); // Will re-validate the ternary after 1s
+```
 
 ### hydro
 
@@ -185,7 +268,14 @@ properties:<br>
 - asyncUpdate: `boolean`, (default: true, derived from globalSchedule)<br>
 - observe: `function`, args: `string` as key<br>
 - unobserve: `function`, args: `string | undefined`, unobserve key or all<br>
-- getObservers: `function`, returns: map with all observer
+- getObservers: `function`, returns: map with all observers
+
+#### Example
+
+```js
+hydro.fruit = "Banana";
+render(html`<span>{{ fruit }}</span>`);
+```
 
 ### emit
 
@@ -198,6 +288,38 @@ args:
 
 Emits an event from the EventTarget <em>who</em>. This event bubbles by default.
 
+#### Example 1
+
+```js
+render(
+  html`<div onfav=${({ detail: cake }) => console.log(cake)}>
+    <p onclick=${({ target }) => emit("fav", "Cheesecake", target)}>
+      Click to emit your favorite cake 🍰
+    </p>
+  </div>`
+);
+```
+
+#### Example 2
+
+```js
+// With event options
+render(
+  html`<div onfav=${({ detail: cake }) => console.log(cake)}>
+    <p
+      onclick=${{
+        options: {
+          once: true,
+        },
+        event: ({ target }) => emit("fav", "Strawberry Cake", target),
+      }}
+    >
+      Click to emit your favorite cake 🍰
+    </p>
+  </div>`
+);
+```
+
 ### \$
 
 Shortcut for `querySelector`.
@@ -209,6 +331,10 @@ Shortcut for `querySelectorAll`.
 ### internals
 
 An object with internal data / functions for testing or deeper dives for developers. This only includes a `compare` function for DOM Elements at the moment.
+
+## Further
+
+To enable HTML highlighting in your files, you could use [leet-html](https://marketplace.visualstudio.com/items?itemName=EldarGerfanov.leet-html) in VS Code.
 
 ## Roadmap
 
