@@ -1196,6 +1196,33 @@ describe("library", () => {
           $("#reactiveArr4")!.textContent!.includes("5")
         );
       });
+
+      it("special logic for prev functions", () => {
+        const a = reactive(undefined);
+        const b = reactive(44);
+        b(undefined);
+        hydro.c = undefined;
+        hydro.d = 44;
+        hydro.d = undefined;
+        const e = reactive(44);
+        e((prev: any) => undefined);
+
+        setTimeout(() => {
+          unset(a);
+          unset(b);
+          hydro.c = null;
+          hydro.d = null;
+          unset(e);
+        });
+
+        return (
+          getValue(a) === undefined &&
+            getValue(b) === undefined &&
+            hydro.c === undefined &&
+            hydro.d === undefined,
+          getValue(e) === 44
+        );
+      });
     });
 
     describe("observe", () => {

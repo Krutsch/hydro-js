@@ -169,7 +169,7 @@ returns: unique `Proxy`
 
 Returns a Proxy object that can be used within `html`. The Proxy is wrapping a function that can set the value. There are two ways to call the function (see `Nested Reactivity 2`. If the Proxy will be called with a function, then the argument of the passed in function will be provided as the current value for the Proxy, otherwise it will take the new argument as new value.
 The actual value will be set on the hydro Proxy.
-<br><em> Special behaviour for promises: the library will await promises and will set its value to the unwrapped value. If the Promise rejects, the value will be unset.</em>
+<br><em> Special behaviour for (prev) functions: the old value will be kept, if the returned value is undefined.</em>
 
 #### Example
 
@@ -235,7 +235,7 @@ Sets the schedule behavior for DOM Updates that are connected to this Proxy. Thi
 
 args: ReturnType<typeof reactive>
 
-Deletes the Proxy object and removes all observers (both recursively). This is important for keeping memory low.
+Deletes the Proxy object and removes all observers (both recursively). This is important for keeping memory low. This happens by setting the value to `null`.
 
 ### ternary
 
@@ -261,6 +261,8 @@ setTimeout(() => toggleValue(false), 1e3); // Will re-validate the ternary after
 ### hydro
 
 The actual Proxy in the library. This cannot be used with `getValue`, `observe`, `ternary` or `unset` but it offers the same functionality in a different manner.
+<br><em> Special behaviour for promises: the library will await promises and will set its value to the unwrapped value. If the Promise rejects, the value will be unset.</em>
+<br><em> Special behaviour for null: null will delete all properties and observer for a value</em>
 
 properties:<br>
 

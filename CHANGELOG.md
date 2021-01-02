@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.7- unreleased
+
+- Add test and update README.md
+
 ## 1.2.6- 2021-01-01
 
 - Add examples for README.md
