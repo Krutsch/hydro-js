@@ -118,12 +118,13 @@ render(template);
 
 #### Example 2 (with event)
 
-````js
+```js
 // <p id="value" placeholder="click">{{value}}</p> in HTML
 const template = $("#value")!;
 hydro.value = "Hello World";
 setReactivity(template, { placeholder: () => console.log("clicked") });
 render(template);
+```
 
 ### onRender
 
@@ -141,7 +142,7 @@ Calls the passed in `function` with `...args`, after the Element is being insert
 const elem = html`<p>Hello World</p>`;
 onRender(() => console.log("rendered elem"), elem);
 render(elem);
-````
+```
 
 ### onCleanup
 
