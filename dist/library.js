@@ -120,63 +120,52 @@ function addEventListener(node, eventName, obj) {
 function html(htmlArray, // The Input String, which is splitted by the template variables
 ...variables) {
     const eventFunctions = {}; // Temporarily store a mapping for string -> function, because eventListener have to be registered after the Element's creation
-    let finalHTMLString = variables.length ? "" : htmlArray.join("").trim(); // The HTML string to parse
     let insertNodes = []; // Array of Nodes, that have to be added after the parsing
-    variables.forEach((variable, index) => {
+    const resolvedVariables = variables.map((variable, index) => {
         const template = `<${"template" /* template */} id="lbInsertNodes${index}"></${"template" /* template */}>`;
-        let html = htmlArray[index];
-        // Remove empty text nodes on start
-        if (index === 0)
-            html = html.trimStart();
-        if (isNode(variable)) {
-            insertNodes.push(variable);
-            finalHTMLString += html + template;
-        }
-        else if (["number", "string" /* string */, "symbol", "boolean", "bigint"].includes(typeof variable) ||
-            Reflect.get(variable, "reactive" /* reactive */)) {
-            finalHTMLString += html + String(variable);
-        }
-        else if (isFunction(variable) || isEventObject(variable)) {
-            finalHTMLString += html.replace(eventListenerRegex, (_, eventType) => {
+        switch (variable) {
+            case isNode(variable) && variable:
+                insertNodes.push(variable);
+                return template;
+            case ([
+                "number",
+                "string" /* string */,
+                "symbol",
+                "boolean",
+                "bigint",
+            ].includes(typeof variable) ||
+                Reflect.get(variable, "reactive" /* reactive */)) &&
+                variable:
+                return String(variable);
+            case (isFunction(variable) || isEventObject(variable)) && variable:
                 const funcName = randomText();
                 Reflect.set(eventFunctions, funcName, variable);
-                return `${funcName}="${eventType}"`;
-            });
-        }
-        else if (Array.isArray(variable)) {
-            // Replace Nodes with template String
-            variable.forEach((item, index) => {
-                if (isNode(item)) {
-                    insertNodes.push(item);
-                    variable[index] = template;
-                }
-            });
-            finalHTMLString += html + variable.join("");
-        }
-        else if (isObject(variable)) {
-            Object.entries(variable).forEach(([key, value], index) => {
-                if (index === 0) {
-                    finalHTMLString += html;
-                }
-                if (isFunction(value) || isEventObject(value)) {
-                    finalHTMLString += `${key}=`.replace(eventListenerRegex, (_, eventType) => {
+                return funcName;
+            case Array.isArray(variable) && variable:
+                variable.forEach((item, index) => {
+                    if (isNode(item)) {
+                        insertNodes.push(item);
+                        variable[index] = template;
+                    }
+                });
+                return variable.join("");
+            case isObject(variable) && variable:
+                let result = "";
+                Object.entries(variable).forEach(([key, value]) => {
+                    if (isFunction(value) || isEventObject(value)) {
                         const funcName = randomText();
                         Reflect.set(eventFunctions, funcName, value);
-                        return `${funcName}="${eventType}"`;
-                    });
-                }
-                else {
-                    finalHTMLString += `${key}="${value}"`;
-                }
-            });
+                        result += `${key}="${funcName}"`;
+                    }
+                    else {
+                        result += `${key}="${value}"`;
+                    }
+                });
+                return result;
         }
-        // Last iteration: trim end
-        if (index === variables.length - 1) {
-            // the length of htmlArray is always 1 bigger than the length of variables
-            finalHTMLString += htmlArray[index + 1].trimEnd();
-        }
+        /* c8 ignore next 1 */
     });
-    const DOM = parser(finalHTMLString);
+    const DOM = parser(String.raw(htmlArray, ...resolvedVariables).trim());
     // Insert HTML Elements, which were stored in insertNodes
     DOM.querySelectorAll("template[id^=lbInsertNodes]").forEach((template) => replaceElement(insertNodes.shift(), template, false));
     setReactivity(DOM, eventFunctions);
@@ -204,9 +193,13 @@ function setReactivity(DOM, eventFunctions) {
         // Check Attributes
         elem.getAttributeNames().forEach((key) => {
             // Set functions
-            if (eventFunctions && key in eventFunctions) {
-                const event = eventFunctions[key];
-                const eventName = elem.getAttribute(key);
+            if (eventFunctions && key.startsWith("on")) {
+                const eventName = key.replace(onEventRegex, "");
+                const event = eventFunctions[elem.getAttribute(key)];
+                if (!event) {
+                    setReactivitySingle(elem, key);
+                    return;
+                }
                 elem.removeAttribute(key);
                 if (isEventObject(event)) {
                     elem.addEventListener(eventName, event.event, event.options);
