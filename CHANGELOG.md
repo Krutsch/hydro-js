@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.2.7- unreleased
+## 1.2.7- 2021-01-17
 
 - Add test and update README.md
 - Refactor HTML function to use String.raw
