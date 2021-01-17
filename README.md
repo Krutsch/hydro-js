@@ -113,17 +113,15 @@ Inserts Proxy values in the template HTML. This is useful, when HTML already exi
 const template = $("#value");
 hydro.value = "Hello World";
 setReactivity(template);
-render(template);
 ```
 
 #### Example 2 (with event)
 
 ```js
-// <p id="value" placeholder="click">{{value}}</p> in HTML
+// <p id="value" onclick="placeholder">{{value}}</p> in HTML
 const template = $("#value")!;
 hydro.value = "Hello World";
-setReactivity(template, { placeholder: () => console.log("clicked") });
-render(template);
+setReactivity(template, { placeholder: () => console.log("clicked") }); // placeholder should be unique
 ```
 
 ### onRender

@@ -27,6 +27,8 @@ window.html = html;
 window.render = render;
 //@ts-ignore
 window.hydro = hydro;
+//@ts-ignore
+window.setReactivity = setReactivity;
 
 setGlobalSchedule(false); // Simplifies testing
 
