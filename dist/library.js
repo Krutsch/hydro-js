@@ -767,6 +767,35 @@ function ternary(condition, trueVal, falseVal, reactiveHydro = condition) {
 function emit(eventName, data, who, options = { bubbles: true }) {
     who.dispatchEvent(new CustomEvent(eventName, { ...options, detail: data }));
 }
+let trackDeps = false;
+const trackProxies = new Set();
+const trackMap = new WeakMap();
+const unobserveMap = new WeakMap();
+function watchEffect(fn) {
+    trackDeps = true;
+    fn();
+    trackDeps = false;
+    const reRun = (newVal) => {
+        if (newVal !== null)
+            fn();
+    };
+    trackProxies.forEach((proxy) => {
+        trackMap.get(proxy)?.forEach((key) => {
+            proxy.observe(key, reRun);
+            if (unobserveMap.has(reRun)) {
+                unobserveMap.get(reRun).push({ proxy, key });
+            }
+            else {
+                unobserveMap.set(reRun, [{ proxy, key }]);
+            }
+        });
+        trackMap.delete(proxy);
+    });
+    trackProxies.clear();
+    return () => unobserveMap
+        .get(reRun)
+        ?.forEach((entry) => entry.proxy.unobserve(entry.key, reRun));
+}
 function getValue(reactiveHydro) {
     // @ts-ignore
     const [resolvedValue] = resolveObject(reactiveHydro["__keys__" /* keys */]);
@@ -789,6 +818,15 @@ function generateProxy(obj = {}) {
     const proxy = new Proxy(obj, {
         // If receiver is a getter, then it is the object on which the search first started for the property|key -> Proxy
         set(target, key, val, receiver) {
+            if (trackDeps) {
+                trackProxies.add(receiver);
+                if (trackMap.has(receiver)) {
+                    trackMap.get(receiver).add(key);
+                }
+                else {
+                    trackMap.set(receiver, new Set([key]));
+                }
+            }
             let returnSet = true;
             let oldVal = Reflect.get(target, key, receiver);
             if (oldVal === val)
@@ -897,6 +935,15 @@ function generateProxy(obj = {}) {
         },
         // fix proxy bugs, e.g Map
         get(target, prop, receiver) {
+            if (trackDeps) {
+                trackProxies.add(receiver);
+                if (trackMap.has(receiver)) {
+                    trackMap.get(receiver).add(prop);
+                }
+                else {
+                    trackMap.set(receiver, new Set([prop]));
+                }
+            }
             const value = Reflect.get(target, prop, receiver);
             if (!isFunction(value)) {
                 return value;
@@ -935,11 +982,20 @@ function generateProxy(obj = {}) {
         configurable: true,
     });
     Reflect.defineProperty(proxy, "unobserve" /* unobserve */, {
-        value: (key) => {
+        value: (key, handler) => {
             const map = Reflect.get(proxy, handlers);
             if (key) {
-                if (map.has(key))
-                    map.delete(key);
+                if (map.has(key)) {
+                    if (handler == null) {
+                        map.delete(key);
+                    }
+                    else {
+                        const set = map.get(key);
+                        if (set?.has(handler)) {
+                            set.delete(handler);
+                        }
+                    }
+                }
             }
             else {
                 map.clear();
@@ -1126,4 +1182,4 @@ document.addEventListener("visibilitychange", () => {
 const internals = {
     compare,
 };
-export { render, html, hydro, setGlobalSchedule, setReuseElements, setInsertDiffing, reactive, unset, setAsyncUpdate, unobserve, observe, ternary, emit, internals, getValue, onRender, onCleanup, setReactivity, $, $$, };
+export { render, html, hydro, setGlobalSchedule, setReuseElements, setInsertDiffing, reactive, unset, setAsyncUpdate, unobserve, observe, ternary, emit, watchEffect, internals, getValue, onRender, onCleanup, setReactivity, $, $$, };

@@ -2,7 +2,7 @@
 
 # hydro-js
 
-> A lightweight (~4.2K <em>compressed</em>) reactive UI library via template literal tags.<br> Support in all modern Browsers.
+> A lightweight (~4.5K <em>compressed</em>) reactive UI library via template literal tags.<br> Support in all modern Browsers.
 
 ## Installation
 
@@ -207,6 +207,25 @@ args:
 
 Removes all observers from the reactive Proxy. This will not be called recursively for properties.
 
+### watchEffect
+
+args: `function`
+returns: a stop `function`
+
+This works similarly to Vue3 watchEffect:
+To apply and automatically re-apply a side effect based on reactive state, we can use the watchEffect method. It runs a function immediately while reactively tracking its dependencies and re-runs it whenever the dependencies are changed.
+
+#### Example
+
+```js
+const count = reactive(0);
+watchEffect(() => console.log(getValue(count)));
+// -> logs 0
+
+count(1);
+// -> logs 1
+```
+
 ### getValue
 
 args: `ReturnType<typeof reactive>`<br>
@@ -267,8 +286,8 @@ properties:<br>
 
 - isProxy: `boolean` (default: true)<br>
 - asyncUpdate: `boolean`, (default: true, derived from globalSchedule)<br>
-- observe: `function`, args: `string` as key<br>
-- unobserve: `function`, args: `string | undefined`, unobserve key or all<br>
+- observe: `function`, args: `string` as key, fn: `function`<br>
+- unobserve: `function`, args: `string | undefined` - unobserve key or all, , fn: `function`<br>
 - getObservers: `function`, returns: map with all observers
 
 #### Example

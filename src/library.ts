@@ -33,7 +33,7 @@ interface hydroObject extends Record<keyof any, any> {
   asyncUpdate: boolean;
   observe: (key: keyof any, fn: Function) => any;
   getObservers: () => Map<string, Set<Function>>;
-  unobserve: (key?: keyof any) => undefined;
+  unobserve: (key?: keyof any, handler?: Function) => undefined;
 }
 type nodeChange = Array<[number, number, string | undefined]>;
 
@@ -1021,6 +1021,42 @@ function emit(
 ) {
   who.dispatchEvent(new CustomEvent(eventName, { ...options, detail: data }));
 }
+let trackDeps = false;
+const trackProxies = new Set<hydroObject>();
+const trackMap = new WeakMap<hydroObject, Set<keyof any>>();
+const unobserveMap = new WeakMap<
+  Function,
+  Array<{ proxy: hydroObject; key: keyof any }>
+>();
+function watchEffect(fn: Function) {
+  trackDeps = true;
+  fn();
+  trackDeps = false;
+
+  const reRun = (newVal: keyof any) => {
+    if (newVal !== null) fn();
+  };
+
+  trackProxies.forEach((proxy) => {
+    trackMap.get(proxy)?.forEach((key) => {
+      proxy.observe(key, reRun);
+
+      if (unobserveMap.has(reRun)) {
+        unobserveMap.get(reRun)!.push({ proxy, key });
+      } else {
+        unobserveMap.set(reRun, [{ proxy, key }]);
+      }
+    });
+    trackMap.delete(proxy);
+  });
+
+  trackProxies.clear();
+
+  return () =>
+    unobserveMap
+      .get(reRun)
+      ?.forEach((entry) => entry.proxy.unobserve(entry.key, reRun));
+}
 function getValue<T>(reactiveHydro: T): T {
   // @ts-ignore
   const [resolvedValue] = resolveObject(reactiveHydro[Placeholder.keys]);
@@ -1054,6 +1090,15 @@ function generateProxy(obj = {}): hydroObject {
   const proxy = new Proxy(obj, {
     // If receiver is a getter, then it is the object on which the search first started for the property|key -> Proxy
     set(target, key, val, receiver) {
+      if (trackDeps) {
+        trackProxies.add(receiver);
+        if (trackMap.has(receiver)) {
+          trackMap.get(receiver)!.add(key);
+        } else {
+          trackMap.set(receiver, new Set([key]));
+        }
+      }
+
       let returnSet = true;
       let oldVal = Reflect.get(target, key, receiver);
       if (oldVal === val) return returnSet;
@@ -1169,6 +1214,14 @@ function generateProxy(obj = {}): hydroObject {
 
     // fix proxy bugs, e.g Map
     get(target, prop, receiver) {
+      if (trackDeps) {
+        trackProxies.add(receiver);
+        if (trackMap.has(receiver)) {
+          trackMap.get(receiver)!.add(prop);
+        } else {
+          trackMap.set(receiver, new Set([prop]));
+        }
+      }
       const value = Reflect.get(target, prop, receiver);
       if (!isFunction(value)) {
         return value;
@@ -1190,7 +1243,7 @@ function generateProxy(obj = {}): hydroObject {
   });
   Reflect.defineProperty(proxy, handlers, {
     //TODO: should be WeakValue in future
-    value: new Map(),
+    value: new Map<keyof any, Set<Function>>(),
   });
   Reflect.defineProperty(proxy, Placeholder.observe, {
     value: (key: keyof any, handler: Function) => {
@@ -1209,11 +1262,20 @@ function generateProxy(obj = {}): hydroObject {
     configurable: true,
   });
   Reflect.defineProperty(proxy, Placeholder.unobserve, {
-    value: (key: keyof any) => {
-      const map = Reflect.get(proxy, handlers);
+    value: (key: keyof any, handler: Function) => {
+      const map = Reflect.get(proxy, handlers) as Map<keyof any, Set<Function>>;
 
       if (key) {
-        if (map.has(key)) map.delete(key);
+        if (map.has(key)) {
+          if (handler == null) {
+            map.delete(key);
+          } else {
+            const set = map.get(key);
+            if (set?.has(handler)) {
+              set.delete(handler);
+            }
+          }
+        }
       } else {
         map.clear();
       }
@@ -1436,6 +1498,7 @@ export {
   observe,
   ternary,
   emit,
+  watchEffect,
   internals,
   getValue,
   onRender,

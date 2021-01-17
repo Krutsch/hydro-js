@@ -7,6 +7,7 @@ import {
   reactive,
   unset,
   emit,
+  watchEffect,
   observe,
   getValue,
   onRender,
@@ -1227,6 +1228,74 @@ describe("library", () => {
       });
     });
 
+    describe("watchEffect", () => {
+      it("tracks and dependencies and re-runs the function (setter)", async () => {
+        let watchCounter = 0;
+
+        hydro.count1 = 0;
+        hydro.count2 = 0;
+
+        watchEffect(() => {
+          hydro.count1 = 2;
+          hydro.count2 = 2;
+          watchCounter++;
+        });
+
+        hydro.count1 = 1;
+        hydro.count2 = 1;
+
+        setTimeout(() => {
+          hydro.count1 = null;
+          hydro.count2 = null;
+        }, 200);
+
+        await sleep(300);
+        return watchCounter === 5;
+      });
+
+      it("tracks and dependencies and re-runs the function (getter)", () => {
+        let watchCounter = 0;
+
+        const count3 = reactive(0);
+        const count4 = reactive(0);
+
+        watchEffect(() => {
+          getValue(count3);
+          getValue(count4);
+          watchCounter++;
+        });
+
+        count3(1);
+        count4(1);
+
+        setTimeout(() => {
+          unset(count3);
+          unset(count4);
+        });
+
+        return watchCounter === 3;
+      });
+
+      it("tracks and dependencies and re-runs the function (stop)", () => {
+        let watchCounter = 0;
+
+        const count5 = reactive(0);
+
+        const stop = watchEffect(() => {
+          getValue(count5);
+          watchCounter++;
+        });
+
+        stop();
+        count5(1);
+        setTimeout(() => {
+          unset(count5);
+        });
+
+        return watchCounter === 1;
+      });
+    });
+
     describe("observe", () => {
       it("observe hydro", () => {
         let test = 0;
@@ -1986,3 +2055,4 @@ function describe(_desc: string, wrapper: Function) {
   wrapper();
 }
 function xdescribe(_desc: string, _wrapper: Function) {}
+function xit(_desc: string, _wrapper: Function) {}
