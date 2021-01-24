@@ -71,6 +71,7 @@ const enum Placeholder {
   change = "change",
   radio = "radio",
   checkbox = "checkbox",
+  dummy = "-dummy",
 }
 
 // Safari Polyfills
@@ -107,7 +108,7 @@ let insertBeforeDiffing = false;
 let isScheduling = false; // Helper - checks if code is already in requestIdleCallback
 
 const reactivityRegex = /\{\{((\s|.)*?)\}\}/;
-const eventListenerRegex = /on(\w+)=/;
+const HTML_FIND_INVALID = /<(\/?)(html|head|body)(>|\s.*?>)/g;
 const newLineRegex = /\n/g;
 const propChainRegex = /[\.\[\]]/;
 const onEventRegex = /^on/;
@@ -212,7 +213,6 @@ function addEventListener(
     isFunction(obj) ? {} : obj.options
   );
 }
-// This does not create <html>, <body> or <head> Elements.
 // That is fine because the render function only renders within a body without a where parameter
 function html(
   htmlArray: TemplateStringsArray, // The Input String, which is splitted by the template variables
@@ -265,7 +265,35 @@ function html(
     }
     /* c8 ignore next 1 */
   });
-  const DOM = parser(String.raw(htmlArray, ...resolvedVariables).trim());
+
+  // Find elements <html|head|body>, as they cannot be created by the parser. Replace them by fake Custom Elements and replace them afterwards.
+  let DOMString = String.raw(htmlArray, ...resolvedVariables).trim();
+  DOMString = DOMString.replace(
+    HTML_FIND_INVALID,
+    `<$1$2${Placeholder.dummy}$3`
+  );
+  const DOM = parser(DOMString);
+
+  const root = document.createNodeIterator(
+    DOM,
+    window.NodeFilter.SHOW_ELEMENT,
+    {
+      acceptNode(element: Element) {
+        return element.localName.endsWith(Placeholder.dummy)
+          ? NodeFilter.FILTER_ACCEPT
+          : NodeFilter.FILTER_REJECT;
+      },
+    }
+  );
+  let elem;
+  while ((elem = root.nextNode())) {
+    const tag = (elem as Element).localName.replace(Placeholder.dummy, "");
+    const replacement = document.createElement(tag);
+
+    //@ts-ignore
+    replacement.append(...(elem as Element).childNodes);
+    (elem as Element).replaceWith(replacement);
+  }
 
   // Insert HTML Elements, which were stored in insertNodes
   DOM.querySelectorAll("template[id^=lbInsertNodes]").forEach((template) =>

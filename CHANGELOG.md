@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.8- 2021-01-24
+
+- Add support for `html`, `head` and `body` element. The html function can create every element now.
+
 ## 1.2.7- 2021-01-17
 
 - Add test and update README.md

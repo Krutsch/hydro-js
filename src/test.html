@@ -69,10 +69,12 @@
             });
 
             describe("html", () => {
-              // Test all HTML Elements expect html, head and body
               // https://developer.mozilla.org/en-US/docs/Web/HTML/Element
               // https://en.wikipedia.org/wiki/HTML_element
               [
+                "html",
+                "head",
+                "body",
                 "link",
                 "meta",
                 "style",
@@ -189,6 +191,20 @@
                   const elem = html`<${tag} />`;
                   expect(elem.localName === tag).to.be.true;
                 });
+              });
+
+              it("handles a new html doc correctly", () => {
+                const elem = html`<html>
+                  <head></head>
+                  <body>
+                    a
+                  </body>
+                </html>`;
+                expect(
+                  elem.localName === "html" &&
+                    !!elem.querySelector("head") &&
+                    !!elem.querySelector("body")
+                ).to.be.true;
               });
 
               it("returns empty text node", () => {

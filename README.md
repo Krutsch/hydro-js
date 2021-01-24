@@ -9,7 +9,7 @@
 To bootstrap a new app:
 
 ```properties
-$ npx create-hydro-app@latest <project> // or $ npm init hydro-app@latest <project>
+$ npm init hydro-app@latest <project> // or npx create-hydro-app@latest <project>
 ```
 
 or integrate in an existing app:

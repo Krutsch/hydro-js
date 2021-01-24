@@ -98,10 +98,12 @@ describe("library", () => {
     });
 
     describe("html", () => {
-      // Test all HTML Elements expect html, head and body
       // https://developer.mozilla.org/en-US/docs/Web/HTML/Element
       // https://en.wikipedia.org/wiki/HTML_element
       [
+        "html",
+        "head",
+        "body",
         "link",
         "meta",
         "style",
@@ -218,6 +220,20 @@ describe("library", () => {
           const elem = html`<${tag} />` as Element;
           return elem.localName === tag;
         });
+      });
+
+      it("handles a new html doc correctly", () => {
+        const elem = html`<html>
+          <head></head>
+          <body>
+            a
+          </body>
+        </html>` as Element;
+        return (
+          elem.localName === "html" &&
+          !!elem.querySelector("head") &&
+          !!elem.querySelector("body")
+        );
       });
 
       it("returns empty text node", () => {
