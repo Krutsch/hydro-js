@@ -297,7 +297,7 @@ function html(
 
   // Insert HTML Elements, which were stored in insertNodes
   DOM.querySelectorAll("template[id^=lbInsertNodes]").forEach((template) =>
-    replaceElement(insertNodes.shift()!, template, false)
+    template.replaceWith(insertNodes.shift()!)
   );
 
   setReactivity(DOM, eventFunctions);
@@ -729,10 +729,12 @@ function render(
     }
 
     if (!reuseElements) {
-      replaceElement(elem, where as Element);
+      (where as Element).replaceWith(elem);
+      runLifecyle(where as Element, onCleanupMap);
     } else {
       if (isTextNode(elem)) {
-        replaceElement(elem, where as Element);
+        (where as Element).replaceWith(elem);
+        runLifecyle(where as Element, onCleanupMap);
       } else if (isDocumentFragment(elem) || !compare(elem, where as Element)) {
         treeDiff(elem, where as Element);
       }
@@ -826,7 +828,12 @@ function treeDiff(elem: Element | DocumentFragment, where: Element) {
   let template: HTMLTemplateElement;
   if (insertBeforeDiffing) {
     template = document.createElement(Placeholder.template);
-    where.before(template);
+    /* c8 ignore next 3 */
+    if (where === document.documentElement) {
+      where.append(template);
+    } else {
+      where.before(template);
+    }
     template.append(elem);
   }
 
@@ -835,6 +842,9 @@ function treeDiff(elem: Element | DocumentFragment, where: Element) {
   const tag2Elements = new Map<string, Array<Element>>();
   //@ts-ignore
   while ((wElem = whereElements.nextNode())) {
+    /* c8 ignore next 2 */
+    if (insertBeforeDiffing && wElem === template!) continue;
+
     if (tag2Elements.has(wElem.localName)) {
       tag2Elements.get(wElem.localName)!.push(wElem);
     } else {
@@ -853,7 +863,8 @@ function treeDiff(elem: Element | DocumentFragment, where: Element) {
         const whereElem = sameElements[index];
 
         if (compare(subElem, whereElem, true)) {
-          replaceElement(whereElem, subElem);
+          subElem.replaceWith(whereElem);
+          runLifecyle(subElem, onCleanupMap);
           filterTag2Elements(tag2Elements, whereElem);
           break;
         }
@@ -862,14 +873,14 @@ function treeDiff(elem: Element | DocumentFragment, where: Element) {
   }
 
   if (insertBeforeDiffing) {
-    where.before(
+    where.replaceWith(
       ...(isDocumentFragment(elem) ? Array.from(template!.childNodes) : [elem])
     );
-    where.remove();
     template!.remove();
     runLifecyle(where, onCleanupMap);
   } else {
-    replaceElement(elem, where);
+    where.replaceWith(elem);
+    runLifecyle(where, onCleanupMap);
   }
   tag2Elements.clear();
 }
@@ -887,17 +898,6 @@ function removeElement(elem: Text | Element) {
     elem.remove();
     runLifecyle(elem, onCleanupMap);
   }
-}
-
-function replaceElement(
-  elem: Node,
-  where: Element,
-  withLifecycle: boolean = true
-) {
-  where.before(elem);
-  where.remove();
-
-  if (withLifecycle) runLifecyle(where, onCleanupMap);
 }
 
 function schedule(deadline: RequestIdleCallbackDeadline): void {
@@ -1402,7 +1402,8 @@ function updateDOM(
       let useStartEnd = false;
 
       if (isNode(val)) {
-        replaceElement(val, node as Element);
+        node.replaceWith(val);
+        runLifecyle(node, onCleanupMap);
       } else if (isTextNode(node)) {
         useStartEnd = true;
         let text = node.nodeValue!;

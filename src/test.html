@@ -2004,6 +2004,128 @@
               expect(document.body.querySelectorAll("*").length).to.equal(1);
             });
           });
+
+          describe("end tests", () => {
+            it("diffs head against head", () => {
+              let oldValue;
+              let oldChildCount = 0;
+              setTimeout(() => {
+                oldValue = document.head.outerHTML;
+                oldChildCount = document.head.childElementCount;
+                setInsertDiffing(false);
+                render(document.createElement("head"), document.head, false);
+                expect(document.head.childElementCount === 0).to.be.true;
+              }, 750);
+              setTimeout(() => {
+                setInsertDiffing(false);
+                render(html`${oldValue}`, document.head, false);
+                expect(oldChildCount === document.head.childElementCount).to.be
+                  .true;
+              }, 800);
+            });
+
+            it("diffs body against body", () => {
+              let oldValue;
+              let oldChildCount = 0;
+              setTimeout(() => {
+                oldValue = document.body.outerHTML;
+                oldChildCount = document.body.childElementCount;
+                setInsertDiffing(false);
+                render(document.createElement("body"), document.body, false);
+                expect(document.body.childElementCount === 0).to.be.true;
+              }, 850);
+              setTimeout(() => {
+                setInsertDiffing(false);
+                render(html`${oldValue}`, document.body, false);
+                expect(oldChildCount === document.body.childElementCount).to.be
+                  .true;
+              }, 900);
+            });
+
+            it("diffs html against html", () => {
+              let oldValue;
+              let oldChildCount = 0;
+              setTimeout(() => {
+                oldValue = document.documentElement.outerHTML;
+                oldChildCount = document.documentElement.childElementCount;
+                setInsertDiffing(false);
+                render(
+                  document.createElement("html"),
+                  document.documentElement,
+                  false
+                );
+                expect(document.documentElement.childElementCount === 0).to.be
+                  .true;
+              }, 950);
+              setTimeout(() => {
+                setInsertDiffing(false);
+                render(html`${oldValue}`, document.documentElement, false);
+                expect(
+                  oldChildCount === document.documentElement.childElementCount
+                ).to.be.true;
+              }, 1000);
+            });
+
+            it("diffs head against head - setInsertDiffing", () => {
+              let oldValue;
+              let oldChildCount = 0;
+              setTimeout(() => {
+                oldValue = document.head.outerHTML;
+                oldChildCount = document.head.childElementCount;
+                setInsertDiffing(true);
+                render(document.createElement("head"), document.head, false);
+                expect(document.head.childElementCount === 0).to.be.true;
+              }, 1050);
+              setTimeout(() => {
+                setInsertDiffing(true);
+                render(html`${oldValue}`, document.head, false);
+                expect(oldChildCount === document.head.childElementCount).to.be
+                  .true;
+              }, 1100);
+            });
+
+            it("diffs body against body - setInsertDiffing", () => {
+              let oldValue;
+              let oldChildCount = 0;
+              setTimeout(() => {
+                oldValue = document.body.outerHTML;
+                oldChildCount = document.body.childElementCount;
+                setInsertDiffing(true);
+                render(document.createElement("body"), document.body, false);
+                expect(document.body.childElementCount === 0).to.be.true;
+              }, 1150);
+              setTimeout(() => {
+                setInsertDiffing(true);
+                render(html`${oldValue}`, document.body, false);
+                expect(oldChildCount === document.body.childElementCount).to.be
+                  .true;
+              }, 1200);
+            });
+
+            it("diffs html against html - setInsertDiffing", () => {
+              let oldValue;
+              let oldChildCount = 0;
+              setTimeout(() => {
+                oldValue = document.documentElement.outerHTML;
+                oldChildCount = document.documentElement.childElementCount;
+                setInsertDiffing(true);
+                render(
+                  document.createElement("html"),
+                  document.documentElement,
+                  false
+                );
+                expect(document.documentElement.childElementCount === 0).to.be
+                  .true;
+              }, 1250);
+              setTimeout(() => {
+                setInsertDiffing(true);
+                render(html`${oldValue}`, document.documentElement, false);
+                expect(
+                  oldChildCount === document.documentElement.childElementCount
+                ).to.be.true;
+              }, 1300);
+            });
+          });
         });
       });
     </script>

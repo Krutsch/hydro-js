@@ -56,6 +56,7 @@ document.head.insertAdjacentHTML(
 const results: Array<{ name: string; success: boolean }> = [];
 
 // --------- TESTS START ------------
+let condition = true;
 describe("library", () => {
   describe("functions", () => {
     describe("setReuseElements", () => {
@@ -1074,6 +1075,133 @@ describe("library", () => {
         setTimeout(unmount);
         return subOnRender && subOnCleanup && elemOnRender && !elemOnCleanup;
       });
+
+      it("diffs head against head", () => {
+        let oldValue: string | null;
+        let oldChildCount = 0;
+        setTimeout(() => {
+          oldValue = document.head.outerHTML;
+          oldChildCount = document.head.childElementCount;
+          setInsertDiffing(false);
+          render(document.createElement("head"), document.head, false);
+          condition = condition && 0 === document.head.childElementCount;
+        }, 750);
+        setTimeout(() => {
+          setInsertDiffing(false);
+          render(html`${oldValue}`, document.head, false);
+          condition =
+            condition && oldChildCount === document.head.childElementCount;
+        }, 800);
+        return true;
+      });
+
+      it("diffs body against body", () => {
+        let oldValue: string | null;
+        let oldChildCount = 0;
+        setTimeout(() => {
+          oldValue = document.body.outerHTML;
+          oldChildCount = document.body.childElementCount;
+          setInsertDiffing(false);
+          render(document.createElement("body"), document.body, false);
+          condition = condition && 0 === document.body.childElementCount;
+        }, 850);
+        setTimeout(() => {
+          setInsertDiffing(false);
+          render(html`${oldValue}`, document.body, false);
+          condition =
+            condition && oldChildCount === document.body.childElementCount;
+        }, 900);
+        return true;
+      });
+
+      it("diffs html against html", () => {
+        let oldValue: string | null;
+        let oldChildCount = 0;
+        setTimeout(() => {
+          oldValue = document.documentElement.outerHTML;
+          oldChildCount = document.documentElement.childElementCount;
+          setInsertDiffing(false);
+          render(
+            document.createElement("html"),
+            document.documentElement,
+            false
+          );
+          condition =
+            condition && 0 === document.documentElement.childElementCount;
+        }, 950);
+        setTimeout(() => {
+          setInsertDiffing(false);
+          render(html`${oldValue}`, document.documentElement, false);
+          condition =
+            condition &&
+            oldChildCount === document.documentElement.childElementCount;
+        }, 1000);
+        return true;
+      });
+
+      it("diffs head against head - setInsertDiffing", () => {
+        let oldValue: string | null;
+        let oldChildCount = 0;
+        setTimeout(() => {
+          oldValue = document.head.outerHTML;
+          oldChildCount = document.head.childElementCount;
+          setInsertDiffing(true);
+          render(document.createElement("head"), document.head, false);
+          condition = condition && 0 === document.head.childElementCount;
+        }, 1050);
+        setTimeout(() => {
+          setInsertDiffing(true);
+          render(html`${oldValue}`, document.head, false);
+          condition =
+            condition && oldChildCount === document.head.childElementCount;
+        }, 1100);
+        return true;
+      });
+
+      it("diffs body against body - setInsertDiffing", () => {
+        let oldValue: string | null;
+        let oldChildCount = 0;
+        setTimeout(() => {
+          oldValue = document.body.outerHTML;
+          oldChildCount = document.body.childElementCount;
+          setInsertDiffing(true);
+          render(document.createElement("body"), document.body, false);
+          condition = condition && 0 === document.body.childElementCount;
+        }, 1150);
+        setTimeout(() => {
+          setInsertDiffing(true);
+          render(html`${oldValue}`, document.body, false);
+          condition =
+            condition && oldChildCount === document.body.childElementCount;
+        }, 1200);
+        return true;
+      });
+
+      it("diffs html against html - setInsertDiffing", () => {
+        let oldValue: string | null;
+        let oldChildCount = 0;
+        setTimeout(() => {
+          oldValue = document.documentElement.outerHTML;
+          oldChildCount = document.documentElement.childElementCount;
+          setInsertDiffing(true);
+          render(
+            document.createElement("html"),
+            document.documentElement,
+            false
+          );
+          condition =
+            condition && 0 === document.documentElement.childElementCount;
+        }, 1250);
+        setTimeout(() => {
+          setInsertDiffing(true);
+          render(html`${oldValue}`, document.documentElement, false);
+          condition =
+            condition &&
+            oldChildCount === document.documentElement.childElementCount;
+          done();
+        }, 1300);
+        return true;
+      });
     });
 
     describe("reactive", () => {
@@ -2013,7 +2141,6 @@ describe("library", () => {
 
     it("body has DOM Elements - unmount", async () => {
       await sleep(700);
-      setTimeout(() => document.body.dispatchEvent(new CustomEvent("done")));
       return document.body.querySelectorAll("*").length === 0;
     });
   });
@@ -2039,7 +2166,16 @@ describe("library", () => {
 //   );
 // }
 
-document.body.addEventListener("done", () => {
+function done() {
+  // Last test
+  const name = "Render head, body and html correctly";
+  if (condition) {
+    results.push({ name, success: condition });
+  } else {
+    console.log(`Failed at: ${name}`);
+    results.push({ name, success: condition });
+  }
+
   document.body.insertAdjacentHTML("beforeend", `<div id="results"></div>`);
   results.forEach((result) => {
     document.querySelector("#results")!.insertAdjacentHTML(
@@ -2056,7 +2192,7 @@ document.body.addEventListener("done", () => {
     "beforeend",
     `<div id="done">Testing done</div>`
   );
-});
+}
 
 async function it(name: string, testFn: () => boolean | Promise<boolean>) {
   if (await testFn()) {

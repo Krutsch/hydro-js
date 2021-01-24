@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.9- 2021-01-24
+
+- Fix bug where html was not diffable
+
 ## 1.2.8- 2021-01-24
 
 - Add support for `html`, `head` and `body` element. The html function can create every element now.
