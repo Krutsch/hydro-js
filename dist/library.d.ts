@@ -38,6 +38,7 @@ declare type eventFunctions = Record<string, EventListener | EventObject>;
 declare function setGlobalSchedule(willSchedule: boolean): void;
 declare function setReuseElements(willReuse: boolean): void;
 declare function setInsertDiffing(willInsert: boolean): void;
+declare function setShouldSetReactivity(willSet: boolean): void;
 declare function html(htmlArray: TemplateStringsArray, // The Input String, which is splitted by the template variables
 ...variables: Array<any>): Element | DocumentFragment | Text;
 declare function setReactivity(DOM: Node, eventFunctions?: eventFunctions): void;
@@ -68,4 +69,4 @@ declare const $$: {
 declare const internals: {
     compare: typeof compare;
 };
-export { render, html, hydro, setGlobalSchedule, setReuseElements, setInsertDiffing, reactive, unset, setAsyncUpdate, unobserve, observe, ternary, emit, watchEffect, internals, getValue, onRender, onCleanup, setReactivity, $, $$, };
+export { render, html, hydro, setGlobalSchedule, setReuseElements, setInsertDiffing, setShouldSetReactivity, reactive, unset, setAsyncUpdate, unobserve, observe, ternary, emit, watchEffect, internals, getValue, onRender, onCleanup, setReactivity, $, $$, };

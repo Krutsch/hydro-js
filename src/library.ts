@@ -105,6 +105,7 @@ const toSchedule: Array<[Function, ...any[]]> = []; // functions that will be ex
 let globalSchedule = true; // Decides whether to schedule rendering and updating (async)
 let reuseElements = true; // Reuses Elements when rendering
 let insertBeforeDiffing = false;
+let shouldSetReactivity = true;
 let isScheduling = false; // Helper - checks if code is already in requestIdleCallback
 
 const reactivityRegex = /\{\{((\s|.)*?)\}\}/;
@@ -179,6 +180,9 @@ function setReuseElements(willReuse: boolean): void {
 }
 function setInsertDiffing(willInsert: boolean): void {
   insertBeforeDiffing = willInsert;
+}
+function setShouldSetReactivity(willSet: boolean): void {
+  shouldSetReactivity = willSet;
 }
 function setHydroRecursive(obj: hydroObject, willSchedule: boolean) {
   Reflect.set(obj, Placeholder.asyncUpdate, willSchedule);
@@ -300,11 +304,11 @@ function html(
     template.replaceWith(insertNodes.shift()!)
   );
 
-  setReactivity(DOM, eventFunctions);
+  if (shouldSetReactivity) setReactivity(DOM, eventFunctions);
 
   // Set reactive Behavior if only a Text Node is present
   if (DOM.childElementCount === 0 && DOM.firstChild) {
-    setReactivitySingle(DOM.firstChild as Text);
+    if (shouldSetReactivity) setReactivitySingle(DOM.firstChild as Text);
     // Return Text Node
     return DOM.firstChild as Text;
   }
@@ -1520,6 +1524,7 @@ export {
   setGlobalSchedule,
   setReuseElements,
   setInsertDiffing,
+  setShouldSetReactivity,
   reactive,
   unset,
   setAsyncUpdate,

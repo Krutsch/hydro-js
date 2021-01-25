@@ -24,6 +24,7 @@ const toSchedule = []; // functions that will be executed async and during a bro
 let globalSchedule = true; // Decides whether to schedule rendering and updating (async)
 let reuseElements = true; // Reuses Elements when rendering
 let insertBeforeDiffing = false;
+let shouldSetReactivity = true;
 let isScheduling = false; // Helper - checks if code is already in requestIdleCallback
 const reactivityRegex = /\{\{((\s|.)*?)\}\}/;
 const HTML_FIND_INVALID = /<(\/?)(html|head|body)(>|\s.*?>)/g;
@@ -92,6 +93,9 @@ function setReuseElements(willReuse) {
 }
 function setInsertDiffing(willInsert) {
     insertBeforeDiffing = willInsert;
+}
+function setShouldSetReactivity(willSet) {
+    shouldSetReactivity = willSet;
 }
 function setHydroRecursive(obj, willSchedule) {
     Reflect.set(obj, "asyncUpdate" /* asyncUpdate */, willSchedule);
@@ -185,10 +189,12 @@ function html(htmlArray, // The Input String, which is splitted by the template 
     }
     // Insert HTML Elements, which were stored in insertNodes
     DOM.querySelectorAll("template[id^=lbInsertNodes]").forEach((template) => template.replaceWith(insertNodes.shift()));
-    setReactivity(DOM, eventFunctions);
+    if (shouldSetReactivity)
+        setReactivity(DOM, eventFunctions);
     // Set reactive Behavior if only a Text Node is present
     if (DOM.childElementCount === 0 && DOM.firstChild) {
-        setReactivitySingle(DOM.firstChild);
+        if (shouldSetReactivity)
+            setReactivitySingle(DOM.firstChild);
         // Return Text Node
         return DOM.firstChild;
     }
@@ -1206,4 +1212,4 @@ document.addEventListener("visibilitychange", () => {
 const internals = {
     compare,
 };
-module.exports = { render, html, hydro, setGlobalSchedule, setReuseElements, setInsertDiffing, reactive, unset, setAsyncUpdate, unobserve, observe, ternary, emit, watchEffect, internals, getValue, onRender, onCleanup, setReactivity, $, $$, };
+module.exports = { render, html, hydro, setGlobalSchedule, setReuseElements, setInsertDiffing, setShouldSetReactivity, reactive, unset, setAsyncUpdate, unobserve, observe, ternary, emit, watchEffect, internals, getValue, onRender, onCleanup, setReactivity, $, $$, };

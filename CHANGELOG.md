@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.9- 2021-01-25
+
+- Add new function `setShouldSetReactivity`
+
 ## 1.2.9- 2021-01-24
 
 - Fix bug where html was not diffable
