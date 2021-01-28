@@ -19,6 +19,7 @@ const tmpSwap = new WeakMap(); // Take over keyToNodeMap if new value is a hydro
 const bindMap = new WeakMap(); // Bind an Element to Data. If the Data is being unset, the DOM Element disappears too.
 const onRenderMap = new WeakMap(); // Lifecycle Hook that is being called after rendering
 const onCleanupMap = new WeakMap(); // Lifecycle Hook that is being called when unmount function is being called
+const fragmentToElements = new WeakMap(); // Used to retreive Elements from DocumentFragment after it has been rendered – for diffing
 const _boundFunctions = Symbol("boundFunctions"); // Cache for bound functions in Proxy, so that we create the bound version of each function only once
 const toSchedule = []; // functions that will be executed async and during a browser's idle period
 let globalSchedule = true; // Decides whether to schedule rendering and updating (async)
@@ -524,6 +525,7 @@ function render(elem, where = "", shouldSchedule = globalSchedule) {
     let elemChildren;
     if (isDocumentFragment(elem)) {
         elemChildren = Array.from(elem.childNodes);
+        fragmentToElements.set(elem, elemChildren); // For diffing later
     }
     if (!where) {
         document.body.append(elem);
@@ -539,15 +541,15 @@ function render(elem, where = "", shouldSchedule = globalSchedule) {
             }
         }
         if (!reuseElements) {
-            where.replaceWith(elem);
+            replaceElement(elem, where);
             runLifecyle(where, onCleanupMap);
         }
         else {
             if (isTextNode(elem)) {
-                where.replaceWith(elem);
+                replaceElement(elem, where);
                 runLifecyle(where, onCleanupMap);
             }
-            else if (isDocumentFragment(elem) || !compare(elem, where)) {
+            else if (!compare(elem, where)) {
                 treeDiff(elem, where);
             }
         }
@@ -614,7 +616,12 @@ function treeDiff(elem, where) {
             where.append(template);
         }
         else {
-            where.before(template);
+            if (isDocumentFragment(where)) {
+                fragmentToElements.get(where)[0].before(template);
+            }
+            else {
+                where.before(template);
+            }
         }
         template.append(elem);
     }
@@ -651,15 +658,54 @@ function treeDiff(elem, where) {
         }
     }
     if (insertBeforeDiffing) {
-        where.replaceWith(...(isDocumentFragment(elem) ? Array.from(template.childNodes) : [elem]));
+        const newElems = isDocumentFragment(elem)
+            ? Array.from(template.childNodes)
+            : [elem];
+        if (isDocumentFragment(where)) {
+            const oldElems = fragmentToElements.get(where);
+            newElems.forEach((e) => oldElems[0].before(e));
+            oldElems.forEach((e) => e.remove());
+        }
+        else {
+            where.replaceWith(...newElems);
+        }
         template.remove();
         runLifecyle(where, onCleanupMap);
     }
     else {
-        where.replaceWith(elem);
+        replaceElement(elem, where);
         runLifecyle(where, onCleanupMap);
     }
     tag2Elements.clear();
+}
+function replaceElement(elem, where) {
+    if (isDocumentFragment(where)) {
+        const fragmentChildren = fragmentToElements.get(where);
+        if (isDocumentFragment(elem)) {
+            const fragmentElements = Array.from(elem.childNodes);
+            fragmentChildren.forEach((fragWhere, index) => {
+                if (index < fragmentElements.length) {
+                    render(fragmentElements[index], fragWhere);
+                }
+                else {
+                    fragWhere.remove();
+                }
+            });
+        }
+        else {
+            fragmentChildren.forEach((fragWhere, index) => {
+                if (index === 0) {
+                    render(elem, fragWhere);
+                }
+                else {
+                    fragWhere.remove();
+                }
+            });
+        }
+    }
+    else {
+        where.replaceWith(elem);
+    }
 }
 function unmount(elem) {
     if (Array.isArray(elem)) {
@@ -1110,7 +1156,7 @@ function updateDOM(keyToNodeMap, key, val, oldVal) {
             const [start, end, key] = change;
             let useStartEnd = false;
             if (isNode(val)) {
-                node.replaceWith(val);
+                replaceElement(val, node);
                 runLifecyle(node, onCleanupMap);
             }
             else if (isTextNode(node)) {

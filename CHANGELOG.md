@@ -1,6 +1,10 @@
 # Changelog
 
-## 1.2.9- 2021-01-25
+## 1.2.11- 2021-01-28
+
+- Fix bugs where diffing did not work well with document fragments
+
+## 1.2.10- 2021-01-25
 
 - Add new function `setShouldSetReactivity`
 

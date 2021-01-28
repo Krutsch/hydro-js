@@ -99,6 +99,7 @@ const tmpSwap = new WeakMap<hydroObject, keyToNodeMap>(); // Take over keyToNode
 const bindMap = new WeakMap<hydroObject, Array<Element>>(); // Bind an Element to Data. If the Data is being unset, the DOM Element disappears too.
 const onRenderMap = new WeakMap<ReturnType<typeof html>, Function>(); // Lifecycle Hook that is being called after rendering
 const onCleanupMap = new WeakMap<ReturnType<typeof html>, Function>(); // Lifecycle Hook that is being called when unmount function is being called
+const fragmentToElements = new WeakMap<DocumentFragment, Array<ChildNode>>(); // Used to retreive Elements from DocumentFragment after it has been rendered – for diffing
 const _boundFunctions = Symbol("boundFunctions"); // Cache for bound functions in Proxy, so that we create the bound version of each function only once
 
 const toSchedule: Array<[Function, ...any[]]> = []; // functions that will be executed async and during a browser's idle period
@@ -718,6 +719,7 @@ function render(
   let elemChildren: Array<ChildNode>;
   if (isDocumentFragment(elem)) {
     elemChildren = Array.from(elem.childNodes);
+    fragmentToElements.set(elem, elemChildren); // For diffing later
   }
 
   if (!where) {
@@ -733,13 +735,13 @@ function render(
     }
 
     if (!reuseElements) {
-      (where as Element).replaceWith(elem);
+      replaceElement(elem, where as Element);
       runLifecyle(where as Element, onCleanupMap);
     } else {
       if (isTextNode(elem)) {
-        (where as Element).replaceWith(elem);
+        replaceElement(elem, where as Element);
         runLifecyle(where as Element, onCleanupMap);
-      } else if (isDocumentFragment(elem) || !compare(elem, where as Element)) {
+      } else if (!compare(elem, where as Element)) {
         treeDiff(elem, where as Element);
       }
     }
@@ -836,7 +838,11 @@ function treeDiff(elem: Element | DocumentFragment, where: Element) {
     if (where === document.documentElement) {
       where.append(template);
     } else {
-      where.before(template);
+      if (isDocumentFragment(where)) {
+        fragmentToElements.get(where)![0].before(template);
+      } else {
+        where.before(template);
+      }
     }
     template.append(elem);
   }
@@ -877,16 +883,52 @@ function treeDiff(elem: Element | DocumentFragment, where: Element) {
   }
 
   if (insertBeforeDiffing) {
-    where.replaceWith(
-      ...(isDocumentFragment(elem) ? Array.from(template!.childNodes) : [elem])
-    );
+    const newElems = isDocumentFragment(elem)
+      ? Array.from(template!.childNodes)
+      : [elem];
+    if (isDocumentFragment(where)) {
+      const oldElems = fragmentToElements.get(where)!;
+      newElems.forEach((e) => oldElems[0].before(e));
+      oldElems.forEach((e) => e.remove());
+    } else {
+      where.replaceWith(...newElems);
+    }
     template!.remove();
     runLifecyle(where, onCleanupMap);
   } else {
-    where.replaceWith(elem);
+    replaceElement(elem, where);
     runLifecyle(where, onCleanupMap);
   }
   tag2Elements.clear();
+}
+
+function replaceElement(
+  elem: ReturnType<typeof html>,
+  where: ReturnType<typeof html>
+) {
+  if (isDocumentFragment(where)) {
+    const fragmentChildren = fragmentToElements.get(where)!;
+    if (isDocumentFragment(elem)) {
+      const fragmentElements = Array.from(elem.childNodes);
+      fragmentChildren.forEach((fragWhere, index) => {
+        if (index < fragmentElements.length) {
+          render(fragmentElements[index], fragWhere as Element);
+        } else {
+          fragWhere.remove();
+        }
+      });
+    } else {
+      fragmentChildren.forEach((fragWhere, index) => {
+        if (index === 0) {
+          render(elem, fragWhere as Element);
+        } else {
+          fragWhere.remove();
+        }
+      });
+    }
+  } else {
+    where.replaceWith(elem);
+  }
 }
 
 function unmount<T = ReturnType<typeof html> | Array<ChildNode>>(elem: T) {
@@ -1406,7 +1448,7 @@ function updateDOM(
       let useStartEnd = false;
 
       if (isNode(val)) {
-        node.replaceWith(val);
+        replaceElement(val as Element, node);
         runLifecyle(node, onCleanupMap);
       } else if (isTextNode(node)) {
         useStartEnd = true;

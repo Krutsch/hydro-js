@@ -1,6 +1,6 @@
 {
   "name": "hydro-js",
-  "version": "1.2.10",
+  "version": "1.2.11",
   "description": "A lightweight reactive library",
   "type": "module",
   "main": "./dist/library.js",

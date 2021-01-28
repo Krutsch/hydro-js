@@ -59,6 +59,127 @@ const results: Array<{ name: string; success: boolean }> = [];
 let condition = true;
 describe("library", () => {
   describe("functions", () => {
+    describe("documentFragment", () => {
+      it("render elem in fragment", () => {
+        const fragment = html`<div>here</div>
+          <div>and here</div>`;
+        render(fragment);
+        const unmount = render(html`<p>a</p>`, fragment);
+        let condition = document.body.childElementCount === 1;
+        unmount();
+
+        return condition && document.body.childElementCount === 0;
+      });
+
+      it("render fragment in fragment", () => {
+        const fragment = html`<div>here</div>
+          <div>and here</div>`;
+        render(fragment);
+        const unmount = render(html`<p>a</p><p>b</b>`, fragment);
+        let condition = document.body.childElementCount === 2;
+        unmount();
+
+        return condition && document.body.childElementCount === 0;
+      });
+
+      it("render fragment in elem", () => {
+        const elem = html`<div>here</div>`;
+        render(elem);
+        const unmount = render(html`<p>a</p><p>b</b>`, elem);
+        let condition = document.body.childElementCount === 2;
+        unmount();
+
+        return condition && document.body.childElementCount === 0;
+      });
+
+      it("render text in fragment", () => {
+        const fragment = html`<div>here</div>
+          <div>and here</div>`;
+        render(fragment);
+        const unmount = render(html`text`, fragment);
+        let condition = document.body.childElementCount === 0;
+        unmount();
+
+        return condition && document.body.childElementCount === 0;
+      });
+
+      it("render fragment in text", () => {
+        const text = html`text`;
+        render(text);
+        const unmount = render(
+          html`<div>here</div>
+            <div>and here</div>`,
+          text
+        );
+        let condition = document.body.childElementCount === 2;
+        unmount();
+
+        return condition && document.body.childElementCount === 0;
+      });
+
+      it("render elem in fragment - setInsertDiffing", () => {
+        setInsertDiffing(true);
+        const fragment = html`<div>here</div>
+          <div>and here</div>`;
+        render(fragment);
+        const unmount = render(html`<p>a</p>`, fragment);
+        let condition = document.body.childElementCount === 1;
+        unmount();
+        setInsertDiffing(false);
+        return condition && document.body.childElementCount === 0;
+      });
+
+      it("render fragment in fragment - setInsertDiffing", () => {
+        setInsertDiffing(true);
+        const fragment = html`<div>here</div>
+          <div>and here</div>`;
+        render(fragment);
+        const unmount = render(html`<p>a</p><p>b</b>`, fragment);
+        let condition = document.body.childElementCount === 2;
+        unmount();
+        setInsertDiffing(false);
+        return condition && document.body.childElementCount === 0;
+      });
+
+      it("render fragment in elem - setInsertDiffing", () => {
+        setInsertDiffing(true);
+        const elem = html`<div>here</div>`;
+        render(elem);
+        const unmount = render(html`<p>a</p><p>b</b>`, elem);
+        let condition = document.body.childElementCount === 2;
+        unmount();
+        setInsertDiffing(false);
+        return condition && document.body.childElementCount === 0;
+      });
+
+      it("render text in fragment - setInsertDiffing", () => {
+        setInsertDiffing(true);
+        const fragment = html`<div>here</div>
+          <div>and here</div>`;
+        render(fragment);
+        const unmount = render(html`text`, fragment);
+        let condition = document.body.childElementCount === 0;
+        unmount();
+        setInsertDiffing(false);
+        return condition && document.body.childElementCount === 0;
+      });
+
+      it("render fragment in text - setInsertDiffing", () => {
+        setInsertDiffing(true);
+        const text = html`text`;
+        render(text);
+        const unmount = render(
+          html`<div>here</div>
+            <div>and here</div>`,
+          text
+        );
+        let condition = document.body.childElementCount === 2;
+        unmount();
+        setInsertDiffing(false);
+        return condition && document.body.childElementCount === 0;
+      });
+    });
+
     describe("setReuseElements", () => {
       it("code coverage", () => {
         setReuseElements(true);
