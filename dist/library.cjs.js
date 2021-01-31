@@ -208,6 +208,14 @@ function html(htmlArray, // The Input String, which is splitted by the template 
     // Return Element
     return DOM.firstChild;
 }
+function h(name, props, ...children) {
+    const flatChildren = children
+        .map((child) => 
+    /* c8 ignore next 1 */
+    isObject(child) && !isNode(child) ? Object.values(child) : child)
+        .flat();
+    return html `<${name} ${props ?? { localName: name }}>${flatChildren}</${name}>`;
+}
 function setReactivity(DOM, eventFunctions) {
     // Set events and reactive behaviour(checks for {{ key }} where key is on hydro)
     const root = document.createNodeIterator(DOM, window.NodeFilter.SHOW_ELEMENT);
@@ -1258,4 +1266,4 @@ document.addEventListener("visibilitychange", () => {
 const internals = {
     compare,
 };
-module.exports = { render, html, hydro, setGlobalSchedule, setReuseElements, setInsertDiffing, setShouldSetReactivity, reactive, unset, setAsyncUpdate, unobserve, observe, ternary, emit, watchEffect, internals, getValue, onRender, onCleanup, setReactivity, $, $$, };
+module.exports = { render, html, h, hydro, setGlobalSchedule, setReuseElements, setInsertDiffing, setShouldSetReactivity, reactive, unset, setAsyncUpdate, unobserve, observe, ternary, emit, watchEffect, internals, getValue, onRender, onCleanup, setReactivity, $, $$, };

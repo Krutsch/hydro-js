@@ -323,6 +323,21 @@ function html(
   // Return Element
   return DOM.firstChild as Element;
 }
+function h(
+  name: string,
+  props: Record<keyof any, any> | null,
+  ...children: Array<any>
+): ReturnType<typeof html> {
+  const flatChildren = children
+    .map((child) =>
+      /* c8 ignore next 1 */
+      isObject(child) && !isNode(child as Node) ? Object.values(child) : child
+    )
+    .flat();
+  return html`<${name} ${
+    props ?? { localName: name }
+  }>${flatChildren}</${name}>`;
+}
 function setReactivity(DOM: Node, eventFunctions?: eventFunctions) {
   // Set events and reactive behaviour(checks for {{ key }} where key is on hydro)
   const root = document.createNodeIterator(DOM, window.NodeFilter.SHOW_ELEMENT);
@@ -1562,6 +1577,7 @@ const internals = {
 export {
   render,
   html,
+  h,
   hydro,
   setGlobalSchedule,
   setReuseElements,

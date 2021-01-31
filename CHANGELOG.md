@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.12- 2021-01-30
+
+- Add experimental h function
+
 ## 1.2.11- 2021-01-28
 
 - Fix bugs where diffing did not work well with document fragments
@@ -14,7 +18,7 @@
 
 ## 1.2.8- 2021-01-24
 
-- Add support for `html`, `head` and `body` element. The html function can create every element now.
+- Add support for `html`, `head` and `body` element. The html function can create every element now
 
 ## 1.2.7- 2021-01-17
 
@@ -43,7 +47,7 @@
   - `@ampproject/worker-dom` does not cover enough APIs to make it possible
   - `via.js` does not really make it possible to use the windows object
   - `DOM-Proxy` made it possible to run ~50% of the code but was not efficient enough to make it worthwhile
-- Remove Broadcast Channel goal, because this is something that the App Developer has to take care of. Structured cloning will fail for the most important calls.
+- Remove Broadcast Channel goal, because this is something that the App Developer has to take care of. Structured cloning will fail for the most important calls
 - Add MIT License
 
 ## 1.2.2- 2020-11-29

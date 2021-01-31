@@ -1,5 +1,6 @@
 import {
   html,
+  h,
   hydro,
   render,
   setGlobalSchedule,
@@ -59,6 +60,19 @@ const results: Array<{ name: string; success: boolean }> = [];
 let condition = true;
 describe("library", () => {
   describe("functions", () => {
+    describe("h", () => {
+      it("returns a valid element", () => {
+        const test = reactive("A");
+        setTimeout(() => {
+          unset(test);
+        });
+        return (h("div", null, [test]) as Element).localName === "div";
+      });
+      it("returns a valid element when it has children", () => {
+        return h("div", null, [h("p", null, ["test"])]).childNodes.length === 1;
+      });
+    });
+
     describe("documentFragment", () => {
       it("render elem in fragment", () => {
         const fragment = html`<div>here</div>

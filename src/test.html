@@ -9,6 +9,7 @@
       import { expect } from "@esm-bundle/chai";
       import {
         html,
+        h,
         hydro,
         render,
         setGlobalSchedule,
@@ -37,6 +38,22 @@
             new Promise((resolve) => setTimeout(resolve, time));
 
           describe("functions", () => {
+            describe("h", () => {
+              it("returns a valid element", () => {
+                const test = reactive("A");
+                setTimeout(() => {
+                  unset(test);
+                });
+                expect(h("div", null, [test]).localName === "div").to.be.true;
+              });
+              it("returns a valid element when it has children", () => {
+                expect(
+                  h("div", null, [h("p", null, ["test"])]).childNodes.length ===
+                    1
+                ).to.be.true;
+              });
+            });
+
             describe("documentFragment", () => {
               it("render elem in fragment", () => {
                 const fragment = html`<div>here</div>
