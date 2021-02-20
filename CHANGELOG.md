@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.13- 2021-02-20
+
+- Fix bug where a passed in function would not work in JSX
+
 ## 1.2.12- 2021-01-30
 
 - Add experimental h function
