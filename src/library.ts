@@ -324,10 +324,12 @@ function html(
   return DOM.firstChild as Element;
 }
 function h(
-  name: string,
+  name: string | ((...args: any[]) => ReturnType<typeof h>),
   props: Record<keyof any, any> | null,
   ...children: Array<any>
 ): ReturnType<typeof html> {
+  if (isFunction(name)) return name();
+
   const flatChildren = children
     .map((child) =>
       /* c8 ignore next 1 */

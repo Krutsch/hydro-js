@@ -209,6 +209,8 @@ function html(htmlArray, // The Input String, which is splitted by the template 
     return DOM.firstChild;
 }
 function h(name, props, ...children) {
+    if (isFunction(name))
+        return name();
     const flatChildren = children
         .map((child) => 
     /* c8 ignore next 1 */

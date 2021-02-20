@@ -39,6 +39,13 @@
 
           describe("functions", () => {
             describe("h", () => {
+              it("handles functions correctly", () => {
+                expect(
+                  h(() => h("p", null, ["Hello World"]), null, [])
+                    .textContent === "Hello World"
+                ).to.be.true;
+              });
+
               it("returns a valid element", () => {
                 const test = reactive("A");
                 setTimeout(() => {
@@ -46,6 +53,7 @@
                 });
                 expect(h("div", null, [test]).localName === "div").to.be.true;
               });
+
               it("returns a valid element when it has children", () => {
                 expect(
                   h("div", null, [h("p", null, ["test"])]).childNodes.length ===

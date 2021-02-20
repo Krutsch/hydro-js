@@ -61,6 +61,13 @@ let condition = true;
 describe("library", () => {
   describe("functions", () => {
     describe("h", () => {
+      it("handles functions correctly", () => {
+        return (
+          h(() => h("p", null, ["Hello World"]), null, []).textContent ===
+          "Hello World"
+        );
+      });
+
       it("returns a valid element", () => {
         const test = reactive("A");
         setTimeout(() => {
@@ -68,6 +75,7 @@ describe("library", () => {
         });
         return (h("div", null, [test]) as Element).localName === "div";
       });
+
       it("returns a valid element when it has children", () => {
         return h("div", null, [h("p", null, ["test"])]).childNodes.length === 1;
       });
