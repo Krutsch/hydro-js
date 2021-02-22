@@ -14,7 +14,7 @@
   "scripts": {
     "build": "tsc && node utils/esm2c.js",
     "dev": "concurrently \"serve dist\" \"tsc -w\"",
-    "test": "tsc && wtr src/test.html --node-resolve --coverage --playwright --browsers webkit",
+    "test": "tsc && wtr src/test.html --node-resolve --coverage --playwright --browsers chromium firefox webkit",
     "update": "npx npm-check-updates -u && npx typesync && npm i && npm outdated"
   },
   "keywords": [
