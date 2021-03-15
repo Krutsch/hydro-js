@@ -754,7 +754,10 @@ function reactive(initial) {
     return chainKeysProxy;
     function setter(val) {
         // @ts-ignore
-        const keys = (this || chainKeysProxy)["__keys__" /* keys */];
+        const keys = (this && Reflect.get(this, "reactive" /* reactive */)
+            ? // @ts-ignore
+                this
+            : chainKeysProxy)["__keys__" /* keys */];
         const [resolvedValue, resolvedObj] = resolveObject(keys);
         const lastProp = keys[keys.length - 1];
         if (isFunction(val)) {

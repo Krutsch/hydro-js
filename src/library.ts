@@ -993,7 +993,10 @@ function reactive<T>(initial: T): reactiveObject<T> {
 
   function setter<U>(val: U) {
     // @ts-ignore
-    const keys = (this || chainKeysProxy)[Placeholder.keys];
+    const keys = (this && Reflect.get(this, Placeholder.reactive)
+      ? // @ts-ignore
+        this
+      : chainKeysProxy)[Placeholder.keys];
     const [resolvedValue, resolvedObj] = resolveObject(keys);
     const lastProp = keys[keys.length - 1];
 

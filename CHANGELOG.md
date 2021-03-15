@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.14- 2021-03-15
+
+- Update deps
+- Fix bug regarding scope issues
+
 ## 1.2.13- 2021-02-20
 
 - Fix bug where a passed in function would not work in JSX
