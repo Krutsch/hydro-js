@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.3.0- 2021-04-14
+
+- Fix props bug with h function
+- Refactor scheduler
+
 ## 1.2.14- 2021-03-15
 
 - Update deps

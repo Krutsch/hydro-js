@@ -917,32 +917,6 @@
                 expect(!elem1.isConnected && elem2.isConnected).to.be.true;
               });
 
-              it("async behavior", async () => {
-                // Code Coverage
-                setGlobalSchedule(true);
-
-                const text = reactive("hello");
-                const elem = html`<p>${text}</p>`;
-                onRender(() => 1, elem);
-                const unmount = render(elem);
-
-                const waitForElement = (elem) =>
-                  new Promise(async (resolve) => {
-                    while (!elem.isConnected) {
-                      await sleep(50);
-                      if (elem.isConnected) resolve(true);
-                    }
-                  });
-
-                setGlobalSchedule(false);
-                await waitForElement(elem);
-
-                setTimeout(() => {
-                  unset(text);
-                  unmount();
-                });
-              });
-
               it("can render elements wrapped in reactive", async () => {
                 const number = reactive(5);
                 const elem = reactive(html`<p>${number}</p>`);

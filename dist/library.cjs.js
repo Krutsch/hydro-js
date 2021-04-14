@@ -21,12 +21,10 @@ const onRenderMap = new WeakMap(); // Lifecycle Hook that is being called after 
 const onCleanupMap = new WeakMap(); // Lifecycle Hook that is being called when unmount function is being called
 const fragmentToElements = new WeakMap(); // Used to retreive Elements from DocumentFragment after it has been rendered – for diffing
 const _boundFunctions = Symbol("boundFunctions"); // Cache for bound functions in Proxy, so that we create the bound version of each function only once
-const toSchedule = []; // functions that will be executed async and during a browser's idle period
 let globalSchedule = true; // Decides whether to schedule rendering and updating (async)
 let reuseElements = true; // Reuses Elements when rendering
 let insertBeforeDiffing = false;
 let shouldSetReactivity = true;
-let isScheduling = false; // Helper - checks if code is already in requestIdleCallback
 const reactivityRegex = /\{\{((\s|.)*?)\}\}/;
 const HTML_FIND_INVALID = /<(\/?)(html|head|body)(>|\s.*?>)/g;
 const newLineRegex = /\n/g;
@@ -210,7 +208,7 @@ function html(htmlArray, // The Input String, which is splitted by the template 
 }
 function h(name, props, ...children) {
     if (isFunction(name))
-        return name();
+        return name(props);
     const flatChildren = children
         .map((child) => 
     /* c8 ignore next 1 */
@@ -521,10 +519,9 @@ function compare(elem, where, onlyTextChildren) {
     return (elem.isEqualNode(where) && compareEvents(elem, where, onlyTextChildren));
 }
 function render(elem, where = "", shouldSchedule = globalSchedule) {
+    /* c8 ignore next 4 */
     if (shouldSchedule) {
-        toSchedule.push([render, elem, where, false]);
-        if (!isScheduling)
-            window.requestIdleCallback(schedule);
+        schedule(render, elem, where, false);
         return unmount(elem);
     }
     // Get elem value if elem is reactiveObject
@@ -575,7 +572,7 @@ function executeLifecycle(node, lifecyleMap) {
         const fn = lifecyleMap.get(node);
         /* c8 ignore next 3 */
         if (globalSchedule) {
-            window.requestIdleCallback(fn);
+            schedule(fn);
         }
         else {
             fn();
@@ -731,17 +728,19 @@ function removeElement(elem) {
         runLifecyle(elem, onCleanupMap);
     }
 }
-function schedule(deadline) {
-    isScheduling = true;
-    while (deadline.timeRemaining() > 0 && toSchedule.length > 0) {
-        const [fn, ...args] = toSchedule.shift();
-        fn(...args);
+/* c8 ignore next 13 */
+function schedule(fn, ...args) {
+    if (navigator.scheduling) {
+        if (navigator.scheduling.isInputPending()) {
+            setTimeout(schedule, 0, fn, args);
+        }
+        else {
+            fn(...args);
+        }
     }
-    /* c8 ignore next 3 */
-    if (toSchedule.length > 0) {
-        window.requestIdleCallback(schedule);
+    else {
+        window.requestIdleCallback(() => fn(...args));
     }
-    isScheduling = false;
 }
 function reactive(initial) {
     let key;
@@ -1125,9 +1124,7 @@ function checkReactivityMap(obj, key, val, oldVal) {
     if (keyToNodeMap.has(String(key))) {
         /* c8 ignore next 5 */
         if (Reflect.get(obj, "asyncUpdate" /* asyncUpdate */)) {
-            toSchedule.push([updateDOM, keyToNodeMap, String(key), val, oldVal]);
-            if (!isScheduling)
-                window.requestIdleCallback(schedule);
+            schedule(updateDOM, keyToNodeMap, String(key), val, oldVal);
         }
         else {
             updateDOM(keyToNodeMap, String(key), val, oldVal);
@@ -1139,9 +1136,7 @@ function checkReactivityMap(obj, key, val, oldVal) {
             if (keyToNodeMap.has(subKey)) {
                 /* c8 ignore next 5 */
                 if (Reflect.get(obj, "asyncUpdate" /* asyncUpdate */)) {
-                    toSchedule.push([updateDOM, keyToNodeMap, subKey, subVal, subOldVal]);
-                    if (!isScheduling)
-                        window.requestIdleCallback(schedule);
+                    schedule(updateDOM, keyToNodeMap, subKey, subVal, subOldVal);
                 }
                 else {
                     updateDOM(keyToNodeMap, subKey, subVal, subOldVal);
@@ -1245,29 +1240,6 @@ function updateDOM(keyToNodeMap, key, val, oldVal) {
 const hydro = generateProxy();
 const $ = document.querySelector.bind(document);
 const $$ = document.querySelectorAll.bind(document);
-let wasHidden = false;
-document.addEventListener("visibilitychange", () => {
-    /* c8 ignore next 19 */
-    // The schedule logic does not work well when the document is in the background. Ideally all the changes have to be rendered at once, if the User comes back
-    // This could block the UI however, and it makes sense to only render the last updates < 50ms
-    if (wasHidden === true && document.hidden === false) {
-        const start = performance.now();
-        // 1 frame if 24fps, 18 frames if 360fps
-        const lastFrames = toSchedule.splice(toSchedule.length - 18, 18);
-        while (lastFrames.length > 0 && performance.now() < start + 50) {
-            const [fn, ...args] = lastFrames.shift();
-            fn(...args);
-        }
-        // Render the latest update, just in case
-        if (lastFrames.length > 0) {
-            const [fn, ...args] = lastFrames.pop();
-            fn(...args);
-        }
-        // Empty toSchedule
-        toSchedule.splice(0, toSchedule.length);
-    }
-    wasHidden = document.hidden;
-});
 const internals = {
     compare,
 };

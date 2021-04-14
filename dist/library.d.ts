@@ -21,7 +21,15 @@ declare global {
     interface Object {
         setter(val: any): void;
     }
+    interface Navigator {
+        scheduling: {
+            isInputPending(IsInputPendingOptions?: isInputPendingOptions): boolean;
+        };
+    }
 }
+declare type isInputPendingOptions = {
+    includeContinuous: boolean;
+};
 interface hydroObject extends Record<keyof any, any> {
     isProxy: boolean;
     asyncUpdate: boolean;

@@ -57,6 +57,7 @@ document.head.insertAdjacentHTML(
 const results: Array<{ name: string; success: boolean }> = [];
 
 // --------- TESTS START ------------
+
 let condition = true;
 describe("library", () => {
   describe("functions", () => {
@@ -937,34 +938,6 @@ describe("library", () => {
         setTimeout(unmount);
         setReuseElements(true);
         return !elem1.isConnected && elem2.isConnected;
-      });
-
-      it("async behavior", async () => {
-        // Code Coverage
-        setGlobalSchedule(true);
-
-        const text = reactive("hello");
-        const elem = html`<p>${text}</p>` as Element;
-        onRender(() => 1, elem);
-        const unmount = render(elem);
-
-        const waitForElement = (elem: Element) =>
-          new Promise(async (resolve) => {
-            while (!elem.isConnected) {
-              await sleep(50);
-              if (elem.isConnected) resolve(true);
-            }
-          });
-
-        setGlobalSchedule(false);
-        await waitForElement(elem);
-
-        setTimeout(() => {
-          unset(text);
-          unmount();
-        });
-
-        return true;
       });
 
       it("can render elements wrapped in reactive", async () => {

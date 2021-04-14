@@ -22,11 +22,15 @@ declare global {
   interface Object {
     setter(val: any): void;
   }
+  interface Navigator {
+    scheduling: {
+      isInputPending(IsInputPendingOptions?: isInputPendingOptions): boolean;
+    };
+  }
 }
-interface RequestIdleCallbackDeadline {
-  readonly didTimeout: boolean;
-  timeRemaining: () => number;
-}
+type isInputPendingOptions = {
+  includeContinuous: boolean;
+};
 
 interface hydroObject extends Record<keyof any, any> {
   isProxy: boolean;
@@ -102,12 +106,10 @@ const onCleanupMap = new WeakMap<ReturnType<typeof html>, Function>(); // Lifecy
 const fragmentToElements = new WeakMap<DocumentFragment, Array<ChildNode>>(); // Used to retreive Elements from DocumentFragment after it has been rendered – for diffing
 const _boundFunctions = Symbol("boundFunctions"); // Cache for bound functions in Proxy, so that we create the bound version of each function only once
 
-const toSchedule: Array<[Function, ...any[]]> = []; // functions that will be executed async and during a browser's idle period
 let globalSchedule = true; // Decides whether to schedule rendering and updating (async)
 let reuseElements = true; // Reuses Elements when rendering
 let insertBeforeDiffing = false;
 let shouldSetReactivity = true;
-let isScheduling = false; // Helper - checks if code is already in requestIdleCallback
 
 const reactivityRegex = /\{\{((\s|.)*?)\}\}/;
 const HTML_FIND_INVALID = /<(\/?)(html|head|body)(>|\s.*?>)/g;
@@ -328,7 +330,7 @@ function h(
   props: Record<keyof any, any> | null,
   ...children: Array<any>
 ): ReturnType<typeof html> {
-  if (isFunction(name)) return name();
+  if (isFunction(name)) return name(props);
 
   const flatChildren = children
     .map((child) =>
@@ -465,13 +467,16 @@ function setReactivitySingle(node: Element | Text, key?: string): void {
       } else if (key === Placeholder.twoWay) {
         // Same behavior as v-model in https://v3.vuejs.org/guide/forms.html#basic-usage
         const changeAttrVal = (eventName: string) => {
-          node.addEventListener(eventName, ({ target }) => {
-            Reflect.set(
-              resolvedObj,
-              lastProp,
-              (target as HTMLInputElement).value
-            );
-          });
+          node.addEventListener(
+            eventName,
+            ({ target }: { target: EventTarget | null }) => {
+              Reflect.set(
+                resolvedObj,
+                lastProp,
+                (target as HTMLInputElement).value
+              );
+            }
+          );
         };
 
         if (
@@ -721,9 +726,9 @@ function render(
   where: ReturnType<typeof html> | string = "",
   shouldSchedule = globalSchedule
 ): ChildNode["remove"] {
+  /* c8 ignore next 4 */
   if (shouldSchedule) {
-    toSchedule.push([render, elem, where, false]);
-    if (!isScheduling) window.requestIdleCallback(schedule);
+    schedule(render, elem, where, false);
     return unmount(elem);
   }
 
@@ -781,7 +786,7 @@ function executeLifecycle(
 
     /* c8 ignore next 3 */
     if (globalSchedule) {
-      window.requestIdleCallback(fn);
+      schedule(fn);
     } else {
       fn();
     }
@@ -963,20 +968,17 @@ function removeElement(elem: Text | Element) {
   }
 }
 
-function schedule(deadline: RequestIdleCallbackDeadline): void {
-  isScheduling = true;
-
-  while (deadline.timeRemaining() > 0 && toSchedule.length > 0) {
-    const [fn, ...args] = toSchedule.shift()!;
-    fn(...args);
+/* c8 ignore next 13 */
+function schedule(fn: Function, ...args: any): void {
+  if (navigator.scheduling) {
+    if (navigator.scheduling.isInputPending()) {
+      setTimeout(schedule, 0, fn, args);
+    } else {
+      fn(...args);
+    }
+  } else {
+    window.requestIdleCallback(() => fn(...args));
   }
-
-  /* c8 ignore next 3 */
-  if (toSchedule.length > 0) {
-    window.requestIdleCallback(schedule);
-  }
-
-  isScheduling = false;
 }
 
 function reactive<T>(initial: T): reactiveObject<T> {
@@ -1416,8 +1418,7 @@ function checkReactivityMap(obj: any, key: keyof any, val: any, oldVal: any) {
   if (keyToNodeMap.has(String(key))) {
     /* c8 ignore next 5 */
     if (Reflect.get(obj, Placeholder.asyncUpdate)) {
-      toSchedule.push([updateDOM, keyToNodeMap, String(key), val, oldVal]);
-      if (!isScheduling) window.requestIdleCallback(schedule);
+      schedule(updateDOM, keyToNodeMap, String(key), val, oldVal);
     } else {
       updateDOM(keyToNodeMap, String(key), val, oldVal);
     }
@@ -1431,8 +1432,7 @@ function checkReactivityMap(obj: any, key: keyof any, val: any, oldVal: any) {
       if (keyToNodeMap.has(subKey)) {
         /* c8 ignore next 5 */
         if (Reflect.get(obj, Placeholder.asyncUpdate)) {
-          toSchedule.push([updateDOM, keyToNodeMap, subKey, subVal, subOldVal]);
-          if (!isScheduling) window.requestIdleCallback(schedule);
+          schedule(updateDOM, keyToNodeMap, subKey, subVal, subOldVal);
         } else {
           updateDOM(keyToNodeMap, subKey, subVal, subOldVal);
         }
@@ -1551,30 +1551,6 @@ function updateDOM(
 const hydro = generateProxy();
 const $ = document.querySelector.bind(document);
 const $$ = document.querySelectorAll.bind(document);
-
-let wasHidden: boolean = false;
-document.addEventListener("visibilitychange", () => {
-  /* c8 ignore next 19 */
-  // The schedule logic does not work well when the document is in the background. Ideally all the changes have to be rendered at once, if the User comes back
-  // This could block the UI however, and it makes sense to only render the last updates < 50ms
-  if (wasHidden === true && document.hidden === false) {
-    const start = performance.now();
-    // 1 frame if 24fps, 18 frames if 360fps
-    const lastFrames = toSchedule.splice(toSchedule.length - 18, 18);
-    while (lastFrames.length > 0 && performance.now() < start + 50) {
-      const [fn, ...args] = lastFrames.shift()!;
-      fn(...args);
-    }
-    // Render the latest update, just in case
-    if (lastFrames.length > 0) {
-      const [fn, ...args] = lastFrames.pop()!;
-      fn(...args);
-    }
-    // Empty toSchedule
-    toSchedule.splice(0, toSchedule.length);
-  }
-  wasHidden = document.hidden;
-});
 
 const internals = {
   compare,
