@@ -188,15 +188,8 @@ function html(htmlArray, // The Input String, which is splitted by the template 
     }
     // Insert HTML Elements, which were stored in insertNodes
     DOM.querySelectorAll("template[id^=lbInsertNodes]").forEach((template) => template.replaceWith(insertNodes.shift()));
-    if (shouldSetReactivity) {
-        /* c8 ignore next 5 */
-        if (globalSchedule)
-            DOM.childNodes.forEach((child) => {
-                setTimeout(schedule, 0, setReactivity, child, eventFunctions);
-            });
-        else
-            setReactivity(DOM, eventFunctions);
-    }
+    if (shouldSetReactivity)
+        setReactivity(DOM, eventFunctions);
     // Return DocumentFragment
     if (DOM.childNodes.length > 1)
         return DOM;
@@ -1237,10 +1230,21 @@ function updateDOM(keyToNodeMap, key, val, oldVal) {
         });
     });
 }
+/* c8 ignore next 14 */
+function template(elem, placeholders, events) {
+    const wrapper = elem.content.cloneNode(true).firstChild;
+    let innerHTML = wrapper.innerHTML;
+    for (const [key, value] of Object.entries(placeholders)) {
+        innerHTML = innerHTML.replace(key, String(value));
+    }
+    wrapper.innerHTML = innerHTML;
+    schedule(setReactivity, wrapper.firstChild, events);
+    return wrapper.firstChild;
+}
 const hydro = generateProxy();
 const $ = document.querySelector.bind(document);
 const $$ = document.querySelectorAll.bind(document);
 const internals = {
     compare,
 };
-export { render, html, h, hydro, setGlobalSchedule, setReuseElements, setInsertDiffing, setShouldSetReactivity, reactive, unset, setAsyncUpdate, unobserve, observe, ternary, emit, watchEffect, internals, getValue, onRender, onCleanup, setReactivity, $, $$, };
+export { render, html, h, hydro, setGlobalSchedule, setReuseElements, setInsertDiffing, setShouldSetReactivity, reactive, unset, setAsyncUpdate, unobserve, observe, ternary, emit, watchEffect, internals, getValue, onRender, onCleanup, setReactivity, $, $$, template, };

@@ -64,6 +64,7 @@ declare function watchEffect(fn: Function): () => void | undefined;
 declare function getValue<T>(reactiveHydro: T): T;
 declare function onRender(fn: Function, elem: ReturnType<typeof html>, ...args: Array<any>): void;
 declare function onCleanup(fn: Function, elem: ReturnType<typeof html>, ...args: Array<any>): void;
+declare function template(elem: HTMLTemplateElement, placeholders: Record<string, any>, events: Record<string, any>): ChildNode | null;
 declare const hydro: hydroObject;
 declare const $: {
     <K extends keyof HTMLElementTagNameMap>(selectors: K): HTMLElementTagNameMap[K] | null;
@@ -78,4 +79,4 @@ declare const $$: {
 declare const internals: {
     compare: typeof compare;
 };
-export { render, html, h, hydro, setGlobalSchedule, setReuseElements, setInsertDiffing, setShouldSetReactivity, reactive, unset, setAsyncUpdate, unobserve, observe, ternary, emit, watchEffect, internals, getValue, onRender, onCleanup, setReactivity, $, $$, };
+export { render, html, h, hydro, setGlobalSchedule, setReuseElements, setInsertDiffing, setShouldSetReactivity, reactive, unset, setAsyncUpdate, unobserve, observe, ternary, emit, watchEffect, internals, getValue, onRender, onCleanup, setReactivity, $, $$, template, };

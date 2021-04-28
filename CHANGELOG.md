@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.3.3- 2021-04-28
+
+- Add template function
+- Revert using setTimeout for setReactivity
+
 ## 1.3.2- 2021-04-28
 
 - Fix critical bug

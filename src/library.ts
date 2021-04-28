@@ -307,14 +307,7 @@ function html(
     template.replaceWith(insertNodes.shift()!)
   );
 
-  if (shouldSetReactivity) {
-    /* c8 ignore next 5 */
-    if (globalSchedule)
-      DOM.childNodes.forEach((child) => {
-        setTimeout(schedule, 0, setReactivity, child, eventFunctions);
-      });
-    else setReactivity(DOM, eventFunctions);
-  }
+  if (shouldSetReactivity) setReactivity(DOM, eventFunctions);
 
   // Return DocumentFragment
   if (DOM.childNodes.length > 1) return DOM;
@@ -1548,6 +1541,22 @@ function updateDOM(
   });
 }
 
+/* c8 ignore next 14 */
+function template(
+  elem: HTMLTemplateElement,
+  placeholders: Record<string, any>,
+  events: Record<string, any>
+) {
+  const wrapper = elem.content.cloneNode(true).firstChild!;
+  let innerHTML = (wrapper as Element).innerHTML;
+  for (const [key, value] of Object.entries(placeholders)) {
+    innerHTML = innerHTML.replace(key, String(value));
+  }
+  (wrapper as Element).innerHTML = innerHTML;
+  schedule(setReactivity, wrapper.firstChild, events);
+  return wrapper.firstChild;
+}
+
 const hydro = generateProxy();
 const $ = document.querySelector.bind(document);
 const $$ = document.querySelectorAll.bind(document);
@@ -1579,4 +1588,5 @@ export {
   setReactivity,
   $,
   $$,
+  template,
 };
