@@ -188,10 +188,8 @@ function html(htmlArray, // The Input String, which is splitted by the template 
     }
     // Insert HTML Elements, which were stored in insertNodes
     DOM.querySelectorAll("template[id^=lbInsertNodes]").forEach((template) => template.replaceWith(insertNodes.shift()));
-    if (shouldSetReactivity) {
-        if (globalSchedule)
-            setReactivity(DOM, eventFunctions);
-    }
+    if (shouldSetReactivity)
+        setReactivity(DOM, eventFunctions);
     // Return DocumentFragment
     if (DOM.childNodes.length > 1)
         return DOM;

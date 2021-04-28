@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.4- 2021-04-28
+
+- Run build
+
 ## 1.3.3- 2021-04-28
 
 - Add template function
