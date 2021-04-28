@@ -192,7 +192,7 @@ function html(htmlArray, // The Input String, which is splitted by the template 
         /* c8 ignore next 5 */
         if (globalSchedule)
             DOM.childNodes.forEach((child) => {
-                setTimeout(schedule, 0, setReactivity, [child, eventFunctions]);
+                setTimeout(schedule, 0, setReactivity, child, eventFunctions);
             });
         else
             setReactivity(DOM, eventFunctions);
