@@ -59,7 +59,11 @@ const results: Array<{ name: string; success: boolean }> = [];
 // --------- TESTS START ------------
 
 let condition = true;
-describe("library", () => {
+
+const data = reactive({ name: "Pet" });
+render(html`<p bind=${data}>${data.name}</p>`);
+setTimeout(() => unset(data), 1000);
+xdescribe("library", () => {
   describe("functions", () => {
     describe("h", () => {
       it("handles functions correctly", () => {

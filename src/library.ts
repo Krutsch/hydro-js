@@ -307,13 +307,13 @@ function html(
     template.replaceWith(insertNodes.shift()!)
   );
 
-  if (shouldSetReactivity) setReactivity(DOM, eventFunctions);
-
-  // Set reactive Behavior if only a Text Node is present
-  if (DOM.childElementCount === 0 && DOM.firstChild) {
-    if (shouldSetReactivity) setReactivitySingle(DOM.firstChild as Text);
-    // Return Text Node
-    return DOM.firstChild as Text;
+  if (shouldSetReactivity) {
+    /* c8 ignore next 5 */
+    if (globalSchedule)
+      DOM.childNodes.forEach((child) => {
+        setTimeout(schedule, 0, setReactivity, [child, eventFunctions]);
+      });
+    else setReactivity(DOM, eventFunctions);
   }
 
   // Return DocumentFragment

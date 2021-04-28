@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.3.1- 2021-04-28
+
+- update docs with bind
+- schedule reactivity better
+
 ## 1.3.0- 2021-04-14
 
 - Fix props bug with h function

@@ -188,14 +188,14 @@ function html(htmlArray, // The Input String, which is splitted by the template 
     }
     // Insert HTML Elements, which were stored in insertNodes
     DOM.querySelectorAll("template[id^=lbInsertNodes]").forEach((template) => template.replaceWith(insertNodes.shift()));
-    if (shouldSetReactivity)
-        setReactivity(DOM, eventFunctions);
-    // Set reactive Behavior if only a Text Node is present
-    if (DOM.childElementCount === 0 && DOM.firstChild) {
-        if (shouldSetReactivity)
-            setReactivitySingle(DOM.firstChild);
-        // Return Text Node
-        return DOM.firstChild;
+    if (shouldSetReactivity) {
+        /* c8 ignore next 5 */
+        if (globalSchedule)
+            DOM.childNodes.forEach((child) => {
+                setTimeout(schedule, 0, setReactivity, [child, eventFunctions]);
+            });
+        else
+            setReactivity(DOM, eventFunctions);
     }
     // Return DocumentFragment
     if (DOM.childNodes.length > 1)

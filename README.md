@@ -352,6 +352,18 @@ Shortcut for `querySelectorAll`.
 
 An object with internal data / functions for testing or deeper dives for developers. This only includes a `compare` function for DOM Elements at the moment.
 
+### Attributes
+
+- bind: binds a piece of data to an element. This is only useful, when an element should be removed from the DOM, when the data is being set to null.
+
+#### Example
+
+```js
+const data = reactive({ name: "Pet" });
+render(html`<p bind=${data}>${data.name}</p>`);
+setTimeout(() => unset(data), 1000); // will remove the element
+```
+
 ## Further
 
 To enable HTML highlighting in your files, you could use [leet-html](https://marketplace.visualstudio.com/items?itemName=EldarGerfanov.leet-html) in VS Code.
