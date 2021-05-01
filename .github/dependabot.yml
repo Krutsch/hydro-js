@@ -5,10 +5,3 @@ updates:
   schedule:
     interval: daily
   open-pull-requests-limit: 99
-  ignore:
-  - dependency-name: "@web/test-runner"
-    versions:
-    - 0.12.20
-  - dependency-name: "@esm-bundle/chai"
-    versions:
-    - 4.3.1
