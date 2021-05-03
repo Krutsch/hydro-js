@@ -1,4 +1,4 @@
-<img align="right" alt="100% Coverage" src="coverage.svg">
+<img align="right" alt="97% Coverage" src="coverage.svg">
 
 # hydro-js
 
@@ -367,7 +367,3 @@ setTimeout(() => unset(data), 1000); // will remove the element
 ## Further
 
 To enable HTML highlighting in your files, you could use [leet-html](https://marketplace.visualstudio.com/items?itemName=EldarGerfanov.leet-html) in VS Code.
-
-## Roadmap
-
-• Refactor some code parts, once WeakRef is supported in Safari<br>

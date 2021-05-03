@@ -2,7 +2,7 @@
 window.requestIdleCallback =
     /* c8 ignore next 4 */
     window.requestIdleCallback ||
-        ((cb, _, start = performance.now()) => window.setTimeout(cb, 0, {
+        ((cb, _, start = performance.now()) => setTimeout(cb, 0, {
             didTimeout: false,
             timeRemaining: () => Math.max(0, 5 - (performance.now() - start)),
         }));
@@ -15,7 +15,6 @@ const parser = ((range = document.createRange()) => {
 const allNodeChanges = new WeakMap(); // Maps a Node against a change. This is necessary for nodes that have multiple changes for one text / attribute.
 const elemEventFunctions = new WeakMap(); // Stores event functions in order to compare Elements against each other.
 const reactivityMap = new WeakMap(); // Maps Proxy Objects
-const tmpSwap = new WeakMap(); // Take over keyToNodeMap if new value is a hydro Proxy. Save old reactivityMap entry here, in case for a swap operation.
 const bindMap = new WeakMap(); // Bind an Element to Data. If the Data is being unset, the DOM Element disappears too.
 const onRenderMap = new WeakMap(); // Lifecycle Hook that is being called after rendering
 const onCleanupMap = new WeakMap(); // Lifecycle Hook that is being called when unmount function is being called
@@ -58,6 +57,8 @@ const boolAttrList = [
     "reversed",
     "selected",
 ];
+let lastSwapElem = null;
+let internReset = false;
 function isObject(obj) {
     return obj != null && typeof obj === "object";
 }
@@ -171,7 +172,7 @@ function html(htmlArray, // The Input String, which is splitted by the template 
     let DOMString = String.raw(htmlArray, ...resolvedVariables).trim();
     DOMString = DOMString.replace(HTML_FIND_INVALID, `<$1$2${"-dummy" /* dummy */}$3`);
     const DOM = parser(DOMString);
-    const root = document.createNodeIterator(DOM, window.NodeFilter.SHOW_ELEMENT, {
+    const root = document.createNodeIterator(DOM, NodeFilter.SHOW_ELEMENT, {
         acceptNode(element) {
             return element.localName.endsWith("-dummy" /* dummy */)
                 ? NodeFilter.FILTER_ACCEPT
@@ -207,13 +208,12 @@ function h(name, props, ...children) {
     /* c8 ignore next 1 */
     isObject(child) && !isNode(child) ? Object.values(child) : child)
         .flat();
-    return html `<${name} ${props ?? { localName: name }}>${flatChildren}</${name}>`;
+    return html `<${name} ${props || {}}>${flatChildren}</${name}>`;
 }
 function setReactivity(DOM, eventFunctions) {
     // Set events and reactive behaviour(checks for {{ key }} where key is on hydro)
-    const root = document.createNodeIterator(DOM, window.NodeFilter.SHOW_ELEMENT);
+    const root = document.createNodeIterator(DOM, NodeFilter.SHOW_ELEMENT);
     let elem;
-    //@ts-ignore
     while ((elem = root.nextNode())) {
         // Check Attributes
         elem.getAttributeNames().forEach((key) => {
@@ -395,27 +395,26 @@ function setReactivitySingle(node, key) {
 function setTraces(start, end, node, hydroKey, resolvedObj, key) {
     // Set WeakMaps, that will be used to track a change for a Node but also to check if a Node has any other changes.
     const change = [start, end, key];
+    const changeArr = [change];
     if (allNodeChanges.has(node)) {
         allNodeChanges.get(node).push(change);
     }
     else {
-        allNodeChanges.set(node, [change]);
+        allNodeChanges.set(node, changeArr);
     }
     if (reactivityMap.has(resolvedObj)) {
         const keyToNodeMap = reactivityMap.get(resolvedObj);
-        if (keyToNodeMap.has(hydroKey)) {
-            const nodeToChangeMap = keyToNodeMap.get(hydroKey);
+        const nodeToChangeMap = keyToNodeMap.get(hydroKey);
+        if (nodeToChangeMap) {
             if (nodeToChangeMap.has(node)) {
                 nodeToChangeMap.get(node).push(change);
             }
             else {
-                const changeArr = [change];
                 nodeToChangeMap.set(changeArr, node);
                 nodeToChangeMap.set(node, changeArr);
             }
         }
         else {
-            const changeArr = [change];
             keyToNodeMap.set(hydroKey, 
             //@ts-ignore // ts-bug
             new Map([
@@ -425,7 +424,6 @@ function setTraces(start, end, node, hydroKey, resolvedObj, key) {
         }
     }
     else {
-        const changeArr = [change];
         reactivityMap.set(resolvedObj, new Map([
             [
                 hydroKey,
@@ -578,7 +576,7 @@ function runLifecyle(node, lifecyleMap) {
         (lifecyleMap === onCleanupMap && !calledOnCleanup))
         return;
     executeLifecycle(node, lifecyleMap);
-    const elements = document.createNodeIterator(node, window.NodeFilter.SHOW_ELEMENT);
+    const elements = document.createNodeIterator(node, NodeFilter.SHOW_ELEMENT);
     let subElem;
     while ((subElem = elements.nextNode())) {
         executeLifecycle(subElem, lifecyleMap);
@@ -606,8 +604,8 @@ function filterTag2Elements(tag2Elements, root) {
     }
 }
 function treeDiff(elem, where) {
-    const elemElements = document.createNodeIterator(elem, window.NodeFilter.SHOW_ELEMENT);
-    const whereElements = document.createNodeIterator(where, window.NodeFilter.SHOW_ELEMENT);
+    const elemElements = document.createNodeIterator(elem, NodeFilter.SHOW_ELEMENT);
+    const whereElements = document.createNodeIterator(where, NodeFilter.SHOW_ELEMENT);
     let template;
     if (insertBeforeDiffing) {
         template = document.createElement("template" /* template */);
@@ -628,7 +626,6 @@ function treeDiff(elem, where) {
     // Create Mapping for easier diffing, eg: "div" -> [...Element]
     let wElem;
     const tag2Elements = new Map();
-    //@ts-ignore
     while ((wElem = whereElements.nextNode())) {
         /* c8 ignore next 2 */
         if (insertBeforeDiffing && wElem === template)
@@ -642,7 +639,6 @@ function treeDiff(elem, where) {
     }
     // Re-use any where Element if possible, then remove elem Element
     let subElem;
-    //@ts-ignore
     while ((subElem = elemElements.nextNode())) {
         const sameElements = tag2Elements.get(subElem.localName);
         if (sameElements) {
@@ -725,7 +721,7 @@ function removeElement(elem) {
 function schedule(fn, ...args) {
     if (navigator.scheduling) {
         if (navigator.scheduling.isInputPending()) {
-            setTimeout(schedule, 0, fn, args);
+            setTimeout(schedule, 0, fn, ...args);
         }
         else {
             fn(...args);
@@ -877,8 +873,7 @@ function watchEffect(fn) {
         ?.forEach((entry) => entry.proxy.unobserve(entry.key, reRun));
 }
 function getValue(reactiveHydro) {
-    // @ts-ignore
-    const [resolvedValue] = resolveObject(reactiveHydro["__keys__" /* keys */]);
+    const [resolvedValue] = resolveObject(Reflect.get(reactiveHydro, "__keys__" /* keys */));
     return resolvedValue;
 }
 let calledOnRender = false;
@@ -936,7 +931,6 @@ function generateProxy(obj = {}) {
                         bindMap.get(oldVal).forEach(removeElement);
                         bindMap.delete(oldVal);
                     }
-                    cleanProxy(oldVal);
                 }
                 else {
                     if (bindMap.has(receiver)) {
@@ -944,8 +938,30 @@ function generateProxy(obj = {}) {
                         bindMap.delete(receiver);
                     }
                 }
-                returnSet = Reflect.deleteProperty(receiver, key);
-                return returnSet;
+                // Remove item from array
+                if (!internReset && Array.isArray(receiver)) {
+                    receiver.splice(key, 1);
+                    return returnSet;
+                }
+                return Reflect.deleteProperty(receiver, key);
+            }
+            else if (Array.isArray(oldVal) &&
+                Array.isArray(val) &&
+                val.length === 0) {
+                // Parent Array null -> set items to null too
+                // Optimization Path
+                Reflect.get(target, handlers, receiver)
+                    .get(key)
+                    ?.forEach((handler) => handler(val, oldVal));
+                internReset = true;
+                const length = oldVal.length;
+                for (let i = 0; i < length; i++) {
+                    let subItem = receiver[key][i];
+                    if (isObject(subItem) && isProxy(subItem)) {
+                        subItem = null;
+                    }
+                }
+                internReset = false;
             }
             // Set the value
             if (isPromise(val)) {
@@ -975,7 +991,28 @@ function generateProxy(obj = {}) {
                 });
             }
             else {
-                returnSet = Reflect.set(target, key, val, receiver);
+                if (Array.isArray(receiver) &&
+                    receiver.includes(oldVal) &&
+                    receiver.includes(val) &&
+                    bindMap.has(val)) {
+                    const [elem] = bindMap.get(val);
+                    if (lastSwapElem !== elem) {
+                        const [oldElem] = bindMap.get(oldVal);
+                        lastSwapElem = oldElem;
+                        const prevElem = elem.previousSibling;
+                        const prevOldElem = oldElem.previousSibling;
+                        // Move it in the array too without triggering the proxy set
+                        const index = receiver.findIndex((i) => i === val);
+                        receiver.splice(Number(key), 1, val);
+                        receiver.splice(index, 1, oldVal);
+                        prevElem.after(oldElem);
+                        prevOldElem.after(elem);
+                    }
+                    return true;
+                }
+                else {
+                    returnSet = Reflect.set(target, key, val, receiver);
+                }
             }
             const newVal = Reflect.get(target, key, receiver);
             // Check if DOM needs to be updated
@@ -989,15 +1026,7 @@ function generateProxy(obj = {}) {
             // current val (before setting) is a proxy - take over its keyToNodeMap
             if (isObject(val) && isProxy(val)) {
                 if (reactivityMap.has(oldVal)) {
-                    // Store old reactivityMap if it is a swap operation
-                    tmpSwap.set(oldVal, reactivityMap.get(oldVal));
-                    if (tmpSwap.has(val)) {
-                        reactivityMap.set(oldVal, tmpSwap.get(val));
-                        tmpSwap.delete(val);
-                    }
-                    else {
-                        reactivityMap.set(oldVal, reactivityMap.get(val));
-                    }
+                    reactivityMap.set(oldVal, reactivityMap.get(val));
                 }
             }
             // Inform the Observers
@@ -1006,11 +1035,8 @@ function generateProxy(obj = {}) {
                     .get(key)
                     ?.forEach((handler) => handler(newVal, oldVal));
             }
-            // Setting oldVal to null does not work because the prop has already been updated.
-            // Hence, the reset Path will not be triggered. GC it here instead.
-            if (isObject(oldVal) && isProxy(oldVal)) {
-                cleanProxy(oldVal, newVal);
-            }
+            // If oldVal is a Proxy - clean it
+            schedule(cleanProxy, oldVal);
             return returnSet;
         },
         // fix proxy bugs, e.g Map
@@ -1042,7 +1068,6 @@ function generateProxy(obj = {}) {
         writable: true,
     });
     Reflect.defineProperty(proxy, handlers, {
-        //TODO: should be WeakValue in future
         value: new Map(),
     });
     Reflect.defineProperty(proxy, "observe" /* observe */, {
@@ -1083,63 +1108,53 @@ function generateProxy(obj = {}) {
         },
         configurable: true,
     });
-    window.queueMicrotask(() => {
-        if (proxy === hydro)
-            Reflect.defineProperty(proxy, _boundFunctions, {
-                value: boundFunctions,
-            });
-    });
+    if (!Reflect.has(proxy, _boundFunctions))
+        queueMicrotask(() => {
+            if (proxy === hydro)
+                Reflect.defineProperty(proxy, _boundFunctions, {
+                    value: boundFunctions,
+                });
+        });
     return proxy;
 }
-function cleanProxy(oldProxy, currentProxy) {
-    // Unobserve
-    const observer = oldProxy.getObservers();
-    observer.forEach((set) => set.clear());
-    oldProxy.unobserve();
-    // Set containing Proxys to null too
-    let filterEmpty = [];
-    Object.entries(oldProxy).forEach(([subKey, subVal]) => {
-        if (isObject(subVal) && isProxy(subVal)) {
-            filterEmpty.push(subKey);
-            if (!currentProxy ||
-                !Reflect.has(currentProxy, subKey) ||
-                subVal !== Reflect.get(currentProxy, subKey))
-                Reflect.set(oldProxy, subKey, null);
+function cleanProxy(proxy) {
+    if (isObject(proxy) && isProxy(proxy)) {
+        reactivityMap.delete(proxy);
+        if (bindMap.has(proxy)) {
+            bindMap.get(proxy).forEach(removeElement);
+            bindMap.delete(proxy);
         }
-    });
-    // Remove empty slot from array
-    if (Array.isArray(oldProxy)) {
-        filterEmpty.reverse().forEach((idx) => filterEmpty.splice(idx, 1));
     }
 }
 function checkReactivityMap(obj, key, val, oldVal) {
     const keyToNodeMap = reactivityMap.get(obj);
-    if (keyToNodeMap.has(String(key))) {
+    const nodeToChangeMap = keyToNodeMap.get(String(key));
+    if (nodeToChangeMap) {
         /* c8 ignore next 5 */
         if (Reflect.get(obj, "asyncUpdate" /* asyncUpdate */)) {
-            schedule(updateDOM, keyToNodeMap, String(key), val, oldVal);
+            schedule(updateDOM, nodeToChangeMap, val, oldVal);
         }
         else {
-            updateDOM(keyToNodeMap, String(key), val, oldVal);
+            updateDOM(nodeToChangeMap, val, oldVal);
         }
     }
     if (isObject(val)) {
         Object.entries(val).forEach(([subKey, subVal]) => {
             const subOldVal = (isObject(oldVal) && Reflect.get(oldVal, subKey)) || oldVal;
-            if (keyToNodeMap.has(subKey)) {
+            const nodeToChangeMap = keyToNodeMap.get(subKey);
+            if (nodeToChangeMap) {
                 /* c8 ignore next 5 */
                 if (Reflect.get(obj, "asyncUpdate" /* asyncUpdate */)) {
-                    schedule(updateDOM, keyToNodeMap, subKey, subVal, subOldVal);
+                    schedule(updateDOM, nodeToChangeMap, subVal, subOldVal);
                 }
                 else {
-                    updateDOM(keyToNodeMap, subKey, subVal, subOldVal);
+                    updateDOM(nodeToChangeMap, subVal, subOldVal);
                 }
             }
         });
     }
 }
-function updateDOM(keyToNodeMap, key, val, oldVal) {
-    const nodeToChangeMap = keyToNodeMap.get(key);
+function updateDOM(nodeToChangeMap, val, oldVal) {
     nodeToChangeMap.forEach((entry) => {
         // Circular reference in order to keep Memory low
         if (isNode(entry)) {
@@ -1230,16 +1245,36 @@ function updateDOM(keyToNodeMap, key, val, oldVal) {
         });
     });
 }
-/* c8 ignore next 14 */
 function template(elem, placeholders, events) {
-    const wrapper = elem.content.cloneNode(true).firstChild;
+    let wrapper = elem.content.cloneNode(true).firstChild;
     let innerHTML = wrapper.innerHTML;
     for (const [key, value] of Object.entries(placeholders)) {
         innerHTML = innerHTML.replace(key, String(value));
     }
     wrapper.innerHTML = innerHTML;
-    schedule(setReactivity, wrapper.firstChild, events);
+    setReactivity(wrapper.firstChild, events);
     return wrapper.firstChild;
+}
+function view(root, data, renderFunction) {
+    getValue(data).forEach((item, i) => {
+        const elem = renderFunction(item, i);
+        $(root).appendChild(elem);
+    });
+    observe(data, (newData, oldData) => {
+        const rootElem = $(root);
+        if (!newData?.length || oldData?.[0] !== newData?.[0]) {
+            rootElem.innerHTML = "";
+        }
+        if (oldData?.length && newData?.length > oldData?.length) {
+            rootElem.append(...newData.slice(oldData.length).map(renderFunction));
+        }
+        else {
+            newData?.forEach((item, i) => {
+                const elem = renderFunction(item, i);
+                rootElem.insertBefore(elem, null);
+            });
+        }
+    });
 }
 const hydro = generateProxy();
 const $ = document.querySelector.bind(document);
@@ -1247,4 +1282,4 @@ const $$ = document.querySelectorAll.bind(document);
 const internals = {
     compare,
 };
-export { render, html, h, hydro, setGlobalSchedule, setReuseElements, setInsertDiffing, setShouldSetReactivity, reactive, unset, setAsyncUpdate, unobserve, observe, ternary, emit, watchEffect, internals, getValue, onRender, onCleanup, setReactivity, $, $$, template, };
+export { render, html, h, hydro, setGlobalSchedule, setReuseElements, setInsertDiffing, setShouldSetReactivity, reactive, unset, setAsyncUpdate, unobserve, observe, ternary, emit, watchEffect, internals, getValue, onRender, onCleanup, setReactivity, $, $$, template, view, };
