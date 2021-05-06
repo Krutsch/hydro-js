@@ -20,6 +20,7 @@ import {
   unobserve,
   setAsyncUpdate,
   setReactivity,
+  view,
 } from "./library.js";
 
 // Local debugging
@@ -2099,6 +2100,101 @@ describe("library", () => {
         return $("#async")!.textContent!.includes("777");
       });
     });
+
+    describe("view", () => {
+      it("creates a view that will handle add, delete and swap", async () => {
+        let condition: boolean;
+
+        const data = reactive([
+          { id: 4, label: "Red Onions" },
+          { id: 5, label: "Green Socks" },
+        ]);
+        const unmount = render(html`<ul></ul>`);
+        view(
+          "ul",
+          data,
+          (item, i) =>
+            html`<li>Reactive: ${data[i].id}, Non-reactive: ${item.label}</li>`
+        );
+
+        await sleep(300);
+
+        condition =
+          $("ul")!.textContent!.includes("Red Onions") &&
+          $("ul")!.textContent!.includes("Green Socks");
+
+        data[0].setter((curr: typeof data[number]) => {
+          curr.id = 6;
+          curr.label = "Orange Hat";
+        });
+
+        condition =
+          condition &&
+          !$("ul")!.textContent!.includes("Orange Hat") &&
+          $("ul")!.textContent!.includes("6");
+
+        data((curr: typeof data) => {
+          [curr[0], curr[1]] = [curr[1], curr[0]];
+        });
+
+        condition = condition && getValue(data)[0].id === 5;
+
+        setTimeout(() => {
+          unset(data);
+          unmount();
+        }, 300);
+
+        return condition;
+      });
+
+      it("creates a view that will handle add, delete and swap with (keyed)", async () => {
+        setReuseElements(false);
+        let condition: boolean;
+
+        const data = reactive([
+          { id: 4, label: "Red Onions" },
+          { id: 5, label: "Green Socks" },
+        ]);
+        const unmount = render(html`<ul></ul>`);
+        view(
+          "ul",
+          data,
+          (item, i) =>
+            html`<li>Reactive: ${data[i].id}, Non-reactive: ${item.label}</li>`
+        );
+
+        await sleep(300);
+
+        condition =
+          $("ul")!.textContent!.includes("Red Onions") &&
+          $("ul")!.textContent!.includes("Green Socks");
+
+        data[0].setter((curr: typeof data[number]) => {
+          curr.id = 6;
+          curr.label = "Orange Hat";
+        });
+
+        condition =
+          condition &&
+          !$("ul")!.textContent!.includes("Orange Hat") &&
+          $("ul")!.textContent!.includes("6");
+
+        data((curr: typeof data) => {
+          [curr[0], curr[1]] = [curr[1], curr[0]];
+        });
+
+        condition = condition && getValue(data)[0].id === 5;
+
+        setTimeout(() => {
+          unset(data);
+          unmount();
+        }, 300);
+
+        setReuseElements(true);
+
+        return condition;
+      });
+    });
   });
 
   describe("integration", () => {
@@ -2262,25 +2358,6 @@ describe("library", () => {
   });
 });
 // --------- TESTS END ------------
-
-// // Check Garbage Collection
-// // @ts-ignore
-// document.body.insertAdjacentHTML("beforeend", `<p id="gc">click</p>`);
-// const elem = $("#gc")!;
-// elem.addEventListener("click", () => render(elem, elem));
-// // In Render
-// if (elem && "id" in elem && elem.id === "gc") {
-//   console.log(
-//     allNodeChanges,
-//     elemEventFunctions,
-//     reactivityMap,
-//     tmpSwap,
-//     bindMap,
-//     onRenderMap,
-//     onCleanupMap,
-//     hydro.getObservers()
-//   );
-// }
 
 function done() {
   // Last test

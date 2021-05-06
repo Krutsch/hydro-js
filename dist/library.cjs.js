@@ -16,6 +16,7 @@ const allNodeChanges = new WeakMap(); // Maps a Node against a change. This is n
 const elemEventFunctions = new WeakMap(); // Stores event functions in order to compare Elements against each other.
 const reactivityMap = new WeakMap(); // Maps Proxy Objects
 const bindMap = new WeakMap(); // Bind an Element to Data. If the Data is being unset, the DOM Element disappears too.
+const tmpSwap = new WeakMap(); // Take over keyToNodeMap if new value is a hydro Proxy. Save old reactivityMap entry here, in case for a swap operation. [if reuseElements]
 const onRenderMap = new WeakMap(); // Lifecycle Hook that is being called after rendering
 const onCleanupMap = new WeakMap(); // Lifecycle Hook that is being called when unmount function is being called
 const fragmentToElements = new WeakMap(); // Used to retreive Elements from DocumentFragment after it has been rendered – for diffing
@@ -24,6 +25,7 @@ let globalSchedule = true; // Decides whether to schedule rendering and updating
 let reuseElements = true; // Reuses Elements when rendering
 let insertBeforeDiffing = false;
 let shouldSetReactivity = true;
+let viewElements = false;
 const reactivityRegex = /\{\{((\s|.)*?)\}\}/;
 const HTML_FIND_INVALID = /<(\/?)(html|head|body)(>|\s.*?>)/g;
 const newLineRegex = /\n/g;
@@ -172,25 +174,13 @@ function html(htmlArray, // The Input String, which is splitted by the template 
     let DOMString = String.raw(htmlArray, ...resolvedVariables).trim();
     DOMString = DOMString.replace(HTML_FIND_INVALID, `<$1$2${"-dummy" /* dummy */}$3`);
     const DOM = parser(DOMString);
-    const root = document.createNodeIterator(DOM, NodeFilter.SHOW_ELEMENT, {
-        acceptNode(element) {
-            return element.localName.endsWith("-dummy" /* dummy */)
-                ? NodeFilter.FILTER_ACCEPT
-                : NodeFilter.FILTER_REJECT;
-        },
-    });
-    let elem;
-    while ((elem = root.nextNode())) {
-        const tag = elem.localName.replace("-dummy" /* dummy */, "");
-        const replacement = document.createElement(tag);
-        //@ts-ignore
-        replacement.append(...elem.childNodes);
-        elem.replaceWith(replacement);
+    // Delay Elemen iteration and manipulation after the elements have been added to the DOM.
+    if (viewElements) {
+        onRender(fillDOM, DOM.firstChild, DOM.firstChild, insertNodes, eventFunctions);
     }
-    // Insert HTML Elements, which were stored in insertNodes
-    DOM.querySelectorAll("template[id^=lbInsertNodes]").forEach((template) => template.replaceWith(insertNodes.shift()));
-    if (shouldSetReactivity)
-        setReactivity(DOM, eventFunctions);
+    else {
+        fillDOM(DOM, insertNodes, eventFunctions);
+    }
     // Return DocumentFragment
     if (DOM.childNodes.length > 1)
         return DOM;
@@ -200,16 +190,46 @@ function html(htmlArray, // The Input String, which is splitted by the template 
     // Return Element
     return DOM.firstChild;
 }
+function fillDOM(elem, insertNodes, eventFunctions) {
+    const root = document.createNodeIterator(elem, NodeFilter.SHOW_ELEMENT, {
+        acceptNode(element) {
+            return element.localName.endsWith("-dummy" /* dummy */)
+                ? NodeFilter.FILTER_ACCEPT
+                : NodeFilter.FILTER_REJECT;
+        },
+    });
+    let nextNode;
+    while ((nextNode = root.nextNode())) {
+        const tag = nextNode.localName.replace("-dummy" /* dummy */, "");
+        const replacement = document.createElement(tag);
+        //@ts-ignore
+        replacement.append(...nextNode.childNodes);
+        nextNode.replaceWith(replacement);
+    }
+    // Insert HTML Elements, which were stored in insertNodes
+    elem
+        .querySelectorAll("template[id^=lbInsertNodes]")
+        .forEach((template) => template.replaceWith(insertNodes.shift()));
+    if (shouldSetReactivity)
+        setReactivity(elem, eventFunctions);
+}
+/* c8 ignore start */
 function h(name, props, ...children) {
     if (isFunction(name))
         return name(props);
     const flatChildren = children
-        .map((child) => 
-    /* c8 ignore next 1 */
-    isObject(child) && !isNode(child) ? Object.values(child) : child)
+        .map((child) => isObject(child) && !isNode(child) ? Object.values(child) : child)
         .flat();
-    return html `<${name} ${props || {}}>${flatChildren}</${name}>`;
+    const elem = document.createElement(name);
+    for (let i in props) {
+        //@ts-ignore
+        i in elem ? (elem[i] = props[i]) : setAttribute(elem, i, props[i]);
+    }
+    elem.append(...flatChildren);
+    onRender(setReactivity, elem, elem);
+    return elem;
 }
+/* c8 ignore end */
 function setReactivity(DOM, eventFunctions) {
     // Set events and reactive behaviour(checks for {{ key }} where key is on hydro)
     const root = document.createNodeIterator(DOM, NodeFilter.SHOW_ELEMENT);
@@ -561,9 +581,12 @@ function render(elem, where = "", shouldSchedule = globalSchedule) {
 function executeLifecycle(node, lifecyleMap) {
     if (lifecyleMap.has(node)) {
         const fn = lifecyleMap.get(node);
-        /* c8 ignore next 3 */
-        if (globalSchedule) {
+        if (viewElements) {
             schedule(fn);
+            /* c8 ignore next 3 */
+        }
+        else if (globalSchedule) {
+            window.requestIdleCallback(fn);
         }
         else {
             fn();
@@ -939,6 +962,7 @@ function generateProxy(obj = {}) {
                     }
                 }
                 // Remove item from array
+                /* c8 ignore next 4 */
                 if (!internReset && Array.isArray(receiver)) {
                     receiver.splice(key, 1);
                     return returnSet;
@@ -957,8 +981,9 @@ function generateProxy(obj = {}) {
                 const length = oldVal.length;
                 for (let i = 0; i < length; i++) {
                     let subItem = receiver[key][i];
+                    /* c8 ignore next 3 */
                     if (isObject(subItem) && isProxy(subItem)) {
-                        subItem = null;
+                        receiver[key][i] = null;
                     }
                 }
                 internReset = false;
@@ -991,9 +1016,11 @@ function generateProxy(obj = {}) {
                 });
             }
             else {
-                if (Array.isArray(receiver) &&
+                if (!reuseElements &&
+                    Array.isArray(receiver) &&
                     receiver.includes(oldVal) &&
                     receiver.includes(val) &&
+                    /* c8 ignore start */
                     bindMap.has(val)) {
                     const [elem] = bindMap.get(val);
                     if (lastSwapElem !== elem) {
@@ -1011,6 +1038,7 @@ function generateProxy(obj = {}) {
                     return true;
                 }
                 else {
+                    /* c8 ignore end */
                     returnSet = Reflect.set(target, key, val, receiver);
                 }
             }
@@ -1026,7 +1054,15 @@ function generateProxy(obj = {}) {
             // current val (before setting) is a proxy - take over its keyToNodeMap
             if (isObject(val) && isProxy(val)) {
                 if (reactivityMap.has(oldVal)) {
-                    reactivityMap.set(oldVal, reactivityMap.get(val));
+                    // Store old reactivityMap if it is a swap operation
+                    reuseElements && tmpSwap.set(oldVal, reactivityMap.get(oldVal));
+                    if (tmpSwap.has(val)) {
+                        reactivityMap.set(oldVal, tmpSwap.get(val));
+                        tmpSwap.delete(val);
+                    }
+                    else {
+                        reactivityMap.set(oldVal, reactivityMap.get(val));
+                    }
                 }
             }
             // Inform the Observers
@@ -1036,7 +1072,7 @@ function generateProxy(obj = {}) {
                     ?.forEach((handler) => handler(newVal, oldVal));
             }
             // If oldVal is a Proxy - clean it
-            schedule(cleanProxy, oldVal);
+            !reuseElements && cleanProxy(oldVal);
             return returnSet;
         },
         // fix proxy bugs, e.g Map
@@ -1101,6 +1137,7 @@ function generateProxy(obj = {}) {
                         }
                     }
                 }
+                /* c8 ignore next 3 */
             }
             else {
                 map.clear();
@@ -1120,6 +1157,7 @@ function generateProxy(obj = {}) {
 function cleanProxy(proxy) {
     if (isObject(proxy) && isProxy(proxy)) {
         reactivityMap.delete(proxy);
+        /* c8 ignore next 4 */
         if (bindMap.has(proxy)) {
             bindMap.get(proxy).forEach(removeElement);
             bindMap.delete(proxy);
@@ -1245,35 +1283,44 @@ function updateDOM(nodeToChangeMap, val, oldVal) {
         });
     });
 }
-function template(elem, placeholders, events) {
-    let wrapper = elem.content.cloneNode(true).firstChild;
-    let innerHTML = wrapper.innerHTML;
-    for (const [key, value] of Object.entries(placeholders)) {
-        innerHTML = innerHTML.replace(key, String(value));
-    }
-    wrapper.innerHTML = innerHTML;
-    setReactivity(wrapper.firstChild, events);
-    return wrapper.firstChild;
-}
 function view(root, data, renderFunction) {
-    getValue(data).forEach((item, i) => {
-        const elem = renderFunction(item, i);
-        $(root).appendChild(elem);
-    });
+    viewElements = true;
+    const rootElem = $(root);
+    const elements = getValue(data).map(renderFunction);
+    rootElem.append(...elements);
+    elements.forEach((elem) => runLifecyle(elem, onRenderMap));
+    viewElements = false;
     observe(data, (newData, oldData) => {
-        const rootElem = $(root);
-        if (!newData?.length || oldData?.[0] !== newData?.[0]) {
-            rootElem.innerHTML = "";
+        /* c8 ignore start */
+        viewElements = true;
+        // Reset or re-use
+        if (!newData?.length ||
+            (!reuseElements && newData?.length === oldData?.length)) {
+            rootElem.textContent = "";
         }
+        else if (reuseElements) {
+            for (let i = 0; i < oldData?.length && newData?.length; i++) {
+                oldData[i].id = newData[i].id;
+                oldData[i].label = newData[i].label;
+                newData[i] = oldData[i];
+            }
+        }
+        // Add to existing
         if (oldData?.length && newData?.length > oldData?.length) {
-            rootElem.append(...newData.slice(oldData.length).map(renderFunction));
+            const length = oldData.length;
+            const slicedData = newData.slice(length);
+            const newElements = slicedData.map((item, i) => renderFunction(item, i + length));
+            rootElem.append(...newElements);
+            newElements.forEach((elem) => runLifecyle(elem, onRenderMap));
         }
-        else {
-            newData?.forEach((item, i) => {
-                const elem = renderFunction(item, i);
-                rootElem.insertBefore(elem, null);
-            });
+        // Add new
+        else if (oldData?.length === 0 || (!reuseElements && newData?.length)) {
+            const elements = newData.map(renderFunction);
+            rootElem.append(...elements);
+            elements.forEach((elem) => runLifecyle(elem, onRenderMap));
         }
+        viewElements = false;
+        /* c8 ignore end */
     });
 }
 const hydro = generateProxy();
@@ -1282,4 +1329,4 @@ const $$ = document.querySelectorAll.bind(document);
 const internals = {
     compare,
 };
-module.exports = { render, html, h, hydro, setGlobalSchedule, setReuseElements, setInsertDiffing, setShouldSetReactivity, reactive, unset, setAsyncUpdate, unobserve, observe, ternary, emit, watchEffect, internals, getValue, onRender, onCleanup, setReactivity, $, $$, template, view, };
+module.exports = { render, html, h, hydro, setGlobalSchedule, setReuseElements, setInsertDiffing, setShouldSetReactivity, reactive, unset, setAsyncUpdate, unobserve, observe, ternary, emit, watchEffect, internals, getValue, onRender, onCleanup, setReactivity, $, $$, view, };

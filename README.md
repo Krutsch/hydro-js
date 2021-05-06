@@ -1,8 +1,8 @@
-<img align="right" alt="97% Coverage" src="coverage.svg">
+<img align="right" alt="100% Coverage" src="coverage.svg">
 
 # hydro-js
 
-> A lightweight (~4.5K <em>compressed</em>) reactive UI library via template literal tags.<br> Support in all modern Browsers.
+> A lightweight (below 5K <em>compressed</em>) reactive UI library via template literal tags.<br> Support in all modern Browsers.
 
 ## Installation
 
@@ -295,6 +295,23 @@ properties:<br>
 ```js
 hydro.fruit = "Banana";
 render(html`<span>{{ fruit }}</span>`);
+```
+
+### view
+
+Render the elements whenever the data changes. It will handle the operation for deletion, addition, swapping etc. This defaults to a non-keyed solution but it can be changed by calling `setReuseElements` with false.
+
+args:
+
+- root: `string` (CSS selector)<br>
+- data: `ReturnType<typeof reactive>`<br>
+- renderFunction: `function`, args: item: `any`, i: `number`<br>
+
+#### Example
+
+```js
+const data = reactive([{ id: 4, label: "Red Onions" }])
+view('.table', data, (item, i) => <tr>Reactive: {data[i].id}, Non-reactive: {item.id}<tr>)
 ```
 
 ### emit

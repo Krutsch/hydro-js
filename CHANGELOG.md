@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.4.0- 2021-05-06
+
+- Refactor h function. Breaking Change: Does not really support SVG anymore. Use html function for this case.
+- Performance improvements
+- Add non-keyed solution and default to it
+
 ## 1.3.5- 2021-05-03
 
 - Refactor Memory Cleanup

@@ -98,6 +98,7 @@ const allNodeChanges = new WeakMap<Text | Element, nodeChange>(); // Maps a Node
 const elemEventFunctions = new WeakMap<Element, Array<EventListener>>(); // Stores event functions in order to compare Elements against each other.
 const reactivityMap = new WeakMap<hydroObject, keyToNodeMap>(); // Maps Proxy Objects
 const bindMap = new WeakMap<hydroObject, Array<Element>>(); // Bind an Element to Data. If the Data is being unset, the DOM Element disappears too.
+const tmpSwap = new WeakMap<hydroObject, keyToNodeMap>(); // Take over keyToNodeMap if new value is a hydro Proxy. Save old reactivityMap entry here, in case for a swap operation. [if reuseElements]
 const onRenderMap = new WeakMap<ReturnType<typeof html>, Function>(); // Lifecycle Hook that is being called after rendering
 const onCleanupMap = new WeakMap<ReturnType<typeof html>, Function>(); // Lifecycle Hook that is being called when unmount function is being called
 const fragmentToElements = new WeakMap<DocumentFragment, Array<ChildNode>>(); // Used to retreive Elements from DocumentFragment after it has been rendered – for diffing
@@ -107,6 +108,7 @@ let globalSchedule = true; // Decides whether to schedule rendering and updating
 let reuseElements = true; // Reuses Elements when rendering
 let insertBeforeDiffing = false;
 let shouldSetReactivity = true;
+let viewElements = false;
 
 const reactivityRegex = /\{\{((\s|.)*?)\}\}/;
 const HTML_FIND_INVALID = /<(\/?)(html|head|body)(>|\s.*?>)/g;
@@ -280,29 +282,18 @@ function html(
   );
   const DOM = parser(DOMString);
 
-  const root = document.createNodeIterator(DOM, NodeFilter.SHOW_ELEMENT, {
-    acceptNode(element: Element) {
-      return element.localName.endsWith(Placeholder.dummy)
-        ? NodeFilter.FILTER_ACCEPT
-        : NodeFilter.FILTER_REJECT;
-    },
-  });
-  let elem;
-  while ((elem = root.nextNode())) {
-    const tag = (elem as Element).localName.replace(Placeholder.dummy, "");
-    const replacement = document.createElement(tag);
-
-    //@ts-ignore
-    replacement.append(...(elem as Element).childNodes);
-    (elem as Element).replaceWith(replacement);
+  // Delay Elemen iteration and manipulation after the elements have been added to the DOM.
+  if (viewElements) {
+    onRender(
+      fillDOM,
+      DOM.firstChild as Element,
+      DOM.firstChild,
+      insertNodes,
+      eventFunctions
+    );
+  } else {
+    fillDOM(DOM, insertNodes, eventFunctions);
   }
-
-  // Insert HTML Elements, which were stored in insertNodes
-  DOM.querySelectorAll("template[id^=lbInsertNodes]").forEach((template) =>
-    template.replaceWith(insertNodes.shift()!)
-  );
-
-  if (shouldSetReactivity) setReactivity(DOM, eventFunctions);
 
   // Return DocumentFragment
   if (DOM.childNodes.length > 1) return DOM;
@@ -313,6 +304,36 @@ function html(
   // Return Element
   return DOM.firstChild as Element;
 }
+function fillDOM(
+  elem: DocumentFragment | Element,
+  insertNodes: Node[],
+  eventFunctions: eventFunctions
+) {
+  const root = document.createNodeIterator(elem, NodeFilter.SHOW_ELEMENT, {
+    acceptNode(element: Element) {
+      return element.localName.endsWith(Placeholder.dummy)
+        ? NodeFilter.FILTER_ACCEPT
+        : NodeFilter.FILTER_REJECT;
+    },
+  });
+  let nextNode;
+  while ((nextNode = root.nextNode())) {
+    const tag = (nextNode as Element).localName.replace(Placeholder.dummy, "");
+    const replacement = document.createElement(tag);
+
+    //@ts-ignore
+    replacement.append(...(nextNode as Element).childNodes);
+    (nextNode as Element).replaceWith(replacement);
+  }
+
+  // Insert HTML Elements, which were stored in insertNodes
+  elem
+    .querySelectorAll("template[id^=lbInsertNodes]")
+    .forEach((template) => template.replaceWith(insertNodes.shift()!));
+
+  if (shouldSetReactivity) setReactivity(elem, eventFunctions);
+}
+/* c8 ignore start */
 function h(
   name: string | ((...args: any[]) => ReturnType<typeof h>),
   props: Record<keyof any, any> | null,
@@ -321,13 +342,21 @@ function h(
   if (isFunction(name)) return name(props);
 
   const flatChildren = children
-    .map((child) =>
-      /* c8 ignore next 1 */
+    .map((child: any) =>
       isObject(child) && !isNode(child as Node) ? Object.values(child) : child
     )
     .flat();
-  return html`<${name} ${props || {}}>${flatChildren}</${name}>`;
+  const elem = document.createElement(name);
+  for (let i in props) {
+    //@ts-ignore
+    i in elem ? (elem[i] = props[i]) : setAttribute(elem, i, props[i]);
+  }
+
+  elem.append(...flatChildren);
+  onRender(setReactivity, elem, elem);
+  return elem;
 }
+/* c8 ignore end */
 function setReactivity(DOM: Node, eventFunctions?: eventFunctions) {
   // Set events and reactive behaviour(checks for {{ key }} where key is on hydro)
   const root = document.createNodeIterator(DOM, NodeFilter.SHOW_ELEMENT);
@@ -768,9 +797,11 @@ function executeLifecycle(
   if (lifecyleMap.has(node)) {
     const fn = lifecyleMap.get(node)!;
 
-    /* c8 ignore next 3 */
-    if (globalSchedule) {
+    if (viewElements) {
       schedule(fn);
+      /* c8 ignore next 3 */
+    } else if (globalSchedule) {
+      window.requestIdleCallback(fn);
     } else {
       fn();
     }
@@ -1217,6 +1248,7 @@ function generateProxy(obj = {}): hydroObject {
         }
 
         // Remove item from array
+        /* c8 ignore next 4 */
         if (!internReset && Array.isArray(receiver)) {
           receiver.splice((key as unknown) as number, 1);
           return returnSet;
@@ -1239,8 +1271,9 @@ function generateProxy(obj = {}): hydroObject {
         const length = oldVal.length;
         for (let i = 0; i < length; i++) {
           let subItem = receiver[key][i];
+          /* c8 ignore next 3 */
           if (isObject(subItem) && isProxy(subItem)) {
-            subItem = null;
+            receiver[key][i] = null;
           }
         }
         internReset = false;
@@ -1273,9 +1306,11 @@ function generateProxy(obj = {}): hydroObject {
         });
       } else {
         if (
+          !reuseElements &&
           Array.isArray(receiver) &&
           receiver.includes(oldVal) &&
           receiver.includes(val) &&
+          /* c8 ignore start */
           bindMap.has(val)
         ) {
           const [elem] = bindMap.get(val)!;
@@ -1296,6 +1331,7 @@ function generateProxy(obj = {}): hydroObject {
           }
           return true;
         } else {
+          /* c8 ignore end */
           returnSet = Reflect.set(target, key, val, receiver);
         }
       }
@@ -1313,7 +1349,15 @@ function generateProxy(obj = {}): hydroObject {
       // current val (before setting) is a proxy - take over its keyToNodeMap
       if (isObject(val) && isProxy(val)) {
         if (reactivityMap.has(oldVal)) {
-          reactivityMap.set(oldVal, reactivityMap.get(val)!);
+          // Store old reactivityMap if it is a swap operation
+          reuseElements && tmpSwap.set(oldVal, reactivityMap.get(oldVal)!);
+
+          if (tmpSwap.has(val)) {
+            reactivityMap.set(oldVal, tmpSwap.get(val)!);
+            tmpSwap.delete(val);
+          } else {
+            reactivityMap.set(oldVal, reactivityMap.get(val)!);
+          }
         }
       }
 
@@ -1325,7 +1369,7 @@ function generateProxy(obj = {}): hydroObject {
       }
 
       // If oldVal is a Proxy - clean it
-      schedule(cleanProxy, oldVal);
+      !reuseElements && cleanProxy(oldVal);
 
       return returnSet;
     },
@@ -1393,6 +1437,7 @@ function generateProxy(obj = {}): hydroObject {
             }
           }
         }
+        /* c8 ignore next 3 */
       } else {
         map.clear();
       }
@@ -1413,6 +1458,7 @@ function generateProxy(obj = {}): hydroObject {
 function cleanProxy(proxy: any) {
   if (isObject(proxy) && isProxy(proxy)) {
     reactivityMap.delete(proxy);
+    /* c8 ignore next 4 */
     if (bindMap.has(proxy)) {
       bindMap.get(proxy)!.forEach(removeElement);
       bindMap.delete(proxy);
@@ -1549,44 +1595,54 @@ function updateDOM(nodeToChangeMap: nodeToChangeMap, val: any, oldVal: any) {
     });
   });
 }
-function template(
-  elem: HTMLTemplateElement,
-  placeholders: Record<string, any>,
-  events: Record<string, any>
-) {
-  let wrapper = elem.content.cloneNode(true).firstChild as HTMLElement;
-  let innerHTML = wrapper.innerHTML;
-  for (const [key, value] of Object.entries(placeholders)) {
-    innerHTML = innerHTML.replace(key, String(value));
-  }
-  wrapper.innerHTML = innerHTML;
-  setReactivity(wrapper.firstChild!, events);
-  return wrapper.firstChild as Element;
-}
 function view(
   root: string,
   data: reactiveObject<Array<any>>,
   renderFunction: (value: any, index: number) => Node
 ) {
-  getValue(data).forEach((item: any, i: number) => {
-    const elem = renderFunction(item, i);
-    $(root)!.appendChild(elem);
-  });
+  viewElements = true;
+  const rootElem = $(root)!;
+  const elements = getValue(data).map(renderFunction);
+  rootElem.append(...elements);
+  elements.forEach((elem) => runLifecyle(elem as Element, onRenderMap));
+  viewElements = false;
+  observe(data, (newData: typeof data, oldData: typeof data) => {
+    /* c8 ignore start */
+    viewElements = true;
 
-  observe(data, (newData: Array<any>, oldData: Array<any>) => {
-    const rootElem = $(root)!;
-    if (!newData?.length || oldData?.[0] !== newData?.[0]) {
-      rootElem.innerHTML = "";
+    // Reset or re-use
+    if (
+      !newData?.length ||
+      (!reuseElements && newData?.length === oldData?.length)
+    ) {
+      rootElem.textContent = "";
+    } else if (reuseElements) {
+      for (let i = 0; i < oldData?.length && newData?.length; i++) {
+        oldData[i].id = newData[i].id;
+        oldData[i].label = newData[i].label;
+        newData[i] = oldData[i];
+      }
     }
 
+    // Add to existing
     if (oldData?.length && newData?.length > oldData?.length) {
-      rootElem.append(...newData.slice(oldData.length).map(renderFunction));
-    } else {
-      newData?.forEach((item, i) => {
-        const elem = renderFunction(item, i);
-        rootElem.insertBefore(elem, null);
-      });
+      const length = oldData.length;
+      const slicedData = newData.slice(length);
+      const newElements = slicedData.map((item, i) =>
+        renderFunction(item, i + length)
+      );
+      rootElem.append(...newElements);
+      newElements.forEach((elem) => runLifecyle(elem as Element, onRenderMap));
     }
+
+    // Add new
+    else if (oldData?.length === 0 || (!reuseElements && newData?.length)) {
+      const elements = newData.map(renderFunction);
+      rootElem.append(...elements);
+      elements.forEach((elem) => runLifecyle(elem as Element, onRenderMap));
+    }
+    viewElements = false;
+    /* c8 ignore end */
   });
 }
 
@@ -1621,6 +1677,5 @@ export {
   setReactivity,
   $,
   $$,
-  template,
   view,
 };

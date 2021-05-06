@@ -29,6 +29,7 @@
         unobserve,
         setAsyncUpdate,
         setShouldSetReactivity,
+        view,
       } from "../dist/library.js";
 
       runTests(async () => {
@@ -1966,6 +1967,105 @@
                 }, 201);
 
                 expect($("#async").textContent.includes("777")).to.be.true;
+              });
+            });
+
+            describe("view", () => {
+              it("creates a view that will handle add, delete and swap", async () => {
+                let condition;
+
+                const data = reactive([
+                  { id: 4, label: "Red Onions" },
+                  { id: 5, label: "Green Socks" },
+                ]);
+                const unmount = render(html`<ul></ul>`);
+                view(
+                  "ul",
+                  data,
+                  (item, i) =>
+                    html`<li>
+                      Reactive: ${data[i].id}, Non-reactive: ${item.label}
+                    </li>`
+                );
+
+                await sleep(400);
+
+                condition =
+                  $("ul").textContent.includes("Red Onions") &&
+                  $("ul").textContent.includes("Green Socks");
+
+                data[0].setter((curr) => {
+                  curr.id = 6;
+                  curr.label = "Orange Hat";
+                });
+
+                condition =
+                  condition &&
+                  !$("ul").textContent.includes("Orange Hat") &&
+                  $("ul").textContent.includes("6");
+
+                data((curr) => {
+                  [curr[0], curr[1]] = [curr[1], curr[0]];
+                });
+
+                condition = condition && getValue(data)[0].id === 5;
+
+                setTimeout(() => {
+                  unset(data);
+                  unmount();
+                }, 400);
+
+                expect(condition).to.be.true;
+              });
+
+              it("creates a view that will handle add, delete and swap with (keyed)", async () => {
+                setReuseElements(false);
+                let condition;
+
+                const data = reactive([
+                  { id: 4, label: "Red Onions" },
+                  { id: 5, label: "Green Socks" },
+                ]);
+                const unmount = render(html`<ul></ul>`);
+                view(
+                  "ul",
+                  data,
+                  (item, i) =>
+                    html`<li>
+                      Reactive: ${data[i].id}, Non-reactive: ${item.label}
+                    </li>`
+                );
+
+                await sleep(300);
+
+                condition =
+                  $("ul").textContent.includes("Red Onions") &&
+                  $("ul").textContent.includes("Green Socks");
+
+                data[0].setter((curr) => {
+                  curr.id = 6;
+                  curr.label = "Orange Hat";
+                });
+
+                condition =
+                  condition &&
+                  !$("ul").textContent.includes("Orange Hat") &&
+                  $("ul").textContent.includes("6");
+
+                data((curr) => {
+                  [curr[0], curr[1]] = [curr[1], curr[0]];
+                });
+
+                condition = condition && getValue(data)[0].id === 5;
+
+                setTimeout(() => {
+                  unset(data);
+                  unmount();
+                }, 300);
+
+                setReuseElements(true);
+
+                expect(condition).to.be.true;
               });
             });
           });
