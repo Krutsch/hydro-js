@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.1-
+
+- Use better RegExp
+
 ## 1.4.0- 2021-05-06
 
 - Refactor h function. Breaking Change: Does not really support SVG anymore. Use html function for this case.

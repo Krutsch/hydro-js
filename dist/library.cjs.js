@@ -26,7 +26,7 @@ let reuseElements = true; // Reuses Elements when rendering
 let insertBeforeDiffing = false;
 let shouldSetReactivity = true;
 let viewElements = false;
-const reactivityRegex = /\{\{((\s|.)*?)\}\}/;
+const reactivityRegex = /\{\{([^]*?)\}\}/;
 const HTML_FIND_INVALID = /<(\/?)(html|head|body)(>|\s.*?>)/g;
 const newLineRegex = /\n/g;
 const propChainRegex = /[\.\[\]]/;
@@ -764,11 +764,8 @@ function reactive(initial) {
     const chainKeysProxy = chainKeys(setter, [key]);
     return chainKeysProxy;
     function setter(val) {
-        // @ts-ignore
-        const keys = (this && Reflect.get(this, "reactive" /* reactive */)
-            ? // @ts-ignore
-                this
-            : chainKeysProxy)["__keys__" /* keys */];
+        const keys = ( // @ts-ignore
+        this && Reflect.get(this, "reactive" /* reactive */) ? this : chainKeysProxy)["__keys__" /* keys */];
         const [resolvedValue, resolvedObj] = resolveObject(keys);
         const lastProp = keys[keys.length - 1];
         if (isFunction(val)) {

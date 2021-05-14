@@ -110,7 +110,7 @@ let insertBeforeDiffing = false;
 let shouldSetReactivity = true;
 let viewElements = false;
 
-const reactivityRegex = /\{\{((\s|.)*?)\}\}/;
+const reactivityRegex = /\{\{([^]*?)\}\}/;
 const HTML_FIND_INVALID = /<(\/?)(html|head|body)(>|\s.*?>)/g;
 const newLineRegex = /\n/g;
 const propChainRegex = /[\.\[\]]/;
@@ -970,7 +970,7 @@ function unmount<T = ReturnType<typeof html> | Array<ChildNode>>(elem: T) {
   if (Array.isArray(elem)) {
     return () => elem.forEach(removeElement);
   } else {
-    return () => removeElement((elem as unknown) as Text | Element);
+    return () => removeElement(elem as unknown as Text | Element);
   }
 }
 
@@ -1007,11 +1007,9 @@ function reactive<T>(initial: T): reactiveObject<T> {
   return chainKeysProxy;
 
   function setter<U>(val: U) {
-    // @ts-ignore
-    const keys = (this && Reflect.get(this, Placeholder.reactive)
-      ? // @ts-ignore
-        this
-      : chainKeysProxy)[Placeholder.keys];
+    const keys = ( // @ts-ignore
+      this && Reflect.get(this, Placeholder.reactive) ? this : chainKeysProxy
+    )[Placeholder.keys];
     const [resolvedValue, resolvedObj] = resolveObject(keys);
     const lastProp = keys[keys.length - 1];
 
@@ -1250,7 +1248,7 @@ function generateProxy(obj = {}): hydroObject {
         // Remove item from array
         /* c8 ignore next 4 */
         if (!internReset && Array.isArray(receiver)) {
-          receiver.splice((key as unknown) as number, 1);
+          receiver.splice(key as unknown as number, 1);
           return returnSet;
         }
 
