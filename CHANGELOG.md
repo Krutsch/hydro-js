@@ -1,8 +1,9 @@
 # Changelog
 
-## 1.4.1-
+## 1.4.1- 2021-05-21
 
 - Use better RegExp
+- Little performance gain
 
 ## 1.4.0- 2021-05-06
 

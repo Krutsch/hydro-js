@@ -232,10 +232,25 @@ function h(name, props, ...children) {
 /* c8 ignore end */
 function setReactivity(DOM, eventFunctions) {
     // Set events and reactive behaviour(checks for {{ key }} where key is on hydro)
-    const root = document.createNodeIterator(DOM, NodeFilter.SHOW_ELEMENT);
-    let elem;
-    while ((elem = root.nextNode())) {
-        // Check Attributes
+    if (isTextNode(DOM)) {
+        setReactivitySingle(DOM);
+        return;
+    }
+    const root = [...DOM.querySelectorAll("*")].reverse();
+    if (!isDocumentFragment(DOM)) {
+        root.push(DOM);
+    }
+    root.forEach((elem) => {
+        // Check Text Nodes
+        // This is somehow faster than createNodeIterator and createTreeWalker
+        // https://esbench.com/bench/5e9c421c12464000a01e4359
+        let childNode = elem.firstChild;
+        while (childNode) {
+            if (isTextNode(childNode)) {
+                setReactivitySingle(childNode);
+            }
+            childNode = childNode.nextSibling;
+        }
         elem.getAttributeNames().forEach((key) => {
             // Set functions
             if (eventFunctions && key.startsWith("on")) {
@@ -269,17 +284,7 @@ function setReactivity(DOM, eventFunctions) {
                 setReactivitySingle(elem, key);
             }
         });
-        // Check Text Nodes
-        // This is somehow faster than createNodeIterator and createTreeWalker
-        // https://esbench.com/bench/5e9c421c12464000a01e4359
-        let childNode = elem.firstChild;
-        while (childNode) {
-            if (isTextNode(childNode)) {
-                setReactivitySingle(childNode);
-            }
-            childNode = childNode.nextSibling;
-        }
-    }
+    });
 }
 function setReactivitySingle(node, key) {
     let attr_OR_text, match;
