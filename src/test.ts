@@ -1106,6 +1106,7 @@ describe("library", () => {
       });
 
       it("replacing elements will not stop their state", async () => {
+        await sleep(300);
         setInsertDiffing(true);
         const video1 = html`
           <div id="video">
@@ -2354,7 +2355,7 @@ describe("library", () => {
     });
 
     it("body has DOM Elements - unmount", async () => {
-      await sleep(700);
+      await sleep(900);
       return document.body.querySelectorAll("*").length === 0;
     });
   });

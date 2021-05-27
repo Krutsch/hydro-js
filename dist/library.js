@@ -206,9 +206,11 @@ function fillDOM(elem, insertNodes, eventFunctions) {
         nextNode.replaceWith(replacement);
     }
     // Insert HTML Elements, which were stored in insertNodes
-    elem
-        .querySelectorAll("template[id^=lbInsertNodes]")
-        .forEach((template) => template.replaceWith(insertNodes.shift()));
+    if (!isTextNode(elem)) {
+        elem
+            .querySelectorAll("template[id^=lbInsertNodes]")
+            .forEach((template) => template.replaceWith(insertNodes.shift()));
+    }
     if (shouldSetReactivity)
         setReactivity(elem, eventFunctions);
 }
@@ -217,23 +219,37 @@ function h(name, props, ...children) {
     if (isFunction(name))
         return name(props);
     const flatChildren = children
-        .map((child) => 
-    /* c8 ignore next 1 */
-    isObject(child) && !isNode(child) ? Object.values(child) : child)
+        .map((child) => isObject(child) && !isNode(child) ? Object.values(child) : child)
         .flat();
-    return html `<${name} ${props || {}}>${flatChildren}</${name}>`;
+    const elem = document.createElement(name);
+    for (let i in props) {
+        //@ts-ignore
+        i in elem ? (elem[i] = props[i]) : setAttribute(elem, i, props[i]);
+    }
+    elem.append(...flatChildren);
+    if (viewElements) {
+        onRender(setReactivity, elem, elem);
+    }
+    else {
+        setReactivity(elem);
+    }
+    return elem;
 }
 /* c8 ignore end */
 function setReactivity(DOM, eventFunctions) {
     // Set events and reactive behaviour(checks for {{ key }} where key is on hydro)
-    if (DOM.firstChild && isTextNode(DOM.firstChild)) {
-        if (!setReactivityElements.has(DOM.firstChild)) {
-            setReactivityElements.add(DOM.firstChild);
-            setReactivitySingle(DOM.firstChild);
-        }
+    if (isTextNode(DOM) && !setReactivityElements.has(DOM)) {
+        setReactivityElements.add(DOM);
+        setReactivitySingle(DOM);
         return;
     }
-    [...DOM.querySelectorAll("*")].reverse().forEach((elem) => {
+    const root = [
+        ...DOM.querySelectorAll("*"),
+    ].reverse();
+    if (!isDocumentFragment(DOM)) {
+        root.push(DOM);
+    }
+    root.forEach((elem) => {
         if (setReactivityElements.has(elem)) {
             return; // continue
         }
@@ -529,6 +545,8 @@ function compareEvents(elem, where, onlyTextChildren) {
     return true;
 }
 function compare(elem, where, onlyTextChildren) {
+    if (isDocumentFragment(elem) || isDocumentFragment(where))
+        return false;
     return (elem.isEqualNode(where) && compareEvents(elem, where, onlyTextChildren));
 }
 function render(elem, where = "", shouldSchedule = globalSchedule) {
@@ -552,7 +570,7 @@ function render(elem, where = "", shouldSchedule = globalSchedule) {
     }
     else {
         if (typeof where === "string" /* string */) {
-            const resolveStringToElement = document.querySelector(where);
+            const resolveStringToElement = $(where);
             if (resolveStringToElement) {
                 where = resolveStringToElement;
             }
@@ -629,8 +647,15 @@ function filterTag2Elements(tag2Elements, root) {
     }
 }
 function treeDiff(elem, where) {
-    const elemElements = document.createNodeIterator(elem, NodeFilter.SHOW_ELEMENT);
-    const whereElements = document.createNodeIterator(where, NodeFilter.SHOW_ELEMENT);
+    let elemElements = [...elem.querySelectorAll("*")];
+    if (!isDocumentFragment(elem))
+        elemElements.unshift(elem);
+    let whereElements = [];
+    if (!isTextNode(where)) {
+        whereElements = [...where.querySelectorAll("*")];
+        if (!isDocumentFragment(where))
+            whereElements.unshift(where);
+    }
     let template;
     if (insertBeforeDiffing) {
         template = document.createElement("template" /* template */);
@@ -649,22 +674,20 @@ function treeDiff(elem, where) {
         template.append(elem);
     }
     // Create Mapping for easier diffing, eg: "div" -> [...Element]
-    let wElem;
     const tag2Elements = new Map();
-    while ((wElem = whereElements.nextNode())) {
+    whereElements.forEach((wElem) => {
         /* c8 ignore next 2 */
         if (insertBeforeDiffing && wElem === template)
-            continue;
+            return;
         if (tag2Elements.has(wElem.localName)) {
             tag2Elements.get(wElem.localName).push(wElem);
         }
         else {
             tag2Elements.set(wElem.localName, [wElem]);
         }
-    }
+    });
     // Re-use any where Element if possible, then remove elem Element
-    let subElem;
-    while ((subElem = elemElements.nextNode())) {
+    elemElements.forEach((subElem) => {
         const sameElements = tag2Elements.get(subElem.localName);
         if (sameElements) {
             for (let index = 0; index < sameElements.length; index++) {
@@ -677,7 +700,7 @@ function treeDiff(elem, where) {
                 }
             }
         }
-    }
+    });
     if (insertBeforeDiffing) {
         const newElems = isDocumentFragment(elem)
             ? Array.from(template.childNodes)
@@ -766,8 +789,8 @@ function reactive(initial) {
     const chainKeysProxy = chainKeys(setter, [key]);
     return chainKeysProxy;
     function setter(val) {
-        const keys = // @ts-ignore
-         (this && Reflect.get(this, "reactive" /* reactive */) ? this : chainKeysProxy)["__keys__" /* keys */];
+        const keys = ( // @ts-ignore
+        this && Reflect.get(this, "reactive" /* reactive */) ? this : chainKeysProxy)["__keys__" /* keys */];
         const [resolvedValue, resolvedObj] = resolveObject(keys);
         const lastProp = keys[keys.length - 1];
         if (isFunction(val)) {

@@ -7,12 +7,11 @@
   "module": "./dist/library.js",
   "types": "./dist/library.d.ts",
   "exports": {
-    "require": "./dist/library.cjs.js",
     "import": "./dist/library.js",
     "default": "./dist/library.js"
   },
   "scripts": {
-    "build": "tsc && node utils/esm2c.js",
+    "build": "tsc",
     "dev": "concurrently \"serve dist\" \"tsc -w\"",
     "test": "tsc && wtr src/test.html --node-resolve --coverage --playwright --browsers chromium firefox webkit",
     "update": "npx npm-check-updates -u && npx typesync && npm i && npm outdated"

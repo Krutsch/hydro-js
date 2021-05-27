@@ -3,8 +3,8 @@
 ## 1.4.2- 2021-05-27
 
 - Use another parser
-- Revert h function change
 - Use cache for setReactivity
+- Add minor tweaks
 
 ## 1.4.1- 2021-05-21
 
