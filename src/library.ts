@@ -87,6 +87,13 @@ window.requestIdleCallback =
     }));
 // Safari Polyfills END
 
+// Parser to create HTML elements from strings
+const parser = ((range = document.createRange()) => {
+  range.selectNodeContents(
+    range.createContextualFragment(`<${Placeholder.template}>`).lastChild!
+  );
+  return range.createContextualFragment.bind(range);
+})();
 const allNodeChanges = new WeakMap<Text | Element, nodeChange>(); // Maps a Node against a change. This is necessary for nodes that have multiple changes for one text / attribute.
 const elemEventFunctions = new WeakMap<Element, Array<EventListener>>(); // Stores event functions in order to compare Elements against each other.
 const reactivityMap = new WeakMap<hydroObject, keyToNodeMap>(); // Maps Proxy Objects
@@ -274,11 +281,7 @@ function html(
     HTML_FIND_INVALID,
     `<$1$2${Placeholder.dummy}$3`
   );
-
-  // Parser
-  const template = document.createElement(Placeholder.template);
-  template.innerHTML = DOMString;
-  const DOM = template.content;
+  const DOM = parser(DOMString);
 
   // Delay Element iteration and manipulation after the elements have been added to the DOM.
   if (viewElements) {
@@ -1032,9 +1035,10 @@ function reactive<T>(initial: T): reactiveObject<T> {
   return chainKeysProxy;
 
   function setter<U>(val: U) {
-    const keys = ( // @ts-ignore
-      this && Reflect.get(this, Placeholder.reactive) ? this : chainKeysProxy
-    )[Placeholder.keys];
+    const keys = // @ts-ignore
+    (this && Reflect.get(this, Placeholder.reactive) ? this : chainKeysProxy)[
+      Placeholder.keys
+    ];
     const [resolvedValue, resolvedObj] = resolveObject(keys);
     const lastProp = keys[keys.length - 1];
 

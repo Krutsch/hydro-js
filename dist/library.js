@@ -7,6 +7,11 @@ window.requestIdleCallback =
             timeRemaining: () => Math.max(0, 5 - (performance.now() - start)),
         }));
 // Safari Polyfills END
+// Parser to create HTML elements from strings
+const parser = ((range = document.createRange()) => {
+    range.selectNodeContents(range.createContextualFragment(`<${"template" /* template */}>`).lastChild);
+    return range.createContextualFragment.bind(range);
+})();
 const allNodeChanges = new WeakMap(); // Maps a Node against a change. This is necessary for nodes that have multiple changes for one text / attribute.
 const elemEventFunctions = new WeakMap(); // Stores event functions in order to compare Elements against each other.
 const reactivityMap = new WeakMap(); // Maps Proxy Objects
@@ -169,10 +174,7 @@ function html(htmlArray, // The Input String, which is splitted by the template 
     // Find elements <html|head|body>, as they cannot be created by the parser. Replace them by fake Custom Elements and replace them afterwards.
     let DOMString = String.raw(htmlArray, ...resolvedVariables).trim();
     DOMString = DOMString.replace(HTML_FIND_INVALID, `<$1$2${"-dummy" /* dummy */}$3`);
-    // Parser
-    const template = document.createElement("template" /* template */);
-    template.innerHTML = DOMString;
-    const DOM = template.content;
+    const DOM = parser(DOMString);
     // Delay Element iteration and manipulation after the elements have been added to the DOM.
     if (viewElements) {
         onRender(fillDOM, DOM.firstChild, DOM.firstChild, insertNodes, eventFunctions);
@@ -789,8 +791,8 @@ function reactive(initial) {
     const chainKeysProxy = chainKeys(setter, [key]);
     return chainKeysProxy;
     function setter(val) {
-        const keys = ( // @ts-ignore
-        this && Reflect.get(this, "reactive" /* reactive */) ? this : chainKeysProxy)["__keys__" /* keys */];
+        const keys = // @ts-ignore
+         (this && Reflect.get(this, "reactive" /* reactive */) ? this : chainKeysProxy)["__keys__" /* keys */];
         const [resolvedValue, resolvedObj] = resolveObject(keys);
         const lastProp = keys[keys.length - 1];
         if (isFunction(val)) {

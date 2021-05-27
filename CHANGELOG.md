@@ -1,6 +1,10 @@
 # Changelog
 
-## 1.4.2- 2021-05-27
+## 1.4.3- 2021-05-
+
+- Use another parser revert
+
+## 1.4.3- 2021-05-27
 
 - Use another parser
 - Use cache for setReactivity
