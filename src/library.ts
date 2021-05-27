@@ -32,12 +32,12 @@ type isInputPendingOptions = {
   includeContinuous: boolean;
 };
 
-interface hydroObject extends Record<keyof any, any> {
+interface hydroObject extends Record<PropertyKey, any> {
   isProxy: boolean;
   asyncUpdate: boolean;
-  observe: (key: keyof any, fn: Function) => any;
+  observe: (key: PropertyKey, fn: Function) => any;
   getObservers: () => Map<string, Set<Function>>;
-  unobserve: (key?: keyof any, handler?: Function) => undefined;
+  unobserve: (key?: PropertyKey, handler?: Function) => undefined;
 }
 type nodeChange = Array<[number, number, string | undefined]>;
 
@@ -87,13 +87,6 @@ window.requestIdleCallback =
     }));
 // Safari Polyfills END
 
-// Parser to create HTML elements from strings
-const parser = ((range = document.createRange()) => {
-  range.selectNodeContents(
-    range.createContextualFragment(`<${Placeholder.template}>`).lastChild!
-  );
-  return range.createContextualFragment.bind(range);
-})();
 const allNodeChanges = new WeakMap<Text | Element, nodeChange>(); // Maps a Node against a change. This is necessary for nodes that have multiple changes for one text / attribute.
 const elemEventFunctions = new WeakMap<Element, Array<EventListener>>(); // Stores event functions in order to compare Elements against each other.
 const reactivityMap = new WeakMap<hydroObject, keyToNodeMap>(); // Maps Proxy Objects
@@ -102,6 +95,7 @@ const tmpSwap = new WeakMap<hydroObject, keyToNodeMap>(); // Take over keyToNode
 const onRenderMap = new WeakMap<ReturnType<typeof html>, Function>(); // Lifecycle Hook that is being called after rendering
 const onCleanupMap = new WeakMap<ReturnType<typeof html>, Function>(); // Lifecycle Hook that is being called when unmount function is being called
 const fragmentToElements = new WeakMap<DocumentFragment, Array<ChildNode>>(); // Used to retreive Elements from DocumentFragment after it has been rendered – for diffing
+const setReactivityElements = new WeakSet<ReturnType<typeof html>>();
 const _boundFunctions = Symbol("boundFunctions"); // Cache for bound functions in Proxy, so that we create the bound version of each function only once
 
 let globalSchedule = true; // Decides whether to schedule rendering and updating (async)
@@ -280,9 +274,13 @@ function html(
     HTML_FIND_INVALID,
     `<$1$2${Placeholder.dummy}$3`
   );
-  const DOM = parser(DOMString);
 
-  // Delay Elemen iteration and manipulation after the elements have been added to the DOM.
+  // Parser
+  const template = document.createElement(Placeholder.template);
+  template.innerHTML = DOMString;
+  const DOM = template.content;
+
+  // Delay Element iteration and manipulation after the elements have been added to the DOM.
   if (viewElements) {
     onRender(
       fillDOM,
@@ -298,14 +296,14 @@ function html(
   // Return DocumentFragment
   if (DOM.childNodes.length > 1) return DOM;
 
-  // Return Text Node
+  // Return empty Text Node
   if (!DOM.firstChild) return document.createTextNode("");
 
-  // Return Element
-  return DOM.firstChild as Element;
+  // Return Element | Text
+  return DOM.firstChild as Element | Text;
 }
 function fillDOM(
-  elem: DocumentFragment | Element,
+  elem: DocumentFragment,
   insertNodes: Node[],
   eventFunctions: eventFunctions
 ) {
@@ -336,40 +334,34 @@ function fillDOM(
 /* c8 ignore start */
 function h(
   name: string | ((...args: any[]) => ReturnType<typeof h>),
-  props: Record<keyof any, any> | null,
+  props: Record<PropertyKey, any> | null,
   ...children: Array<any>
 ): ReturnType<typeof html> {
   if (isFunction(name)) return name(props);
-
   const flatChildren = children
     .map((child: any) =>
+      /* c8 ignore next 1 */
       isObject(child) && !isNode(child as Node) ? Object.values(child) : child
     )
     .flat();
-  const elem = document.createElement(name);
-  for (let i in props) {
-    //@ts-ignore
-    i in elem ? (elem[i] = props[i]) : setAttribute(elem, i, props[i]);
-  }
-
-  elem.append(...flatChildren);
-  onRender(setReactivity, elem, elem);
-  return elem;
+  return html`<${name} ${props || {}}>${flatChildren}</${name}>`;
 }
 /* c8 ignore end */
-function setReactivity(DOM: Node, eventFunctions?: eventFunctions) {
+function setReactivity(DOM: DocumentFragment, eventFunctions?: eventFunctions) {
   // Set events and reactive behaviour(checks for {{ key }} where key is on hydro)
-  if (isTextNode(DOM)) {
-    setReactivitySingle(DOM);
+  if (DOM.firstChild && isTextNode(DOM.firstChild)) {
+    if (!setReactivityElements.has(DOM.firstChild)) {
+      setReactivityElements.add(DOM.firstChild);
+      setReactivitySingle(DOM.firstChild);
+    }
     return;
   }
 
-  const root = [...(DOM as Element).querySelectorAll("*")].reverse();
-  if (!isDocumentFragment(DOM)) {
-    root.push(DOM as Element);
-  }
-
-  root.forEach((elem) => {
+  [...DOM.querySelectorAll("*")].reverse().forEach((elem) => {
+    if (setReactivityElements.has(elem)) {
+      return; // continue
+    }
+    setReactivityElements.add(elem);
     // Check Text Nodes
     // This is somehow faster than createNodeIterator and createTreeWalker
     // https://esbench.com/bench/5e9c421c12464000a01e4359
@@ -640,7 +632,7 @@ function setTraces(
   }
 }
 // Helper function to return a Hydro Obj with a aalue from a chain of properties on hydro
-function resolveObject(propertyArray: Array<keyof any>): [any, hydroObject] {
+function resolveObject(propertyArray: Array<PropertyKey>): [any, hydroObject] {
   let value: any, prev: hydroObject;
   value = prev = hydro;
 
@@ -1014,9 +1006,10 @@ function reactive<T>(initial: T): reactiveObject<T> {
   return chainKeysProxy;
 
   function setter<U>(val: U) {
-    const keys = ( // @ts-ignore
-      this && Reflect.get(this, Placeholder.reactive) ? this : chainKeysProxy
-    )[Placeholder.keys];
+    const keys = // @ts-ignore
+    (this && Reflect.get(this, Placeholder.reactive) ? this : chainKeysProxy)[
+      Placeholder.keys
+    ];
     const [resolvedValue, resolvedObj] = resolveObject(keys);
     const lastProp = keys[keys.length - 1];
 
@@ -1031,7 +1024,7 @@ function reactive<T>(initial: T): reactiveObject<T> {
     }
   }
 }
-function chainKeys(initial: Function | any, keys: Array<keyof any>): any {
+function chainKeys(initial: Function | any, keys: Array<PropertyKey>): any {
   return new Proxy(initial, {
     get(target, subKey, _receiver) {
       if (subKey === Placeholder.reactive) return true;
@@ -1137,17 +1130,17 @@ function emit(
 }
 let trackDeps = false;
 const trackProxies = new Set<hydroObject>();
-const trackMap = new WeakMap<hydroObject, Set<keyof any>>();
+const trackMap = new WeakMap<hydroObject, Set<PropertyKey>>();
 const unobserveMap = new WeakMap<
   Function,
-  Array<{ proxy: hydroObject; key: keyof any }>
+  Array<{ proxy: hydroObject; key: PropertyKey }>
 >();
 function watchEffect(fn: Function) {
   trackDeps = true;
   fn();
   trackDeps = false;
 
-  const reRun = (newVal: keyof any) => {
+  const reRun = (newVal: PropertyKey) => {
     if (newVal !== null) fn();
   };
 
@@ -1409,10 +1402,10 @@ function generateProxy(obj = {}): hydroObject {
     writable: true,
   });
   Reflect.defineProperty(proxy, handlers, {
-    value: new Map<keyof any, Set<Function>>(),
+    value: new Map<PropertyKey, Set<Function>>(),
   });
   Reflect.defineProperty(proxy, Placeholder.observe, {
-    value: (key: keyof any, handler: Function) => {
+    value: (key: PropertyKey, handler: Function) => {
       const map = Reflect.get(proxy, handlers);
 
       if (map.has(key)) {
@@ -1428,7 +1421,7 @@ function generateProxy(obj = {}): hydroObject {
     configurable: true,
   });
   Reflect.defineProperty(proxy, Placeholder.unobserve, {
-    value: (key: keyof any, handler: Function) => {
+    value: (key: PropertyKey, handler: Function) => {
       const map = Reflect.get(proxy, handlers);
 
       if (key) {
@@ -1471,7 +1464,7 @@ function cleanProxy(proxy: any) {
   }
 }
 
-function checkReactivityMap(obj: any, key: keyof any, val: any, oldVal: any) {
+function checkReactivityMap(obj: any, key: PropertyKey, val: any, oldVal: any) {
   const keyToNodeMap = reactivityMap.get(obj)!;
   const nodeToChangeMap = keyToNodeMap.get(String(key));
 

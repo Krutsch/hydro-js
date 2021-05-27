@@ -30,12 +30,12 @@ declare global {
 declare type isInputPendingOptions = {
     includeContinuous: boolean;
 };
-interface hydroObject extends Record<keyof any, any> {
+interface hydroObject extends Record<PropertyKey, any> {
     isProxy: boolean;
     asyncUpdate: boolean;
-    observe: (key: keyof any, fn: Function) => any;
+    observe: (key: PropertyKey, fn: Function) => any;
     getObservers: () => Map<string, Set<Function>>;
-    unobserve: (key?: keyof any, handler?: Function) => undefined;
+    unobserve: (key?: PropertyKey, handler?: Function) => undefined;
 }
 interface EventObject {
     event: EventListener;
@@ -49,8 +49,8 @@ declare function setInsertDiffing(willInsert: boolean): void;
 declare function setShouldSetReactivity(willSet: boolean): void;
 declare function html(htmlArray: TemplateStringsArray, // The Input String, which is splitted by the template variables
 ...variables: Array<any>): Element | DocumentFragment | Text;
-declare function h(name: string | ((...args: any[]) => ReturnType<typeof h>), props: Record<keyof any, any> | null, ...children: Array<any>): ReturnType<typeof html>;
-declare function setReactivity(DOM: Node, eventFunctions?: eventFunctions): void;
+declare function h(name: string | ((...args: any[]) => ReturnType<typeof h>), props: Record<PropertyKey, any> | null, ...children: Array<any>): ReturnType<typeof html>;
+declare function setReactivity(DOM: DocumentFragment, eventFunctions?: eventFunctions): void;
 declare function compare(elem: Element, where: Element, onlyTextChildren?: boolean): boolean;
 declare function render(elem: ReturnType<typeof html> | reactiveObject<any>, where?: ReturnType<typeof html> | string, shouldSchedule?: boolean): ChildNode["remove"];
 declare function reactive<T>(initial: T): reactiveObject<T>;

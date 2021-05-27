@@ -7,11 +7,6 @@ window.requestIdleCallback =
             timeRemaining: () => Math.max(0, 5 - (performance.now() - start)),
         }));
 // Safari Polyfills END
-// Parser to create HTML elements from strings
-const parser = ((range = document.createRange()) => {
-    range.selectNodeContents(range.createContextualFragment(`<${"template" /* template */}>`).lastChild);
-    return range.createContextualFragment.bind(range);
-})();
 const allNodeChanges = new WeakMap(); // Maps a Node against a change. This is necessary for nodes that have multiple changes for one text / attribute.
 const elemEventFunctions = new WeakMap(); // Stores event functions in order to compare Elements against each other.
 const reactivityMap = new WeakMap(); // Maps Proxy Objects
@@ -20,6 +15,7 @@ const tmpSwap = new WeakMap(); // Take over keyToNodeMap if new value is a hydro
 const onRenderMap = new WeakMap(); // Lifecycle Hook that is being called after rendering
 const onCleanupMap = new WeakMap(); // Lifecycle Hook that is being called when unmount function is being called
 const fragmentToElements = new WeakMap(); // Used to retreive Elements from DocumentFragment after it has been rendered – for diffing
+const setReactivityElements = new WeakSet();
 const _boundFunctions = Symbol("boundFunctions"); // Cache for bound functions in Proxy, so that we create the bound version of each function only once
 let globalSchedule = true; // Decides whether to schedule rendering and updating (async)
 let reuseElements = true; // Reuses Elements when rendering
@@ -173,8 +169,11 @@ function html(htmlArray, // The Input String, which is splitted by the template 
     // Find elements <html|head|body>, as they cannot be created by the parser. Replace them by fake Custom Elements and replace them afterwards.
     let DOMString = String.raw(htmlArray, ...resolvedVariables).trim();
     DOMString = DOMString.replace(HTML_FIND_INVALID, `<$1$2${"-dummy" /* dummy */}$3`);
-    const DOM = parser(DOMString);
-    // Delay Elemen iteration and manipulation after the elements have been added to the DOM.
+    // Parser
+    const template = document.createElement("template" /* template */);
+    template.innerHTML = DOMString;
+    const DOM = template.content;
+    // Delay Element iteration and manipulation after the elements have been added to the DOM.
     if (viewElements) {
         onRender(fillDOM, DOM.firstChild, DOM.firstChild, insertNodes, eventFunctions);
     }
@@ -184,10 +183,10 @@ function html(htmlArray, // The Input String, which is splitted by the template 
     // Return DocumentFragment
     if (DOM.childNodes.length > 1)
         return DOM;
-    // Return Text Node
+    // Return empty Text Node
     if (!DOM.firstChild)
         return document.createTextNode("");
-    // Return Element
+    // Return Element | Text
     return DOM.firstChild;
 }
 function fillDOM(elem, insertNodes, eventFunctions) {
@@ -218,29 +217,27 @@ function h(name, props, ...children) {
     if (isFunction(name))
         return name(props);
     const flatChildren = children
-        .map((child) => isObject(child) && !isNode(child) ? Object.values(child) : child)
+        .map((child) => 
+    /* c8 ignore next 1 */
+    isObject(child) && !isNode(child) ? Object.values(child) : child)
         .flat();
-    const elem = document.createElement(name);
-    for (let i in props) {
-        //@ts-ignore
-        i in elem ? (elem[i] = props[i]) : setAttribute(elem, i, props[i]);
-    }
-    elem.append(...flatChildren);
-    onRender(setReactivity, elem, elem);
-    return elem;
+    return html `<${name} ${props || {}}>${flatChildren}</${name}>`;
 }
 /* c8 ignore end */
 function setReactivity(DOM, eventFunctions) {
     // Set events and reactive behaviour(checks for {{ key }} where key is on hydro)
-    if (isTextNode(DOM)) {
-        setReactivitySingle(DOM);
+    if (DOM.firstChild && isTextNode(DOM.firstChild)) {
+        if (!setReactivityElements.has(DOM.firstChild)) {
+            setReactivityElements.add(DOM.firstChild);
+            setReactivitySingle(DOM.firstChild);
+        }
         return;
     }
-    const root = [...DOM.querySelectorAll("*")].reverse();
-    if (!isDocumentFragment(DOM)) {
-        root.push(DOM);
-    }
-    root.forEach((elem) => {
+    [...DOM.querySelectorAll("*")].reverse().forEach((elem) => {
+        if (setReactivityElements.has(elem)) {
+            return; // continue
+        }
+        setReactivityElements.add(elem);
         // Check Text Nodes
         // This is somehow faster than createNodeIterator and createTreeWalker
         // https://esbench.com/bench/5e9c421c12464000a01e4359
@@ -769,8 +766,8 @@ function reactive(initial) {
     const chainKeysProxy = chainKeys(setter, [key]);
     return chainKeysProxy;
     function setter(val) {
-        const keys = ( // @ts-ignore
-        this && Reflect.get(this, "reactive" /* reactive */) ? this : chainKeysProxy)["__keys__" /* keys */];
+        const keys = // @ts-ignore
+         (this && Reflect.get(this, "reactive" /* reactive */) ? this : chainKeysProxy)["__keys__" /* keys */];
         const [resolvedValue, resolvedObj] = resolveObject(keys);
         const lastProp = keys[keys.length - 1];
         if (isFunction(val)) {

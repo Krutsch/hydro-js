@@ -2322,8 +2322,10 @@ describe("library", () => {
 
       let cond = $("#testEvent2")!.textContent!.includes("5");
 
-      testEvent2((x: any) => (e: any) =>
-        (e.currentTarget.textContent = Number(e.currentTarget.textContent) + 10)
+      testEvent2(
+        (x: any) => (e: any) =>
+          (e.currentTarget.textContent =
+            Number(e.currentTarget.textContent) + 10)
       );
 
       //@ts-ignore
