@@ -1,10 +1,14 @@
 # Changelog
 
-## 1.4.3- 2021-05-
+## 1.4.4- 2021-06-18
+
+- Pass children in h function as prop
+
+## 1.4.3- 2021-05-28
 
 - Use another parser revert
 
-## 1.4.3- 2021-05-27
+## 1.4.2- 2021-05-27
 
 - Use another parser
 - Use cache for setReactivity

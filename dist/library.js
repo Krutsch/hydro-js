@@ -219,7 +219,7 @@ function fillDOM(elem, insertNodes, eventFunctions) {
 /* c8 ignore start */
 function h(name, props, ...children) {
     if (isFunction(name))
-        return name(props);
+        return name({ ...props, children });
     const flatChildren = children
         .map((child) => isObject(child) && !isNode(child) ? Object.values(child) : child)
         .flat();
@@ -791,8 +791,8 @@ function reactive(initial) {
     const chainKeysProxy = chainKeys(setter, [key]);
     return chainKeysProxy;
     function setter(val) {
-        const keys = // @ts-ignore
-         (this && Reflect.get(this, "reactive" /* reactive */) ? this : chainKeysProxy)["__keys__" /* keys */];
+        const keys = ( // @ts-ignore
+        this && Reflect.get(this, "reactive" /* reactive */) ? this : chainKeysProxy)["__keys__" /* keys */];
         const [resolvedValue, resolvedObj] = resolveObject(keys);
         const lastProp = keys[keys.length - 1];
         if (isFunction(val)) {

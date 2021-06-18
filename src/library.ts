@@ -342,7 +342,7 @@ function h(
   props: Record<keyof any, any> | null,
   ...children: Array<any>
 ): ReturnType<typeof html> {
-  if (isFunction(name)) return name(props);
+  if (isFunction(name)) return name({ ...props, children });
 
   const flatChildren = children
     .map((child: any) =>
@@ -1035,10 +1035,9 @@ function reactive<T>(initial: T): reactiveObject<T> {
   return chainKeysProxy;
 
   function setter<U>(val: U) {
-    const keys = // @ts-ignore
-    (this && Reflect.get(this, Placeholder.reactive) ? this : chainKeysProxy)[
-      Placeholder.keys
-    ];
+    const keys = ( // @ts-ignore
+      this && Reflect.get(this, Placeholder.reactive) ? this : chainKeysProxy
+    )[Placeholder.keys];
     const [resolvedValue, resolvedObj] = resolveObject(keys);
     const lastProp = keys[keys.length - 1];
 
