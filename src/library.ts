@@ -504,16 +504,13 @@ function setReactivitySingle(node: Element | Text, key?: string): void {
       } else if (key === Placeholder.twoWay) {
         // Same behavior as v-model in https://v3.vuejs.org/guide/forms.html#basic-usage
         const changeAttrVal = (eventName: string) => {
-          node.addEventListener(
-            eventName,
-            ({ target }: { target: EventTarget | null }) => {
-              Reflect.set(
-                resolvedObj,
-                lastProp,
-                (target as HTMLInputElement).value
-              );
-            }
-          );
+          node.addEventListener(eventName, ({ target }) => {
+            Reflect.set(
+              resolvedObj,
+              lastProp,
+              (target as HTMLInputElement).value
+            );
+          });
         };
 
         if (
@@ -535,13 +532,13 @@ function setReactivitySingle(node: Element | Text, key?: string): void {
           node instanceof HTMLInputElement &&
           node.type === Placeholder.checkbox
         ) {
-          node.checked = resolvedValue.includes(node.name);
+          node.checked = resolvedValue;
           node.addEventListener(Placeholder.change, ({ target }) => {
-            if (!(target as HTMLInputElement).checked) {
-              resolvedValue.splice(resolvedValue.indexOf(node.name), 1);
-            } else if (!resolvedValue.includes(node.name)) {
-              resolvedValue.push(node.name);
-            }
+            Reflect.set(
+              resolvedObj,
+              lastProp,
+              (target as HTMLInputElement).checked
+            );
           });
         }
 
@@ -1035,9 +1032,10 @@ function reactive<T>(initial: T): reactiveObject<T> {
   return chainKeysProxy;
 
   function setter<U>(val: U) {
-    const keys = ( // @ts-ignore
-      this && Reflect.get(this, Placeholder.reactive) ? this : chainKeysProxy
-    )[Placeholder.keys];
+    const keys = // @ts-ignore
+    (this && Reflect.get(this, Placeholder.reactive) ? this : chainKeysProxy)[
+      Placeholder.keys
+    ];
     const [resolvedValue, resolvedObj] = resolveObject(keys);
     const lastProp = keys[keys.length - 1];
 
@@ -1544,6 +1542,11 @@ function updateDOM(nodeToChangeMap: nodeToChangeMap, val: any, oldVal: any) {
       if (isNode(val)) {
         replaceElement(val as Element, node);
         runLifecyle(node, onCleanupMap);
+        if (val !== node) {
+          nodeToChangeMap.delete(node);
+          nodeToChangeMap.set(val as Element, entry);
+          nodeToChangeMap.set(entry, val as Element);
+        }
       } else if (isTextNode(node)) {
         useStartEnd = true;
         let text = node.nodeValue!;
@@ -1560,12 +1563,16 @@ function updateDOM(nodeToChangeMap: nodeToChangeMap, val: any, oldVal: any) {
             (node as HTMLInputElement).value = String(val);
           } else if (
             node instanceof HTMLInputElement &&
-            (node.type === Placeholder.checkbox ||
-              node.type === Placeholder.radio)
+            node.type === Placeholder.radio
           ) {
             node.checked = Array.isArray(val)
               ? val.includes(node.name)
               : String(val) === node.value;
+          } else if (
+            node instanceof HTMLInputElement &&
+            node.type === Placeholder.checkbox
+          ) {
+            node.checked = val;
           }
         } else if (isFunction(val) || isEventObject(val)) {
           const eventName = key!.replace(onEventRegex, "");

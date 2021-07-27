@@ -382,14 +382,9 @@ function setReactivitySingle(node, key) {
                 }
                 else if (node instanceof HTMLInputElement &&
                     node.type === "checkbox" /* checkbox */) {
-                    node.checked = resolvedValue.includes(node.name);
+                    node.checked = resolvedValue;
                     node.addEventListener("change" /* change */, ({ target }) => {
-                        if (!target.checked) {
-                            resolvedValue.splice(resolvedValue.indexOf(node.name), 1);
-                        }
-                        else if (!resolvedValue.includes(node.name)) {
-                            resolvedValue.push(node.name);
-                        }
+                        Reflect.set(resolvedObj, lastProp, target.checked);
                     });
                 }
                 attr_OR_text = attr_OR_text.replace(hydroMatch, "");
@@ -791,8 +786,8 @@ function reactive(initial) {
     const chainKeysProxy = chainKeys(setter, [key]);
     return chainKeysProxy;
     function setter(val) {
-        const keys = ( // @ts-ignore
-        this && Reflect.get(this, "reactive" /* reactive */) ? this : chainKeysProxy)["__keys__" /* keys */];
+        const keys = // @ts-ignore
+         (this && Reflect.get(this, "reactive" /* reactive */) ? this : chainKeysProxy)["__keys__" /* keys */];
         const [resolvedValue, resolvedObj] = resolveObject(keys);
         const lastProp = keys[keys.length - 1];
         if (isFunction(val)) {
@@ -1236,6 +1231,11 @@ function updateDOM(nodeToChangeMap, val, oldVal) {
             if (isNode(val)) {
                 replaceElement(val, node);
                 runLifecyle(node, onCleanupMap);
+                if (val !== node) {
+                    nodeToChangeMap.delete(node);
+                    nodeToChangeMap.set(val, entry);
+                    nodeToChangeMap.set(entry, val);
+                }
             }
             else if (isTextNode(node)) {
                 useStartEnd = true;
@@ -1251,11 +1251,14 @@ function updateDOM(nodeToChangeMap, val, oldVal) {
                         node.value = String(val);
                     }
                     else if (node instanceof HTMLInputElement &&
-                        (node.type === "checkbox" /* checkbox */ ||
-                            node.type === "radio" /* radio */)) {
+                        node.type === "radio" /* radio */) {
                         node.checked = Array.isArray(val)
                             ? val.includes(node.name)
                             : String(val) === node.value;
+                    }
+                    else if (node instanceof HTMLInputElement &&
+                        node.type === "checkbox" /* checkbox */) {
+                        node.checked = val;
                     }
                 }
                 else if (isFunction(val) || isEventObject(val)) {

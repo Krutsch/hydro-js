@@ -616,7 +616,7 @@ describe("library", () => {
 
       it("two-way attribute", () => {
         const text = reactive("text");
-        const checked = reactive(["John", "Mike"]);
+        const checked = reactive(true);
         const checkedRadio = reactive("A");
         const select = reactive("cat");
 
@@ -627,22 +627,8 @@ describe("library", () => {
               <textarea two-way=${text}></textarea>
 
               <label>
-                <input
-                  id="checkbox1"
-                  type="checkbox"
-                  name="John"
-                  two-way=${checked}
-                />
+                <input id="checkbox1" type="checkbox" two-way=${checked} />
                 John
-              </label>
-              <label>
-                <input
-                  id="checkbox2"
-                  type="checkbox"
-                  name="Mike"
-                  two-way=${checked}
-                />
-                Mike
               </label>
 
               <label>
@@ -687,8 +673,6 @@ describe("library", () => {
           //@ts-ignore
           $("#checkbox1").checked &&
           //@ts-ignore
-          $("#checkbox2").checked &&
-          //@ts-ignore
           $("#radio1").checked &&
           //@ts-ignore
           !$("#radio2").checked &&
@@ -699,11 +683,9 @@ describe("library", () => {
         $("#radio1")!.dispatchEvent(new Event("change"));
         //@ts-ignore
         $("#checkbox1")!.click();
-        //@ts-ignore
-        $("#checkbox1")!.click();
 
         text("haha");
-        checked([]);
+        checked(false);
         checkedRadio("B");
         select("dog");
 
@@ -723,8 +705,6 @@ describe("library", () => {
           $("textarea").value === "haha" &&
           //@ts-ignore
           !$("#checkbox1").checked &&
-          //@ts-ignore
-          !$("#checkbox2").checked &&
           //@ts-ignore
           !$("#radio1").checked &&
           //@ts-ignore

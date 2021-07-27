@@ -606,7 +606,7 @@
 
               it("two-way attribute", () => {
                 const text = reactive("text");
-                const checked = reactive(["John", "Mike"]);
+                const checked = reactive(true);
                 const checkedRadio = reactive("A");
                 const select = reactive("cat");
 
@@ -620,19 +620,9 @@
                         <input
                           id="checkbox1"
                           type="checkbox"
-                          name="John"
                           two-way=${checked}
                         />
                         John
-                      </label>
-                      <label>
-                        <input
-                          id="checkbox2"
-                          type="checkbox"
-                          name="Mike"
-                          two-way=${checked}
-                        />
-                        Mike
                       </label>
 
                       <label>
@@ -673,7 +663,6 @@
                   $("#text").value === "text" &&
                   $("textarea").value === "text" &&
                   $("#checkbox1").checked &&
-                  $("#checkbox2").checked &&
                   $("#radio1").checked &&
                   !$("#radio2").checked &&
                   $("select").value === "cat";
@@ -681,10 +670,9 @@
                 // Code Coverage
                 $("#radio1").dispatchEvent(new Event("change"));
                 $("#checkbox1").click();
-                $("#checkbox1").click();
 
                 text("haha");
-                checked([]);
+                checked(false);
                 checkedRadio("B");
                 select("dog");
 
@@ -701,7 +689,6 @@
                     $("#text").value === "haha" &&
                     $("textarea").value === "haha" &&
                     !$("#checkbox1").checked &&
-                    !$("#checkbox2").checked &&
                     !$("#radio1").checked &&
                     $("#radio2").checked &&
                     $("select").value === "dog"
@@ -2194,9 +2181,10 @@
 
               let cond = $("#testEvent2").textContent.includes("5");
 
-              testEvent2((x) => (e) =>
-                (e.currentTarget.textContent =
-                  Number(e.currentTarget.textContent) + 10)
+              testEvent2(
+                (x) => (e) =>
+                  (e.currentTarget.textContent =
+                    Number(e.currentTarget.textContent) + 10)
               );
 
               //@ts-ignore

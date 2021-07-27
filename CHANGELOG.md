@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.4.5- 2021-07-27
+
+- Change checkbox two-way behavior: this will now take a boolean instead of an array associated with the name on the element.
+- Fix ternary bug in combination with two-way logic
+
 ## 1.4.4- 2021-06-18
 
 - Pass children in h function as prop
