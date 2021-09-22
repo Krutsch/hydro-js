@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.6- 2021-09-22
+
+- Update deps
+
 ## 1.4.5- 2021-07-27
 
 - Change checkbox two-way behavior: this will now take a boolean instead of an array associated with the name on the element.
