@@ -47,8 +47,7 @@ declare function setGlobalSchedule(willSchedule: boolean): void;
 declare function setReuseElements(willReuse: boolean): void;
 declare function setInsertDiffing(willInsert: boolean): void;
 declare function setShouldSetReactivity(willSet: boolean): void;
-declare function html(htmlArray: TemplateStringsArray, // The Input String, which is splitted by the template variables
-...variables: Array<any>): Element | DocumentFragment | Text;
+declare function html(htmlArray: TemplateStringsArray, ...variables: Array<any>): Element | DocumentFragment | Text;
 declare function h(name: string | ((...args: any[]) => ReturnType<typeof h>), props: Record<keyof any, any> | null, ...children: Array<any>): ReturnType<typeof html>;
 declare function setReactivity(DOM: ReturnType<typeof html>, eventFunctions?: eventFunctions): void;
 declare function compare(elem: Element | DocumentFragment, where: Element | DocumentFragment | Text, onlyTextChildren?: boolean): boolean;
@@ -60,7 +59,7 @@ declare function observe(reactiveHydro: reactiveObject<any>, fn: Function): void
 declare function unobserve(reactiveHydro: reactiveObject<any>): void;
 declare function ternary(condition: Function | reactiveObject<any>, trueVal: any, falseVal: any, reactiveHydro?: reactiveObject<any>): any;
 declare function emit(eventName: string, data: any, who: EventTarget, options?: object): void;
-declare function watchEffect(fn: Function): () => void | undefined;
+declare function watchEffect(fn: Function): () => void;
 declare function getValue<T extends object>(reactiveHydro: T): T;
 declare function onRender(fn: Function, elem: ReturnType<typeof html>, ...args: Array<any>): void;
 declare function onCleanup(fn: Function, elem: ReturnType<typeof html>, ...args: Array<any>): void;

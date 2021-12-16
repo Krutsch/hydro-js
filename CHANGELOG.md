@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.4.7- 2021-12-15
+
+- Bug fix, where variable was undefined
+- Rewrite using less inline functions
+- Add two pseudo-boolean attributes: draggable and spellcheck
+
 ## 1.4.6- 2021-09-22
 
 - Update deps

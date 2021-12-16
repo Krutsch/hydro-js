@@ -1,6 +1,6 @@
 {
   "name": "hydro-js",
-  "version": "1.4.6",
+  "version": "1.4.7",
   "description": "A lightweight reactive library",
   "type": "module",
   "main": "./dist/library.js",
@@ -28,12 +28,12 @@
   "license": "MIT",
   "devDependencies": {
     "@esm-bundle/chai": "^4.3.4",
-    "@types/concurrently": "^6.2.1",
-    "@web/test-runner": "^0.13.17",
+    "@types/concurrently": "^6.4.0",
+    "@web/test-runner": "^0.13.22",
     "@web/test-runner-playwright": "^0.8.8",
-    "concurrently": "^6.2.1",
+    "concurrently": "^6.4.0",
     "serve": "^13.0.2",
-    "typescript": "^4.4.3"
+    "typescript": "^4.5.4"
   },
   "repository": {
     "type": "git",

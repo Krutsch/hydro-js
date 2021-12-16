@@ -1,4 +1,3 @@
-declare const window: any;
 declare global {
   interface Window {
     $: Document["querySelector"];
@@ -39,12 +38,12 @@ interface hydroObject extends Record<PropertyKey, any> {
   getObservers: () => Map<string, Set<Function>>;
   unobserve: (key?: PropertyKey, handler?: Function) => undefined;
 }
-type nodeChange = Array<[number, number, string | undefined]>;
+type nodeChanges = Array<[number, number, string | undefined]>;
 
 // Circular reference
 type nodeToChangeMap = Map<
-  Element | Text | nodeChange,
-  Element | Text | nodeChange
+  Element | Text | nodeChanges,
+  Element | Text | nodeChanges
 >;
 interface keyToNodeMap extends Map<string, nodeToChangeMap> {}
 interface EventObject {
@@ -87,27 +86,27 @@ window.requestIdleCallback =
     }));
 // Safari Polyfills END
 
-// Parser to create HTML elements from strings
-const parser = ((range = document.createRange()) => {
+const parser = (() => {
+  const range = document.createRange();
   range.selectNodeContents(
     range.createContextualFragment(`<${Placeholder.template}>`).lastChild!
   );
   return range.createContextualFragment.bind(range);
 })();
-const allNodeChanges = new WeakMap<Text | Element, nodeChange>(); // Maps a Node against a change. This is necessary for nodes that have multiple changes for one text / attribute.
+const allNodeChanges = new WeakMap<Text | Element, nodeChanges>(); // Maps a Node against an array of changes. An array is necessary because a node can have multiple variables for one text / attribute.
 const elemEventFunctions = new WeakMap<Element, Array<EventListener>>(); // Stores event functions in order to compare Elements against each other.
-const reactivityMap = new WeakMap<hydroObject, keyToNodeMap>(); // Maps Proxy Objects
-const bindMap = new WeakMap<hydroObject, Array<Element>>(); // Bind an Element to Data. If the Data is being unset, the DOM Element disappears too.
-const tmpSwap = new WeakMap<hydroObject, keyToNodeMap>(); // Take over keyToNodeMap if new value is a hydro Proxy. Save old reactivityMap entry here, in case for a swap operation. [if reuseElements]
+const reactivityMap = new WeakMap<hydroObject, keyToNodeMap>(); // Maps Proxy Objects to another Map(proxy-key, node).
+const bindMap = new WeakMap<hydroObject, Array<Element>>(); // Bind an Element to data. If the data is being unset, the DOM Element disappears too.
+const tmpSwap = new WeakMap<hydroObject, keyToNodeMap>(); // Take over keyToNodeMap if the new value is a hydro Proxy. Save old reactivityMap entry here, in case for a swap operation.
 const onRenderMap = new WeakMap<ReturnType<typeof html>, Function>(); // Lifecycle Hook that is being called after rendering
 const onCleanupMap = new WeakMap<ReturnType<typeof html>, Function>(); // Lifecycle Hook that is being called when unmount function is being called
 const fragmentToElements = new WeakMap<DocumentFragment, Array<ChildNode>>(); // Used to retreive Elements from DocumentFragment after it has been rendered – for diffing
-const setReactivityElements = new WeakSet<ReturnType<typeof html>>();
+const setReactivityElements = new WeakSet<ReturnType<typeof html>>(); // Caching
 const _boundFunctions = Symbol("boundFunctions"); // Cache for bound functions in Proxy, so that we create the bound version of each function only once
 
 let globalSchedule = true; // Decides whether to schedule rendering and updating (async)
 let reuseElements = true; // Reuses Elements when rendering
-let insertBeforeDiffing = false;
+let insertBeforeDiffing = false; // Makes sense in Chrome only
 let shouldSetReactivity = true;
 let viewElements = false;
 
@@ -119,6 +118,7 @@ const onEventRegex = /^on/;
 
 // https://html.spec.whatwg.org/#attributes-3
 // if value for bool attr is falsy, then remove attr
+// INFO: draggable and spellcheck are actually using booleans as string! Might consider to add 'translate' (yes and no as string)
 const boolAttrList = [
   "allowfullscreen",
   "async",
@@ -126,6 +126,7 @@ const boolAttrList = [
   "autoplay",
   "checked",
   "controls",
+  "draggable",
   "default",
   "defer",
   "disabled",
@@ -144,6 +145,7 @@ const boolAttrList = [
   "required",
   "reversed",
   "selected",
+  "spellcheck",
 ];
 let lastSwapElem: null | Element = null;
 let internReset = false;
@@ -161,7 +163,7 @@ function isNode(node: Node): node is Node {
   return node instanceof Node;
 }
 function isDocumentFragment(node: Node): node is DocumentFragment {
-  // getElementById exists in svg too. I did not find a better way to identify a DocumentFragment
+  // getElementById exists in SVG too. I did not find a better way to identify a DocumentFragment
   return node.nodeName !== "svg" && "getElementById" in node;
 }
 function isEventObject(obj: object | unknown): obj is EventObject {
@@ -175,10 +177,13 @@ function isProxy(hydroObject: any): hydroObject is hydroObject {
 function isPromise(obj: any): obj is Promise<any> {
   return isObject(obj) && typeof obj.then === "function";
 }
+function randomText() {
+  return Math.random().toString(32).slice(2);
+}
 
 function setGlobalSchedule(willSchedule: boolean): void {
   globalSchedule = willSchedule;
-  setHydroRecursive(hydro, willSchedule);
+  setHydroRecursive(hydro);
 }
 function setReuseElements(willReuse: boolean): void {
   reuseElements = willReuse;
@@ -189,19 +194,16 @@ function setInsertDiffing(willInsert: boolean): void {
 function setShouldSetReactivity(willSet: boolean): void {
   shouldSetReactivity = willSet;
 }
-function setHydroRecursive(obj: hydroObject, willSchedule: boolean) {
-  Reflect.set(obj, Placeholder.asyncUpdate, willSchedule);
+function setHydroRecursive(obj: hydroObject) {
+  Reflect.set(obj, Placeholder.asyncUpdate, globalSchedule);
 
-  Object.values(obj).forEach((value) => {
+  for (const value of Object.values(obj)) {
     if (isObject(value) && isProxy(value)) {
-      setHydroRecursive(value, willSchedule);
+      setHydroRecursive(value);
     }
-  });
+  }
 }
 
-function randomText() {
-  return Math.random().toString(32).slice(2);
-}
 function setAttribute(node: Element, key: string, val: any): boolean {
   if (boolAttrList.includes(key) && !val) {
     node.removeAttribute(key);
@@ -222,21 +224,24 @@ function addEventListener(
     isFunction(obj) ? {} : obj.options
   );
 }
-// That is fine because the render function only renders within a body without a where parameter
+
 function html(
-  htmlArray: TemplateStringsArray, // The Input String, which is splitted by the template variables
+  htmlArray: TemplateStringsArray,
   ...variables: Array<any>
 ): Element | DocumentFragment | Text {
   const eventFunctions: eventFunctions = {}; // Temporarily store a mapping for string -> function, because eventListener have to be registered after the Element's creation
-  let insertNodes: Node[] = []; // Array of Nodes, that have to be added after the parsing
+  let insertNodes: Node[] = []; // Nodes, that will be added after the parsing
 
-  const resolvedVariables = variables.map((variable, index) => {
-    const template = `<${Placeholder.template} id="lbInsertNodes${index}"></${Placeholder.template}>`;
+  const resolvedVariables: Array<string> = [];
+  for (const variable of variables) {
+    const template = `<${Placeholder.template} id="lbInsertNodes"></${Placeholder.template}>`;
 
     switch (variable) {
-      case isNode(variable) && variable:
+      case isNode(variable) && variable: {
         insertNodes.push(variable);
-        return template;
+        resolvedVariables.push(template);
+        break;
+      }
       case ([
         "number",
         Placeholder.string,
@@ -245,23 +250,30 @@ function html(
         "bigint",
       ].includes(typeof variable) ||
         Reflect.get(variable, Placeholder.reactive)) &&
-        variable:
-        return String(variable);
-      case (isFunction(variable) || isEventObject(variable)) && variable:
+        variable: {
+        resolvedVariables.push(String(variable));
+        break;
+      }
+      case (isFunction(variable) || isEventObject(variable)) && variable: {
         const funcName = randomText();
         Reflect.set(eventFunctions, funcName, variable);
-        return funcName;
-      case Array.isArray(variable) && variable:
-        variable.forEach((item: any, index: number) => {
+        resolvedVariables.push(funcName);
+        break;
+      }
+      case Array.isArray(variable) && variable: {
+        for (let index = 0; index < variable.length; index++) {
+          const item = variable[index];
           if (isNode(item)) {
             insertNodes.push(item);
             variable[index] = template;
           }
-        });
-        return variable.join("");
-      case isObject(variable) && variable:
+        }
+        resolvedVariables.push(variable.join(""));
+        break;
+      }
+      case isObject(variable) && variable: {
         let result = "";
-        Object.entries(variable).forEach(([key, value]) => {
+        for (const [key, value] of Object.entries(variable)) {
           if (isFunction(value) || isEventObject(value)) {
             const funcName = randomText();
             Reflect.set(eventFunctions, funcName, value);
@@ -269,11 +281,13 @@ function html(
           } else {
             result += `${key}="${value}"`;
           }
-        });
-        return result;
+        }
+        resolvedVariables.push(result);
+        break;
+      }
     }
     /* c8 ignore next 1 */
-  });
+  }
 
   // Find elements <html|head|body>, as they cannot be created by the parser. Replace them by fake Custom Elements and replace them afterwards.
   let DOMString = String.raw(htmlArray, ...resolvedVariables).trim();
@@ -322,16 +336,14 @@ function fillDOM(
     const tag = (nextNode as Element).localName.replace(Placeholder.dummy, "");
     const replacement = document.createElement(tag);
 
-    //@ts-ignore
     replacement.append(...(nextNode as Element).childNodes);
     (nextNode as Element).replaceWith(replacement);
   }
 
   // Insert HTML Elements, which were stored in insertNodes
   if (!isTextNode(elem)) {
-    elem
-      .querySelectorAll("template[id^=lbInsertNodes]")
-      .forEach((template) => template.replaceWith(insertNodes.shift()!));
+    for (const template of elem.querySelectorAll("template[id^=lbInsertNodes]"))
+      template.replaceWith(insertNodes.shift()!);
   }
 
   if (shouldSetReactivity) setReactivity(elem, eventFunctions);
@@ -344,11 +356,7 @@ function h(
 ): ReturnType<typeof html> {
   if (isFunction(name)) return name({ ...props, children });
 
-  const flatChildren = children
-    .map((child: any) =>
-      isObject(child) && !isNode(child as Node) ? Object.values(child) : child
-    )
-    .flat();
+  const flatChildren = children.map(getChildren).flat();
   const elem = document.createElement(name);
   for (let i in props) {
     //@ts-ignore
@@ -362,6 +370,11 @@ function h(
     setReactivity(elem);
   }
   return elem;
+}
+function getChildren(child: any) {
+  return isObject(child) && !isNode(child as Node)
+    ? Object.values(child)
+    : child;
 }
 /* c8 ignore end */
 function setReactivity(
@@ -381,7 +394,7 @@ function setReactivity(
     root.push(DOM as Element);
   }
 
-  root.forEach((elem) => {
+  for (const elem of root) {
     if (setReactivityElements.has(elem)) {
       return; // continue
     }
@@ -397,7 +410,7 @@ function setReactivity(
       childNode = childNode.nextSibling;
     }
 
-    elem.getAttributeNames().forEach((key) => {
+    for (const key of elem.getAttributeNames()) {
       // Set functions
       if (eventFunctions && key.startsWith("on")) {
         const eventName = key!.replace(onEventRegex, "");
@@ -426,8 +439,8 @@ function setReactivity(
       } else {
         setReactivitySingle(elem, key);
       }
-    });
-  });
+    }
+  }
 }
 function setReactivitySingle(node: Text): void; // TS function overload
 function setReactivitySingle(node: Element, key: string): void; // TS function overload
@@ -502,44 +515,27 @@ function setReactivitySingle(node: Element | Text, key?: string): void {
         }
         continue;
       } else if (key === Placeholder.twoWay) {
-        // Same behavior as v-model in https://v3.vuejs.org/guide/forms.html#basic-usage
-        const changeAttrVal = (eventName: string) => {
-          node.addEventListener(eventName, ({ target }) => {
-            Reflect.set(
-              resolvedObj,
-              lastProp,
-              (target as HTMLInputElement).value
-            );
-          });
-        };
-
         if (
           node instanceof HTMLTextAreaElement ||
           (node instanceof HTMLInputElement && node.type === Placeholder.text)
         ) {
           node.value = resolvedValue;
-          changeAttrVal("input");
+          changeAttrVal("input", node, resolvedObj, lastProp);
         } else if (node instanceof HTMLSelectElement) {
           node.value = resolvedValue;
-          changeAttrVal(Placeholder.change);
+          changeAttrVal(Placeholder.change, node, resolvedObj, lastProp);
         } else if (
           node instanceof HTMLInputElement &&
           node.type === Placeholder.radio
         ) {
           node.checked = node.value === resolvedValue;
-          changeAttrVal(Placeholder.change);
+          changeAttrVal(Placeholder.change, node, resolvedObj, lastProp);
         } else if (
           node instanceof HTMLInputElement &&
           node.type === Placeholder.checkbox
         ) {
           node.checked = resolvedValue;
-          node.addEventListener(Placeholder.change, ({ target }) => {
-            Reflect.set(
-              resolvedObj,
-              lastProp,
-              (target as HTMLInputElement).checked
-            );
-          });
+          changeAttrVal(Placeholder.change, node, resolvedObj, lastProp, true);
         }
 
         attr_OR_text = attr_OR_text.replace(hydroMatch, "");
@@ -551,7 +547,7 @@ function setReactivitySingle(node: Element | Text, key?: string): void {
       } else if (isObject(resolvedValue)) {
         // Case: setting attrs on Element - <p ${props}>
 
-        Object.entries(resolvedValue).forEach(([subKey, subVal]) => {
+        for (const [subKey, subVal] of Object.entries(resolvedValue)) {
           attr_OR_text = attr_OR_text.replace(hydroMatch, "");
           if (isFunction(subVal) || isEventObject(subVal)) {
             addEventListener(node, subKey.replace(onEventRegex, ""), subVal);
@@ -573,7 +569,7 @@ function setReactivitySingle(node: Element | Text, key?: string): void {
             resolvedValue as hydroObject,
             subKey
           );
-        });
+        }
 
         continue; // As we set all Mappings via subKeys
       } else {
@@ -596,6 +592,27 @@ function setReactivitySingle(node: Element | Text, key?: string): void {
     setTraces(start, end, node, lastProp, resolvedObj, key);
   }
 }
+// Same behavior as v-model in https://v3.vuejs.org/guide/forms.html#basic-usage
+function changeAttrVal(
+  eventName: string,
+  node: HTMLTextAreaElement | HTMLInputElement | HTMLSelectElement,
+  resolvedObj: hydroObject,
+  lastProp: string,
+  isChecked: boolean = false
+) {
+  node.addEventListener(eventName, changeHandler);
+  onCleanup(() => node.removeEventListener(eventName, changeHandler), node);
+
+  function changeHandler({ target }: Event) {
+    Reflect.set(
+      resolvedObj,
+      lastProp,
+      isChecked
+        ? (target as HTMLInputElement).checked
+        : (target as HTMLInputElement).value
+    );
+  }
+}
 function setTraces(
   start: number,
   end: number,
@@ -605,7 +622,7 @@ function setTraces(
   key?: string
 ): void {
   // Set WeakMaps, that will be used to track a change for a Node but also to check if a Node has any other changes.
-  const change = [start, end, key] as nodeChange[number];
+  const change = [start, end, key] as nodeChanges[number];
   const changeArr = [change];
 
   if (allNodeChanges.has(node)) {
@@ -620,7 +637,7 @@ function setTraces(
 
     if (nodeToChangeMap) {
       if (nodeToChangeMap.has(node)) {
-        (nodeToChangeMap.get(node)! as nodeChange).push(change);
+        (nodeToChangeMap.get(node)! as nodeChanges).push(change);
       } else {
         nodeToChangeMap.set(changeArr, node);
         nodeToChangeMap.set(node, changeArr);
@@ -628,7 +645,7 @@ function setTraces(
     } else {
       keyToNodeMap.set(
         hydroKey,
-        //@ts-ignore // ts-bug
+        //@ts-ignore
         new Map([
           [changeArr, node],
           [node, changeArr],
@@ -638,11 +655,10 @@ function setTraces(
   } else {
     reactivityMap.set(
       resolvedObj,
-
       new Map([
         [
           hydroKey,
-          //@ts-ignore // ts-bug
+          //@ts-ignore
           new Map([
             [changeArr, node],
             [node, changeArr],
@@ -652,15 +668,16 @@ function setTraces(
     );
   }
 }
-// Helper function to return a Hydro Obj with a aalue from a chain of properties on hydro
+
+// Helper function to return a value and hydro obj from a chain of properties
 function resolveObject(propertyArray: Array<PropertyKey>): [any, hydroObject] {
   let value: any, prev: hydroObject;
   value = prev = hydro;
 
-  propertyArray.forEach((prop) => {
+  for (const prop of propertyArray) {
     prev = value;
     value = Reflect.get(prev, prop);
-  });
+  }
 
   return [value, prev];
 }
@@ -771,8 +788,8 @@ function render(
     elem = getValue(elem);
   }
 
-  // Store Elements of DocumentFragment for later unmount
-  let elemChildren: Array<ChildNode>;
+  // Store elements of documentFragment for later unmount
+  let elemChildren: Array<ChildNode> = [];
   if (isDocumentFragment(elem)) {
     elemChildren = Array.from(elem.childNodes);
     fragmentToElements.set(elem, elemChildren); // For diffing later
@@ -786,17 +803,15 @@ function render(
       if (resolveStringToElement) {
         where = resolveStringToElement;
       } else {
-        return () => {};
+        return noop;
       }
     }
 
     if (!reuseElements) {
       replaceElement(elem, where as Element);
-      runLifecyle(where as Element, onCleanupMap);
     } else {
       if (isTextNode(elem)) {
         replaceElement(elem, where as Element);
-        runLifecyle(where as Element, onCleanupMap);
       } else if (!compare(elem, where as Element | DocumentFragment | Text)) {
         treeDiff(
           elem as Element | DocumentFragment,
@@ -807,12 +822,13 @@ function render(
   }
 
   runLifecyle(elem, onRenderMap);
-  elemChildren!?.forEach((subElem) => {
+  for (const subElem of elemChildren) {
     runLifecyle(subElem as Element | Text, onRenderMap);
-  });
+  }
 
   return unmount(isDocumentFragment(elem) ? elemChildren! : elem);
 }
+function noop() {}
 
 function executeLifecycle(
   node: ReturnType<typeof html>,
@@ -825,7 +841,7 @@ function executeLifecycle(
       schedule(fn);
       /* c8 ignore next 3 */
     } else if (globalSchedule) {
-      window.requestIdleCallback(fn);
+      window.requestIdleCallback(fn as IdleRequestCallback);
     } else {
       fn();
     }
@@ -913,7 +929,7 @@ function treeDiff(
 
   // Create Mapping for easier diffing, eg: "div" -> [...Element]
   const tag2Elements = new Map<string, Array<Element>>();
-  whereElements.forEach((wElem) => {
+  for (const wElem of whereElements) {
     /* c8 ignore next 2 */
     if (insertBeforeDiffing && wElem === template!) return;
 
@@ -922,16 +938,14 @@ function treeDiff(
     } else {
       tag2Elements.set(wElem.localName, [wElem]);
     }
-  });
+  }
 
   // Re-use any where Element if possible, then remove elem Element
-  elemElements.forEach((subElem) => {
+  for (const subElem of elemElements) {
     const sameElements = tag2Elements!.get(subElem.localName);
 
     if (sameElements) {
-      for (let index = 0; index < sameElements.length; index++) {
-        const whereElem = sameElements[index];
-
+      for (const whereElem of sameElements) {
         if (compare(subElem, whereElem, true)) {
           subElem.replaceWith(whereElem);
           runLifecyle(subElem, onCleanupMap);
@@ -940,7 +954,7 @@ function treeDiff(
         }
       }
     }
-  });
+  }
 
   if (insertBeforeDiffing) {
     const newElems = isDocumentFragment(elem)
@@ -948,8 +962,8 @@ function treeDiff(
       : [elem];
     if (isDocumentFragment(where)) {
       const oldElems = fragmentToElements.get(where)!;
-      newElems.forEach((e) => oldElems[0].before(e));
-      oldElems.forEach((e) => e.remove());
+      for (const e of newElems) oldElems[0].before(e);
+      for (const e of oldElems) e.remove();
     } else {
       where.replaceWith(...newElems);
     }
@@ -957,7 +971,6 @@ function treeDiff(
     runLifecyle(where, onCleanupMap);
   } else {
     replaceElement(elem, where);
-    runLifecyle(where, onCleanupMap);
   }
   tag2Elements.clear();
 }
@@ -970,25 +983,28 @@ function replaceElement(
     const fragmentChildren = fragmentToElements.get(where)!;
     if (isDocumentFragment(elem)) {
       const fragmentElements = Array.from(elem.childNodes);
-      fragmentChildren.forEach((fragWhere, index) => {
+      for (let index = 0; index < fragmentChildren.length; index++) {
+        const fragWhere = fragmentChildren[index];
         if (index < fragmentElements.length) {
           render(fragmentElements[index], fragWhere as Element);
         } else {
           fragWhere.remove();
         }
-      });
+      }
     } else {
-      fragmentChildren.forEach((fragWhere, index) => {
+      for (let index = 0; index < fragmentChildren.length; index++) {
+        const fragWhere = fragmentChildren[index];
         if (index === 0) {
           render(elem, fragWhere as Element);
         } else {
           fragWhere.remove();
         }
-      });
+      }
     }
   } else {
     where.replaceWith(elem);
   }
+  runLifecyle(where, onCleanupMap);
 }
 
 function unmount<T = ReturnType<typeof html> | Array<ChildNode>>(elem: T) {
@@ -1032,10 +1048,9 @@ function reactive<T>(initial: T): reactiveObject<T> {
   return chainKeysProxy;
 
   function setter<U>(val: U) {
-    const keys = // @ts-ignore
-    (this && Reflect.get(this, Placeholder.reactive) ? this : chainKeysProxy)[
-      Placeholder.keys
-    ];
+    const keys = ( // @ts-ignore
+      this && Reflect.get(this, Placeholder.reactive) ? this : chainKeysProxy
+    )[Placeholder.keys];
     const [resolvedValue, resolvedObj] = resolveObject(keys);
     const lastProp = keys[keys.length - 1];
 
@@ -1170,8 +1185,10 @@ function watchEffect(fn: Function) {
     if (newVal !== null) fn();
   };
 
-  trackProxies.forEach((proxy) => {
-    trackMap.get(proxy)?.forEach((key) => {
+  for (const proxy of trackProxies) {
+    if (!trackMap.has(proxy)) continue;
+
+    for (const key of trackMap.get(proxy)!) {
       proxy.observe(key, reRun);
 
       if (unobserveMap.has(reRun)) {
@@ -1179,17 +1196,18 @@ function watchEffect(fn: Function) {
       } else {
         unobserveMap.set(reRun, [{ proxy, key }]);
       }
-    });
+    }
     trackMap.delete(proxy);
-  });
+  }
 
   trackProxies.clear();
 
   return () =>
     unobserveMap
-      .get(reRun)
-      ?.forEach((entry) => entry.proxy.unobserve(entry.key, reRun));
+      .get(reRun)!
+      .forEach((entry) => entry.proxy.unobserve(entry.key, reRun));
 }
+
 function getValue<T extends object>(reactiveHydro: T): T {
   const [resolvedValue] = resolveObject(
     Reflect.get(reactiveHydro, Placeholder.keys)
@@ -1252,7 +1270,9 @@ function generateProxy(obj = {}): hydroObject {
         const observer = Reflect.get(target, handlers, receiver);
         if (observer.has(key)) {
           let set = observer.get(key);
-          set.forEach((handler: Function) => handler(null, oldVal));
+          for (const handler of set) {
+            handler(null, oldVal);
+          }
           set.clear();
           receiver.unobserve(key);
         }
@@ -1274,7 +1294,7 @@ function generateProxy(obj = {}): hydroObject {
         // Remove item from array
         /* c8 ignore next 4 */
         if (!internReset && Array.isArray(receiver)) {
-          receiver.splice(key as unknown as number, 1);
+          receiver.splice(Number(key), 1);
           return returnSet;
         }
 
@@ -1323,11 +1343,11 @@ function generateProxy(obj = {}): hydroObject {
         returnSet = Reflect.set(target, key, generateProxy(val), receiver);
 
         // Recursively set properties to Proxys too
-        Object.entries(val).forEach(([subKey, subVal]) => {
+        for (const [subKey, subVal] of Object.entries(val)) {
           if (isObject(subVal) && !isProxy(subVal)) {
             Reflect.set(val, subKey, generateProxy(subVal));
           }
-        });
+        }
       } else {
         if (
           !reuseElements &&
@@ -1431,7 +1451,7 @@ function generateProxy(obj = {}): hydroObject {
     value: new Map<PropertyKey, Set<Function>>(),
   });
   Reflect.defineProperty(proxy, Placeholder.observe, {
-    value: (key: PropertyKey, handler: Function) => {
+    value(key: PropertyKey, handler: Function) {
       const map = Reflect.get(proxy, handlers);
 
       if (map.has(key)) {
@@ -1443,11 +1463,13 @@ function generateProxy(obj = {}): hydroObject {
     configurable: true,
   });
   Reflect.defineProperty(proxy, Placeholder.getObservers, {
-    value: () => Reflect.get(proxy, handlers),
+    value() {
+      return Reflect.get(proxy, handlers);
+    },
     configurable: true,
   });
   Reflect.defineProperty(proxy, Placeholder.unobserve, {
-    value: (key: PropertyKey, handler: Function) => {
+    value(key: PropertyKey, handler: Function) {
       const map = Reflect.get(proxy, handlers);
 
       if (key) {
@@ -1504,7 +1526,7 @@ function checkReactivityMap(obj: any, key: PropertyKey, val: any, oldVal: any) {
   }
 
   if (isObject(val)) {
-    Object.entries(val).forEach(([subKey, subVal]) => {
+    for (const [subKey, subVal] of Object.entries(val)) {
       const subOldVal =
         (isObject(oldVal) && Reflect.get(oldVal, subKey)) || oldVal;
       const nodeToChangeMap = keyToNodeMap.get(subKey);
@@ -1516,7 +1538,7 @@ function checkReactivityMap(obj: any, key: PropertyKey, val: any, oldVal: any) {
           updateDOM(nodeToChangeMap, subVal, subOldVal);
         }
       }
-    });
+    }
   }
 }
 
@@ -1534,14 +1556,13 @@ function updateDOM(nodeToChangeMap: nodeToChangeMap, val: any, oldVal: any) {
     }
 
     // For each change of the node update either attribute or textContent
-    (entry as nodeChange).forEach((change) => {
+    for (const change of entry as nodeChanges) {
       const node = nodeToChangeMap.get(entry) as Element | Text;
       const [start, end, key] = change;
       let useStartEnd = false;
 
       if (isNode(val)) {
         replaceElement(val as Element, node);
-        runLifecyle(node, onCleanupMap);
         if (val !== node) {
           nodeToChangeMap.delete(node);
           nodeToChangeMap.set(val as Element, entry);
@@ -1582,7 +1603,7 @@ function updateDOM(nodeToChangeMap: nodeToChangeMap, val: any, oldVal: any) {
           );
           addEventListener(node, eventName, val);
         } else if (isObject(val)) {
-          Object.entries(val).forEach(([subKey, subVal]) => {
+          for (const [subKey, subVal] of Object.entries(val)) {
             if (isFunction(subVal) || isEventObject(subVal)) {
               const eventName = subKey.replace(onEventRegex, "");
               node.removeEventListener(
@@ -1593,7 +1614,7 @@ function updateDOM(nodeToChangeMap: nodeToChangeMap, val: any, oldVal: any) {
             } else {
               setAttribute(node, subKey, subVal);
             }
-          });
+          }
         } else {
           useStartEnd = true;
           let attr = node.getAttribute(key!);
@@ -1611,21 +1632,23 @@ function updateDOM(nodeToChangeMap: nodeToChangeMap, val: any, oldVal: any) {
         change[1] = start + String(val).length;
 
         // Because we updated the end, we also have to update the start and end for every other reactive change in the node, for the same key
-        let passedNode: boolean;
-        allNodeChanges.get(node)?.forEach((nodeChange) => {
-          if (nodeChange === change) {
-            passedNode = true;
-            return;
-          }
+        if (allNodeChanges.has(node)) {
+          let passedNode: boolean = false;
+          for (const nodeChange of allNodeChanges.get(node)!) {
+            if (nodeChange === change) {
+              passedNode = true;
+              continue;
+            }
 
-          if (passedNode && (isTextNode(node) || key === nodeChange[2])) {
-            const difference = String(oldVal).length - String(val).length;
-            nodeChange[0] -= difference;
-            nodeChange[1] -= difference;
+            if (passedNode && (isTextNode(node) || key === nodeChange[2])) {
+              const difference = String(oldVal).length - String(val).length;
+              nodeChange[0] -= difference;
+              nodeChange[1] -= difference;
+            }
           }
-        });
+        }
       }
-    });
+    }
   });
 }
 function view(
@@ -1637,7 +1660,7 @@ function view(
   const rootElem = $(root)!;
   const elements = getValue(data).map(renderFunction);
   rootElem.append(...elements);
-  elements.forEach((elem) => runLifecyle(elem as Element, onRenderMap));
+  for (const elem of elements) runLifecyle(elem as Element, onRenderMap);
   viewElements = false;
   observe(data, (newData: typeof data, oldData: typeof data) => {
     /* c8 ignore start */
@@ -1665,14 +1688,14 @@ function view(
         renderFunction(item, i + length)
       );
       rootElem.append(...newElements);
-      newElements.forEach((elem) => runLifecyle(elem as Element, onRenderMap));
+      for (const elem of newElements) runLifecyle(elem as Element, onRenderMap);
     }
 
     // Add new
     else if (oldData?.length === 0 || (!reuseElements && newData?.length)) {
       const elements = newData.map(renderFunction);
       rootElem.append(...elements);
-      elements.forEach((elem) => runLifecyle(elem as Element, onRenderMap));
+      for (const elem of elements) runLifecyle(elem as Element, onRenderMap);
     }
     viewElements = false;
     /* c8 ignore end */
