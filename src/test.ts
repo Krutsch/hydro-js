@@ -619,6 +619,7 @@ describe("library", () => {
         const checked = reactive(true);
         const checkedRadio = reactive("A");
         const select = reactive("cat");
+        const datetime = reactive("2018-06-08T00:00");
 
         const unmount = render(
           html`
@@ -629,6 +630,16 @@ describe("library", () => {
               <label>
                 <input id="checkbox1" type="checkbox" two-way=${checked} />
                 John
+              </label>
+
+              <label>
+                <input
+                  id="datetime"
+                  type="datetime-local"
+                  two-way=${datetime}
+                  min="2018-06-07T00:00"
+                  max="2020-06-14T00:00"
+                />
               </label>
 
               <label>
@@ -677,7 +688,9 @@ describe("library", () => {
           //@ts-ignore
           !$("#radio2").checked &&
           //@ts-ignore
-          $("select").value === "cat";
+          $("select").value === "cat" &&
+          //@ts-ignore
+          $("#datetime").value === "2018-06-08T00:00";
 
         // Code Coverage
         $("#radio1")!.dispatchEvent(new Event("change"));
@@ -688,6 +701,7 @@ describe("library", () => {
         checked(false);
         checkedRadio("B");
         select("dog");
+        datetime("2018-06-09T00:00");
 
         setTimeout(() => {
           unmount();
@@ -695,6 +709,7 @@ describe("library", () => {
           unset(checked);
           unset(checkedRadio);
           unset(select);
+          unset(datetime);
         });
 
         return (
@@ -710,7 +725,9 @@ describe("library", () => {
           //@ts-ignore
           $("#radio2").checked &&
           //@ts-ignore
-          $("select").value === "dog"
+          $("select").value === "dog" &&
+          //@ts-ignore
+          $("#datetime").value === "2018-06-09T00:00"
         );
       });
 

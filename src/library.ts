@@ -63,11 +63,9 @@ const enum Placeholder {
   template = "template",
   event = "event",
   options = "options",
-  reactive = "reactive",
   observe = "observe",
   getObservers = "getObservers",
   unobserve = "unobserve",
-  keys = "__keys__",
   twoWay = "two-way",
   change = "change",
   radio = "radio",
@@ -103,6 +101,8 @@ const onCleanupMap = new WeakMap<ReturnType<typeof html>, Function>(); // Lifecy
 const fragmentToElements = new WeakMap<DocumentFragment, Array<ChildNode>>(); // Used to retreive Elements from DocumentFragment after it has been rendered – for diffing
 const setReactivityElements = new WeakSet<ReturnType<typeof html>>(); // Caching
 const _boundFunctions = Symbol("boundFunctions"); // Cache for bound functions in Proxy, so that we create the bound version of each function only once
+const reactiveSymbol = Symbol("reactive");
+const keysSymbol = Symbol("keys");
 
 let globalSchedule = true; // Decides whether to schedule rendering and updating (async)
 let reuseElements = true; // Reuses Elements when rendering
@@ -249,7 +249,7 @@ function html(
         "boolean",
         "bigint",
       ].includes(typeof variable) ||
-        Reflect.get(variable, Placeholder.reactive)) &&
+        Reflect.has(variable, reactiveSymbol)) &&
         variable: {
         resolvedVariables.push(String(variable));
         break;
@@ -396,7 +396,7 @@ function setReactivity(
 
   for (const elem of root) {
     if (setReactivityElements.has(elem)) {
-      return; // continue
+      continue;
     }
     setReactivityElements.add(elem);
     // Check Text Nodes
@@ -515,13 +515,7 @@ function setReactivitySingle(node: Element | Text, key?: string): void {
         }
         continue;
       } else if (key === Placeholder.twoWay) {
-        if (
-          node instanceof HTMLTextAreaElement ||
-          (node instanceof HTMLInputElement && node.type === Placeholder.text)
-        ) {
-          node.value = resolvedValue;
-          changeAttrVal("input", node, resolvedObj, lastProp);
-        } else if (node instanceof HTMLSelectElement) {
+        if (node instanceof HTMLSelectElement) {
           node.value = resolvedValue;
           changeAttrVal(Placeholder.change, node, resolvedObj, lastProp);
         } else if (
@@ -536,6 +530,12 @@ function setReactivitySingle(node: Element | Text, key?: string): void {
         ) {
           node.checked = resolvedValue;
           changeAttrVal(Placeholder.change, node, resolvedObj, lastProp, true);
+        } else if (
+          node instanceof HTMLTextAreaElement ||
+          node instanceof HTMLInputElement
+        ) {
+          node.value = resolvedValue;
+          changeAttrVal("input", node, resolvedObj, lastProp);
         }
 
         attr_OR_text = attr_OR_text.replace(hydroMatch, "");
@@ -784,7 +784,7 @@ function render(
   }
 
   // Get elem value if elem is reactiveObject
-  if (Reflect.get(elem, Placeholder.reactive)) {
+  if (Reflect.has(elem, reactiveSymbol)) {
     elem = getValue(elem);
   }
 
@@ -1042,15 +1042,16 @@ function reactive<T>(initial: T): reactiveObject<T> {
   while (Reflect.has(hydro, key));
 
   Reflect.set(hydro, key, initial);
-  Reflect.set(setter, Placeholder.reactive, true);
+  Reflect.set(setter, reactiveSymbol, true);
 
   const chainKeysProxy = chainKeys(setter, [key]);
   return chainKeysProxy;
 
   function setter<U>(val: U) {
-    const keys = ( // @ts-ignore
-      this && Reflect.get(this, Placeholder.reactive) ? this : chainKeysProxy
-    )[Placeholder.keys];
+    const keys = // @ts-ignore
+    (this && Reflect.has(this, reactiveSymbol) ? this : chainKeysProxy)[
+      keysSymbol.description!
+    ];
     const [resolvedValue, resolvedObj] = resolveObject(keys);
     const lastProp = keys[keys.length - 1];
 
@@ -1068,8 +1069,8 @@ function reactive<T>(initial: T): reactiveObject<T> {
 function chainKeys(initial: Function | any, keys: Array<PropertyKey>): any {
   return new Proxy(initial, {
     get(target, subKey, _receiver) {
-      if (subKey === Placeholder.reactive) return true;
-      if (subKey === Placeholder.keys) {
+      if (subKey === reactiveSymbol.description) return true;
+      if (subKey === keysSymbol.description) {
         return keys;
       }
 
@@ -1083,7 +1084,7 @@ function chainKeys(initial: Function | any, keys: Array<PropertyKey>): any {
   });
 }
 function getReactiveKeys(reactiveHydro: reactiveObject<any>) {
-  const keys = reactiveHydro[Placeholder.keys];
+  const keys = reactiveHydro[keysSymbol.description!];
   const lastProp = keys[keys.length - 1];
   return [lastProp, keys.length === 1];
 }
@@ -1093,7 +1094,9 @@ function unset(reactiveHydro: reactiveObject<any>): void {
   if (oneKey) {
     Reflect.set(hydro, lastProp, null);
   } else {
-    const [_, resolvedObj] = resolveObject(reactiveHydro[Placeholder.keys]);
+    const [_, resolvedObj] = resolveObject(
+      reactiveHydro[keysSymbol.description!]
+    );
     Reflect.set(resolvedObj, lastProp, null);
   }
 }
@@ -1106,7 +1109,9 @@ function setAsyncUpdate(
   if (oneKey) {
     hydro.asyncUpdate = asyncUpdate;
   } else {
-    const [_, resolvedObj] = resolveObject(reactiveHydro[Placeholder.keys]);
+    const [_, resolvedObj] = resolveObject(
+      reactiveHydro[keysSymbol.description!]
+    );
     resolvedObj.asyncUpdate = asyncUpdate;
   }
 }
@@ -1116,7 +1121,9 @@ function observe(reactiveHydro: reactiveObject<any>, fn: Function) {
   if (oneKey) {
     hydro.observe(lastProp, fn);
   } else {
-    const [_, resolvedObj] = resolveObject(reactiveHydro[Placeholder.keys]);
+    const [_, resolvedObj] = resolveObject(
+      reactiveHydro[keysSymbol.description!]
+    );
     resolvedObj.observe(lastProp, fn);
   }
 }
@@ -1126,7 +1133,9 @@ function unobserve(reactiveHydro: reactiveObject<any>) {
   if (oneKey) {
     hydro.unobserve(lastProp);
   } else {
-    const [_, resolvedObj] = resolveObject(reactiveHydro[Placeholder.keys]);
+    const [_, resolvedObj] = resolveObject(
+      reactiveHydro[keysSymbol.description!]
+    );
     resolvedObj.unobserve(lastProp);
   }
 }
@@ -1138,7 +1147,7 @@ function ternary(
 ) {
   const checkCondition = (cond: any) =>
     (
-      !Reflect.get(condition, Placeholder.reactive) && isFunction(condition)
+      !Reflect.has(condition, reactiveSymbol) && isFunction(condition)
         ? condition(cond)
         : isPromise(cond)
         ? false
@@ -1210,7 +1219,7 @@ function watchEffect(fn: Function) {
 
 function getValue<T extends object>(reactiveHydro: T): T {
   const [resolvedValue] = resolveObject(
-    Reflect.get(reactiveHydro, Placeholder.keys)
+    Reflect.get(reactiveHydro, keysSymbol.description!)
   );
   return resolvedValue;
 }
@@ -1577,12 +1586,6 @@ function updateDOM(nodeToChangeMap: nodeToChangeMap, val: any, oldVal: any) {
       } else {
         if (key === Placeholder.twoWay) {
           if (
-            node instanceof HTMLTextAreaElement ||
-            node instanceof HTMLSelectElement ||
-            (node instanceof HTMLInputElement && node.type === Placeholder.text)
-          ) {
-            (node as HTMLInputElement).value = String(val);
-          } else if (
             node instanceof HTMLInputElement &&
             node.type === Placeholder.radio
           ) {
@@ -1594,6 +1597,12 @@ function updateDOM(nodeToChangeMap: nodeToChangeMap, val: any, oldVal: any) {
             node.type === Placeholder.checkbox
           ) {
             node.checked = val;
+          } else if (
+            node instanceof HTMLTextAreaElement ||
+            node instanceof HTMLSelectElement ||
+            node instanceof HTMLInputElement
+          ) {
+            (node as HTMLInputElement).value = String(val);
           }
         } else if (isFunction(val) || isEventObject(val)) {
           const eventName = key!.replace(onEventRegex, "");

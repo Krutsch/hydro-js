@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.0- 2021-12-22
+
+- Fix bug where two-way bindings did not work on other input element types (type file: can only be set by a user)
+
 ## 1.4.7- 2021-12-15
 
 - Bug fix, where variable was undefined

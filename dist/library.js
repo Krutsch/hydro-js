@@ -22,6 +22,8 @@ const onCleanupMap = new WeakMap(); // Lifecycle Hook that is being called when 
 const fragmentToElements = new WeakMap(); // Used to retreive Elements from DocumentFragment after it has been rendered – for diffing
 const setReactivityElements = new WeakSet(); // Caching
 const _boundFunctions = Symbol("boundFunctions"); // Cache for bound functions in Proxy, so that we create the bound version of each function only once
+const reactiveSymbol = Symbol("reactive");
+const keysSymbol = Symbol("keys");
 let globalSchedule = true; // Decides whether to schedule rendering and updating (async)
 let reuseElements = true; // Reuses Elements when rendering
 let insertBeforeDiffing = false; // Makes sense in Chrome only
@@ -144,7 +146,7 @@ function html(htmlArray, ...variables) {
                 "boolean",
                 "bigint",
             ].includes(typeof variable) ||
-                Reflect.get(variable, "reactive" /* reactive */)) &&
+                Reflect.has(variable, reactiveSymbol)) &&
                 variable:
                 {
                     resolvedVariables.push(String(variable));
@@ -268,7 +270,7 @@ function setReactivity(DOM, eventFunctions) {
     }
     for (const elem of root) {
         if (setReactivityElements.has(elem)) {
-            return; // continue
+            continue;
         }
         setReactivityElements.add(elem);
         // Check Text Nodes
@@ -375,12 +377,7 @@ function setReactivitySingle(node, key) {
                 continue;
             }
             else if (key === "two-way" /* twoWay */) {
-                if (node instanceof HTMLTextAreaElement ||
-                    (node instanceof HTMLInputElement && node.type === "text" /* text */)) {
-                    node.value = resolvedValue;
-                    changeAttrVal("input", node, resolvedObj, lastProp);
-                }
-                else if (node instanceof HTMLSelectElement) {
+                if (node instanceof HTMLSelectElement) {
                     node.value = resolvedValue;
                     changeAttrVal("change" /* change */, node, resolvedObj, lastProp);
                 }
@@ -393,6 +390,11 @@ function setReactivitySingle(node, key) {
                     node.type === "checkbox" /* checkbox */) {
                     node.checked = resolvedValue;
                     changeAttrVal("change" /* change */, node, resolvedObj, lastProp, true);
+                }
+                else if (node instanceof HTMLTextAreaElement ||
+                    node instanceof HTMLInputElement) {
+                    node.value = resolvedValue;
+                    changeAttrVal("input", node, resolvedObj, lastProp);
                 }
                 attr_OR_text = attr_OR_text.replace(hydroMatch, "");
                 node.setAttribute("two-way" /* twoWay */, "");
@@ -570,7 +572,7 @@ function render(elem, where = "", shouldSchedule = globalSchedule) {
         return unmount(elem);
     }
     // Get elem value if elem is reactiveObject
-    if (Reflect.get(elem, "reactive" /* reactive */)) {
+    if (Reflect.has(elem, reactiveSymbol)) {
         elem = getValue(elem);
     }
     // Store elements of documentFragment for later unmount
@@ -801,12 +803,12 @@ function reactive(initial) {
         key = randomText();
     while (Reflect.has(hydro, key));
     Reflect.set(hydro, key, initial);
-    Reflect.set(setter, "reactive" /* reactive */, true);
+    Reflect.set(setter, reactiveSymbol, true);
     const chainKeysProxy = chainKeys(setter, [key]);
     return chainKeysProxy;
     function setter(val) {
-        const keys = ( // @ts-ignore
-        this && Reflect.get(this, "reactive" /* reactive */) ? this : chainKeysProxy)["__keys__" /* keys */];
+        const keys = // @ts-ignore
+         (this && Reflect.has(this, reactiveSymbol) ? this : chainKeysProxy)[keysSymbol.description];
         const [resolvedValue, resolvedObj] = resolveObject(keys);
         const lastProp = keys[keys.length - 1];
         if (isFunction(val)) {
@@ -824,9 +826,9 @@ function reactive(initial) {
 function chainKeys(initial, keys) {
     return new Proxy(initial, {
         get(target, subKey, _receiver) {
-            if (subKey === "reactive" /* reactive */)
+            if (subKey === reactiveSymbol.description)
                 return true;
-            if (subKey === "__keys__" /* keys */) {
+            if (subKey === keysSymbol.description) {
                 return keys;
             }
             if (subKey === Symbol.toPrimitive) {
@@ -837,7 +839,7 @@ function chainKeys(initial, keys) {
     });
 }
 function getReactiveKeys(reactiveHydro) {
-    const keys = reactiveHydro["__keys__" /* keys */];
+    const keys = reactiveHydro[keysSymbol.description];
     const lastProp = keys[keys.length - 1];
     return [lastProp, keys.length === 1];
 }
@@ -847,7 +849,7 @@ function unset(reactiveHydro) {
         Reflect.set(hydro, lastProp, null);
     }
     else {
-        const [_, resolvedObj] = resolveObject(reactiveHydro["__keys__" /* keys */]);
+        const [_, resolvedObj] = resolveObject(reactiveHydro[keysSymbol.description]);
         Reflect.set(resolvedObj, lastProp, null);
     }
 }
@@ -857,7 +859,7 @@ function setAsyncUpdate(reactiveHydro, asyncUpdate) {
         hydro.asyncUpdate = asyncUpdate;
     }
     else {
-        const [_, resolvedObj] = resolveObject(reactiveHydro["__keys__" /* keys */]);
+        const [_, resolvedObj] = resolveObject(reactiveHydro[keysSymbol.description]);
         resolvedObj.asyncUpdate = asyncUpdate;
     }
 }
@@ -867,7 +869,7 @@ function observe(reactiveHydro, fn) {
         hydro.observe(lastProp, fn);
     }
     else {
-        const [_, resolvedObj] = resolveObject(reactiveHydro["__keys__" /* keys */]);
+        const [_, resolvedObj] = resolveObject(reactiveHydro[keysSymbol.description]);
         resolvedObj.observe(lastProp, fn);
     }
 }
@@ -877,12 +879,12 @@ function unobserve(reactiveHydro) {
         hydro.unobserve(lastProp);
     }
     else {
-        const [_, resolvedObj] = resolveObject(reactiveHydro["__keys__" /* keys */]);
+        const [_, resolvedObj] = resolveObject(reactiveHydro[keysSymbol.description]);
         resolvedObj.unobserve(lastProp);
     }
 }
 function ternary(condition, trueVal, falseVal, reactiveHydro = condition) {
-    const checkCondition = (cond) => (!Reflect.get(condition, "reactive" /* reactive */) && isFunction(condition)
+    const checkCondition = (cond) => (!Reflect.has(condition, reactiveSymbol) && isFunction(condition)
         ? condition(cond)
         : isPromise(cond)
             ? false
@@ -936,7 +938,7 @@ function watchEffect(fn) {
         .forEach((entry) => entry.proxy.unobserve(entry.key, reRun));
 }
 function getValue(reactiveHydro) {
-    const [resolvedValue] = resolveObject(Reflect.get(reactiveHydro, "__keys__" /* keys */));
+    const [resolvedValue] = resolveObject(Reflect.get(reactiveHydro, keysSymbol.description));
     return resolvedValue;
 }
 let calledOnRender = false;
@@ -1269,12 +1271,7 @@ function updateDOM(nodeToChangeMap, val, oldVal) {
             }
             else {
                 if (key === "two-way" /* twoWay */) {
-                    if (node instanceof HTMLTextAreaElement ||
-                        node instanceof HTMLSelectElement ||
-                        (node instanceof HTMLInputElement && node.type === "text" /* text */)) {
-                        node.value = String(val);
-                    }
-                    else if (node instanceof HTMLInputElement &&
+                    if (node instanceof HTMLInputElement &&
                         node.type === "radio" /* radio */) {
                         node.checked = Array.isArray(val)
                             ? val.includes(node.name)
@@ -1283,6 +1280,11 @@ function updateDOM(nodeToChangeMap, val, oldVal) {
                     else if (node instanceof HTMLInputElement &&
                         node.type === "checkbox" /* checkbox */) {
                         node.checked = val;
+                    }
+                    else if (node instanceof HTMLTextAreaElement ||
+                        node instanceof HTMLSelectElement ||
+                        node instanceof HTMLInputElement) {
+                        node.value = String(val);
                     }
                 }
                 else if (isFunction(val) || isEventObject(val)) {
