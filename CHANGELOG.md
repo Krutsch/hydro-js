@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.1- 2021-12-23
+
+- Fix bug where document-fragment was added to internal tracking list.
+
 ## 1.5.0- 2021-12-22
 
 - Fix bug where two-way bindings did not work on other input element types (type file: can only be set by a user)

@@ -1259,8 +1259,10 @@ function updateDOM(nodeToChangeMap, val, oldVal) {
                 replaceElement(val, node);
                 if (val !== node) {
                     nodeToChangeMap.delete(node);
-                    nodeToChangeMap.set(val, entry);
-                    nodeToChangeMap.set(entry, val);
+                    if (!isDocumentFragment(val)) {
+                        nodeToChangeMap.set(val, entry);
+                        nodeToChangeMap.set(entry, val);
+                    }
                 }
             }
             else if (isTextNode(node)) {
