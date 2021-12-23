@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.2- 2021-12-23
+
+- Fix bug where attributes where not copied from (html|head|body) element
+
 ## 1.5.1- 2021-12-23
 
 - Fix bug where document-fragment was added to internal tracking list.

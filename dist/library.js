@@ -220,6 +220,10 @@ function fillDOM(elem, insertNodes, eventFunctions) {
         const tag = nextNode.localName.replace("-dummy" /* dummy */, "");
         const replacement = document.createElement(tag);
         replacement.append(...nextNode.childNodes);
+        /* c8 ignore next 3 */
+        for (const key of nextNode.getAttributeNames()) {
+            replacement.setAttribute(key, nextNode.getAttribute(key));
+        }
         nextNode.replaceWith(replacement);
     }
     // Insert HTML Elements, which were stored in insertNodes
@@ -807,8 +811,8 @@ function reactive(initial) {
     const chainKeysProxy = chainKeys(setter, [key]);
     return chainKeysProxy;
     function setter(val) {
-        const keys = // @ts-ignore
-         (this && Reflect.has(this, reactiveSymbol) ? this : chainKeysProxy)[keysSymbol.description];
+        const keys = ( // @ts-ignore
+        this && Reflect.has(this, reactiveSymbol) ? this : chainKeysProxy)[keysSymbol.description];
         const [resolvedValue, resolvedObj] = resolveObject(keys);
         const lastProp = keys[keys.length - 1];
         if (isFunction(val)) {

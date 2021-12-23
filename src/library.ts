@@ -332,12 +332,16 @@ function fillDOM(
     },
   });
   let nextNode;
-  while ((nextNode = root.nextNode())) {
-    const tag = (nextNode as Element).localName.replace(Placeholder.dummy, "");
+  while ((nextNode = root.nextNode() as Element)) {
+    const tag = nextNode.localName.replace(Placeholder.dummy, "");
     const replacement = document.createElement(tag);
 
-    replacement.append(...(nextNode as Element).childNodes);
-    (nextNode as Element).replaceWith(replacement);
+    replacement.append(...nextNode.childNodes);
+    /* c8 ignore next 3 */
+    for (const key of nextNode.getAttributeNames()) {
+      replacement.setAttribute(key, nextNode.getAttribute(key)!);
+    }
+    nextNode.replaceWith(replacement);
   }
 
   // Insert HTML Elements, which were stored in insertNodes
@@ -1048,10 +1052,9 @@ function reactive<T>(initial: T): reactiveObject<T> {
   return chainKeysProxy;
 
   function setter<U>(val: U) {
-    const keys = // @ts-ignore
-    (this && Reflect.has(this, reactiveSymbol) ? this : chainKeysProxy)[
-      keysSymbol.description!
-    ];
+    const keys = ( // @ts-ignore
+      this && Reflect.has(this, reactiveSymbol) ? this : chainKeysProxy
+    )[keysSymbol.description!];
     const [resolvedValue, resolvedObj] = resolveObject(keys);
     const lastProp = keys[keys.length - 1];
 
