@@ -786,8 +786,8 @@ function reactive(initial) {
     const chainKeysProxy = chainKeys(setter, [key]);
     return chainKeysProxy;
     function setter(val) {
-        const keys = ( // @ts-ignore
-        this && Reflect.has(this, reactiveSymbol) ? this : chainKeysProxy)[keysSymbol.description];
+        const keys = // @ts-ignore
+         (this && Reflect.has(this, reactiveSymbol) ? this : chainKeysProxy)[keysSymbol.description];
         const [resolvedValue, resolvedObj] = resolveObject(keys);
         const lastProp = keys[keys.length - 1];
         if (isFunction(val)) {
@@ -1326,7 +1326,8 @@ function view(root, data, renderFunction) {
     rootElem.append(...elements);
     for (const elem of elements)
         runLifecyle(elem, onRenderMap);
-    setReactivity(rootElem);
+    if (rootElem.hasChildNodes())
+        setReactivity(rootElem);
     viewElements = false;
     observe(data, (newData, oldData) => {
         /* c8 ignore start */
@@ -1359,7 +1360,8 @@ function view(root, data, renderFunction) {
             for (const elem of elements)
                 runLifecyle(elem, onRenderMap);
         }
-        setReactivity(rootElem);
+        if (rootElem.hasChildNodes())
+            setReactivity(rootElem);
         viewElements = false;
         /* c8 ignore end */
     });

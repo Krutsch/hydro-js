@@ -1030,9 +1030,10 @@ function reactive<T>(initial: T): reactiveObject<T> {
   return chainKeysProxy;
 
   function setter<U>(val: U) {
-    const keys = ( // @ts-ignore
-      this && Reflect.has(this, reactiveSymbol) ? this : chainKeysProxy
-    )[keysSymbol.description!];
+    const keys = // @ts-ignore
+    (this && Reflect.has(this, reactiveSymbol) ? this : chainKeysProxy)[
+      keysSymbol.description!
+    ];
     const [resolvedValue, resolvedObj] = resolveObject(keys);
     const lastProp = keys[keys.length - 1];
 
@@ -1653,7 +1654,7 @@ function view(
   const elements = getValue(data).map(renderFunction);
   rootElem.append(...elements);
   for (const elem of elements) runLifecyle(elem as Element, onRenderMap);
-  setReactivity(rootElem);
+  if (rootElem.hasChildNodes()) setReactivity(rootElem);
 
   viewElements = false;
   observe(data, (newData: typeof data, oldData: typeof data) => {
@@ -1691,7 +1692,7 @@ function view(
       rootElem.append(...elements);
       for (const elem of elements) runLifecyle(elem as Element, onRenderMap);
     }
-    setReactivity(rootElem);
+    if (rootElem.hasChildNodes()) setReactivity(rootElem);
     viewElements = false;
     /* c8 ignore end */
   });
