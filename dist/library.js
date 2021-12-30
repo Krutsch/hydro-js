@@ -7,11 +7,9 @@ window.requestIdleCallback =
             timeRemaining: () => Math.max(0, 5 - (performance.now() - start)),
         }));
 // Safari Polyfills END
-const parser = (() => {
-    const range = document.createRange();
-    range.selectNodeContents(range.createContextualFragment(`<${"template" /* template */}>`).lastChild);
-    return range.createContextualFragment.bind(range);
-})();
+const range = document.createRange();
+range.selectNodeContents(range.createContextualFragment(`<${"template" /* template */}>`).lastChild);
+const parser = range.createContextualFragment.bind(range);
 const allNodeChanges = new WeakMap(); // Maps a Node against an array of changes. An array is necessary because a node can have multiple variables for one text / attribute.
 const elemEventFunctions = new WeakMap(); // Stores event functions in order to compare Elements against each other.
 const reactivityMap = new WeakMap(); // Maps Proxy Objects to another Map(proxy-key, node).
@@ -80,8 +78,7 @@ function isNode(node) {
     return node instanceof Node;
 }
 function isDocumentFragment(node) {
-    // getElementById exists in SVG too. I did not find a better way to identify a DocumentFragment
-    return node.nodeName !== "svg" && "getElementById" in node;
+    return node.nodeType === 11;
 }
 function isEventObject(obj) {
     return (isObject(obj) && "event" /* event */ in obj && "options" /* options */ in obj);
@@ -93,7 +90,13 @@ function isPromise(obj) {
     return isObject(obj) && typeof obj.then === "function";
 }
 function randomText() {
-    return Math.random().toString(32).slice(2);
+    const randomChars = "abcdefghijklmnopqrstuvwxyz0123456789";
+    let result = "";
+    for (var i = 0; i < 6; i++) {
+        result += randomChars.charAt(Math.floor(Math.random() * randomChars.length));
+    }
+    return result;
+    // return Math.random().toString(32).slice(2);
 }
 function setGlobalSchedule(willSchedule) {
     globalSchedule = willSchedule;
@@ -192,10 +195,7 @@ function html(htmlArray, ...variables) {
     DOMString = DOMString.replace(HTML_FIND_INVALID, `<$1$2${"-dummy" /* dummy */}$3`);
     const DOM = parser(DOMString);
     // Delay Element iteration and manipulation after the elements have been added to the DOM.
-    if (viewElements) {
-        onRender(fillDOM, DOM.firstChild, DOM.firstChild, insertNodes, eventFunctions);
-    }
-    else {
+    if (!viewElements) {
         fillDOM(DOM, insertNodes, eventFunctions);
     }
     // Return DocumentFragment
@@ -238,62 +238,34 @@ function fillDOM(elem, insertNodes, eventFunctions) {
 function h(name, props, ...children) {
     if (isFunction(name))
         return name({ ...props, children });
-    const flatChildren = children.map(getChildren).flat();
     const elem = document.createElement(name);
     for (let i in props) {
         //@ts-ignore
         i in elem ? (elem[i] = props[i]) : setAttribute(elem, i, props[i]);
     }
-    elem.append(...flatChildren);
-    if (viewElements) {
-        onRender(setReactivity, elem, elem);
-    }
-    else {
+    elem.append(...children);
+    if (!viewElements) {
         setReactivity(elem);
     }
     return elem;
 }
-function getChildren(child) {
-    return isObject(child) && !isNode(child)
-        ? Object.values(child)
-        : child;
-}
 /* c8 ignore end */
 function setReactivity(DOM, eventFunctions) {
-    // Set events and reactive behaviour(checks for {{ key }} where key is on hydro)
-    if (isTextNode(DOM) && !setReactivityElements.has(DOM)) {
-        setReactivityElements.add(DOM);
+    if (isTextNode(DOM)) {
         setReactivitySingle(DOM);
         return;
     }
-    const root = [
-        ...DOM.querySelectorAll("*"),
-    ].reverse();
-    if (!isDocumentFragment(DOM)) {
-        root.push(DOM);
-    }
-    for (const elem of root) {
-        if (setReactivityElements.has(elem)) {
-            continue;
-        }
-        setReactivityElements.add(elem);
-        // Check Text Nodes
-        // This is somehow faster than createNodeIterator and createTreeWalker
-        // https://esbench.com/bench/5e9c421c12464000a01e4359
-        let childNode = elem.firstChild;
-        while (childNode) {
-            if (isTextNode(childNode)) {
-                setReactivitySingle(childNode);
-            }
-            childNode = childNode.nextSibling;
-        }
+    const elems = document.createNodeIterator(DOM, NodeFilter.SHOW_ELEMENT);
+    let elem;
+    while ((elem = elems.nextNode())) {
         for (const key of elem.getAttributeNames()) {
             // Set functions
+            const val = elem.getAttribute(key);
             if (eventFunctions && key.startsWith("on")) {
                 const eventName = key.replace(onEventRegex, "");
-                const event = eventFunctions[elem.getAttribute(key)];
+                const event = eventFunctions[val];
                 if (!event) {
-                    setReactivitySingle(elem, key);
+                    setReactivitySingle(elem, key, val);
                     return;
                 }
                 elem.removeAttribute(key);
@@ -317,18 +289,25 @@ function setReactivity(DOM, eventFunctions) {
                 }
             }
             else {
-                setReactivitySingle(elem, key);
+                setReactivitySingle(elem, key, val);
             }
+        }
+        let childNode = elem.firstChild;
+        while (childNode) {
+            if (isTextNode(childNode)) {
+                setReactivitySingle(childNode);
+            }
+            childNode = childNode.nextSibling;
         }
     }
 }
-function setReactivitySingle(node, key) {
+function setReactivitySingle(node, key, val) {
     let attr_OR_text, match;
     if (isTextNode(node)) {
         attr_OR_text = node.nodeValue; // nodeValue is (always) defined on Text Nodes
     }
     else {
-        attr_OR_text = node.getAttribute(key);
+        attr_OR_text = val;
         if (attr_OR_text === "") {
             // e.g. checked attribute or two-way attribute
             attr_OR_text = key;
@@ -620,11 +599,7 @@ function noop() { }
 function executeLifecycle(node, lifecyleMap) {
     if (lifecyleMap.has(node)) {
         const fn = lifecyleMap.get(node);
-        if (viewElements) {
-            schedule(fn);
-            /* c8 ignore next 3 */
-        }
-        else if (globalSchedule) {
+        if (globalSchedule) {
             window.requestIdleCallback(fn);
         }
         else {
@@ -1351,6 +1326,7 @@ function view(root, data, renderFunction) {
     rootElem.append(...elements);
     for (const elem of elements)
         runLifecyle(elem, onRenderMap);
+    setReactivity(rootElem);
     viewElements = false;
     observe(data, (newData, oldData) => {
         /* c8 ignore start */
@@ -1383,6 +1359,7 @@ function view(root, data, renderFunction) {
             for (const elem of elements)
                 runLifecyle(elem, onRenderMap);
         }
+        setReactivity(rootElem);
         viewElements = false;
         /* c8 ignore end */
     });

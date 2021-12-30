@@ -84,13 +84,12 @@ window.requestIdleCallback =
     }));
 // Safari Polyfills END
 
-const parser = (() => {
-  const range = document.createRange();
-  range.selectNodeContents(
-    range.createContextualFragment(`<${Placeholder.template}>`).lastChild!
-  );
-  return range.createContextualFragment.bind(range);
-})();
+const range = document.createRange();
+range.selectNodeContents(
+  range.createContextualFragment(`<${Placeholder.template}>`).lastChild!
+);
+const parser = range.createContextualFragment.bind(range);
+
 const allNodeChanges = new WeakMap<Text | Element, nodeChanges>(); // Maps a Node against an array of changes. An array is necessary because a node can have multiple variables for one text / attribute.
 const elemEventFunctions = new WeakMap<Element, Array<EventListener>>(); // Stores event functions in order to compare Elements against each other.
 const reactivityMap = new WeakMap<hydroObject, keyToNodeMap>(); // Maps Proxy Objects to another Map(proxy-key, node).
@@ -163,8 +162,7 @@ function isNode(node: Node): node is Node {
   return node instanceof Node;
 }
 function isDocumentFragment(node: Node): node is DocumentFragment {
-  // getElementById exists in SVG too. I did not find a better way to identify a DocumentFragment
-  return node.nodeName !== "svg" && "getElementById" in node;
+  return node.nodeType === 11;
 }
 function isEventObject(obj: object | unknown): obj is EventObject {
   return (
@@ -178,7 +176,15 @@ function isPromise(obj: any): obj is Promise<any> {
   return isObject(obj) && typeof obj.then === "function";
 }
 function randomText() {
-  return Math.random().toString(32).slice(2);
+  const randomChars = "abcdefghijklmnopqrstuvwxyz0123456789";
+  let result = "";
+  for (var i = 0; i < 6; i++) {
+    result += randomChars.charAt(
+      Math.floor(Math.random() * randomChars.length)
+    );
+  }
+  return result;
+  // return Math.random().toString(32).slice(2);
 }
 
 function setGlobalSchedule(willSchedule: boolean): void {
@@ -298,15 +304,7 @@ function html(
   const DOM = parser(DOMString);
 
   // Delay Element iteration and manipulation after the elements have been added to the DOM.
-  if (viewElements) {
-    onRender(
-      fillDOM,
-      DOM.firstChild as Element,
-      DOM.firstChild,
-      insertNodes,
-      eventFunctions
-    );
-  } else {
+  if (!viewElements) {
     fillDOM(DOM, insertNodes, eventFunctions);
   }
 
@@ -360,71 +358,42 @@ function h(
 ): ReturnType<typeof html> {
   if (isFunction(name)) return name({ ...props, children });
 
-  const flatChildren = children.map(getChildren).flat();
   const elem = document.createElement(name);
   for (let i in props) {
     //@ts-ignore
     i in elem ? (elem[i] = props[i]) : setAttribute(elem, i, props[i]);
   }
 
-  elem.append(...flatChildren);
-  if (viewElements) {
-    onRender(setReactivity, elem, elem);
-  } else {
+  elem.append(...children);
+  if (!viewElements) {
     setReactivity(elem);
   }
   return elem;
-}
-function getChildren(child: any) {
-  return isObject(child) && !isNode(child as Node)
-    ? Object.values(child)
-    : child;
 }
 /* c8 ignore end */
 function setReactivity(
   DOM: ReturnType<typeof html>,
   eventFunctions?: eventFunctions
 ) {
-  // Set events and reactive behaviour(checks for {{ key }} where key is on hydro)
-  if (isTextNode(DOM) && !setReactivityElements.has(DOM)) {
-    setReactivityElements.add(DOM);
+  if (isTextNode(DOM)) {
     setReactivitySingle(DOM);
     return;
   }
-  const root = [
-    ...(DOM as DocumentFragment | Element).querySelectorAll("*"),
-  ].reverse();
-  if (!isDocumentFragment(DOM)) {
-    root.push(DOM as Element);
-  }
 
-  for (const elem of root) {
-    if (setReactivityElements.has(elem)) {
-      continue;
-    }
-    setReactivityElements.add(elem);
-    // Check Text Nodes
-    // This is somehow faster than createNodeIterator and createTreeWalker
-    // https://esbench.com/bench/5e9c421c12464000a01e4359
-    let childNode = elem.firstChild;
-    while (childNode) {
-      if (isTextNode(childNode)) {
-        setReactivitySingle(childNode);
-      }
-      childNode = childNode.nextSibling;
-    }
-
+  const elems = document.createNodeIterator(DOM, NodeFilter.SHOW_ELEMENT);
+  let elem;
+  while ((elem = elems.nextNode() as Element)) {
     for (const key of elem.getAttributeNames()) {
       // Set functions
+      const val = elem.getAttribute(key)!;
       if (eventFunctions && key.startsWith("on")) {
-        const eventName = key!.replace(onEventRegex, "");
-        const event = eventFunctions[elem.getAttribute(key)!];
+        const eventName = key.replace(onEventRegex, "");
+        const event = eventFunctions[val];
         if (!event) {
-          setReactivitySingle(elem, key);
+          setReactivitySingle(elem, key, val);
           return;
         }
         elem.removeAttribute(key);
-
         if (isEventObject(event)) {
           elem.addEventListener(eventName, event.event, event.options);
           if (elemEventFunctions.has(elem)) {
@@ -435,26 +404,38 @@ function setReactivity(
         } else {
           elem.addEventListener(eventName, event);
           if (elemEventFunctions.has(elem)) {
-            elemEventFunctions.get(elem)!.push(event as EventListener);
+            elemEventFunctions.get(elem)!.push(event);
           } else {
-            elemEventFunctions.set(elem, [event as EventListener]);
+            elemEventFunctions.set(elem, [event]);
           }
         }
       } else {
-        setReactivitySingle(elem, key);
+        setReactivitySingle(elem, key, val);
       }
+    }
+
+    let childNode = elem.firstChild;
+    while (childNode) {
+      if (isTextNode(childNode)) {
+        setReactivitySingle(childNode);
+      }
+      childNode = childNode.nextSibling;
     }
   }
 }
 function setReactivitySingle(node: Text): void; // TS function overload
-function setReactivitySingle(node: Element, key: string): void; // TS function overload
-function setReactivitySingle(node: Element | Text, key?: string): void {
+function setReactivitySingle(node: Element, key: string, val: string): void; // TS function overload
+function setReactivitySingle(
+  node: Element | Text,
+  key?: string,
+  val?: string
+): void {
   let attr_OR_text: string, match: RegExpMatchArray | null;
 
   if (isTextNode(node)) {
     attr_OR_text = node.nodeValue!; // nodeValue is (always) defined on Text Nodes
   } else {
-    attr_OR_text = (node as Element).getAttribute(key!)!;
+    attr_OR_text = val!;
     if (attr_OR_text! === "") {
       // e.g. checked attribute or two-way attribute
       attr_OR_text = key!;
@@ -841,10 +822,7 @@ function executeLifecycle(
   if (lifecyleMap.has(node)) {
     const fn = lifecyleMap.get(node)!;
 
-    if (viewElements) {
-      schedule(fn);
-      /* c8 ignore next 3 */
-    } else if (globalSchedule) {
+    if (globalSchedule) {
       window.requestIdleCallback(fn as IdleRequestCallback);
     } else {
       fn();
@@ -1675,6 +1653,8 @@ function view(
   const elements = getValue(data).map(renderFunction);
   rootElem.append(...elements);
   for (const elem of elements) runLifecyle(elem as Element, onRenderMap);
+  setReactivity(rootElem);
+
   viewElements = false;
   observe(data, (newData: typeof data, oldData: typeof data) => {
     /* c8 ignore start */
@@ -1711,6 +1691,7 @@ function view(
       rootElem.append(...elements);
       for (const elem of elements) runLifecyle(elem as Element, onRenderMap);
     }
+    setReactivity(rootElem);
     viewElements = false;
     /* c8 ignore end */
   });

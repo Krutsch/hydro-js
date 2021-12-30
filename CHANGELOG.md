@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.3- 2021-12-30
+
+- Performance Improvements
+
 ## 1.5.2- 2021-12-23
 
 - Fix bug where attributes where not copied from (html|head|body) element
