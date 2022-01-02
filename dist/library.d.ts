@@ -65,16 +65,22 @@ declare function onRender(fn: Function, elem: ReturnType<typeof html>, ...args: 
 declare function onCleanup(fn: Function, elem: ReturnType<typeof html>, ...args: Array<any>): void;
 declare function view(root: string, data: reactiveObject<Array<any>>, renderFunction: (value: any, index: number) => Node): void;
 declare const hydro: hydroObject;
-declare const $: {
-    <K extends keyof HTMLElementTagNameMap>(selectors: K): HTMLElementTagNameMap[K] | null;
-    <K_1 extends keyof SVGElementTagNameMap>(selectors: K_1): SVGElementTagNameMap[K_1] | null;
-    <E extends Element = Element>(selectors: string): E | null;
-};
-declare const $$: {
-    <K extends keyof HTMLElementTagNameMap>(selectors: K): NodeListOf<HTMLElementTagNameMap[K]>;
-    <K_1 extends keyof SVGElementTagNameMap>(selectors: K_1): NodeListOf<SVGElementTagNameMap[K_1]>;
-    <E extends Element = Element>(selectors: string): NodeListOf<E>;
-};
+declare const $: <T extends string>(query: T) => MatchEachElement<GetEachElementName<Split<T, ",">, []>, null>;
+declare const $$: <T extends string>(query: T) => [] | NonNullable<MatchEachElement<GetEachElementName<Split<T, ",">, []>, null>>[];
+declare type Split<S extends string, D extends string> = S extends `${infer T}${D}${infer U}` ? [T, ...Split<U, D>] : [S];
+declare type TakeLast<V> = V extends [] ? never : V extends [string] ? V[0] : V extends [string, ...infer R] ? TakeLast<R> : never;
+declare type TrimLeft<V extends string> = V extends ` ${infer R}` ? TrimLeft<R> : V;
+declare type TrimRight<V extends string> = V extends `${infer R} ` ? TrimRight<R> : V;
+declare type Trim<V extends string> = TrimLeft<TrimRight<V>>;
+declare type StripModifier<V extends string, M extends string> = V extends `${infer L}${M}${infer A}` ? L : V;
+declare type StripModifiers<V extends string> = StripModifier<StripModifier<StripModifier<StripModifier<V, ".">, "#">, "[">, ":">;
+declare type TakeLastAfterToken<V extends string, T extends string> = StripModifiers<TakeLast<Split<Trim<V>, T>>>;
+declare type GetLastElementName<V extends string> = TakeLastAfterToken<TakeLastAfterToken<V, " ">, ">">;
+declare type GetEachElementName<V, L extends string[] = []> = V extends [] ? L : V extends [string] ? [...L, GetLastElementName<V[0]>] : V extends [string, ...infer R] ? GetEachElementName<R, [...L, GetLastElementName<V[0]>]> : [];
+declare type GetElementNames<V extends string> = GetEachElementName<Split<V, ",">>;
+declare type ElementByName<V extends string> = V extends keyof HTMLElementTagNameMap ? HTMLElementTagNameMap[V] : V extends keyof SVGElementTagNameMap ? SVGElementTagNameMap[V] : Element;
+declare type MatchEachElement<V, L extends Element | null = null> = V extends [] ? L : V extends [string] ? L | ElementByName<V[0]> : V extends [string, ...infer R] ? MatchEachElement<R, L | ElementByName<V[0]>> : L;
+declare type QueryResult<T extends string> = MatchEachElement<GetElementNames<T>>;
 declare const internals: {
     compare: typeof compare;
 };

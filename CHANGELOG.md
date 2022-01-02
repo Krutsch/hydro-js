@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.5.5- 2021-01-02
+
+- Improve TypeScript types of $ and $$
+
+## 1.5.4- 2021-12-30
+
+- Perf Tweak in view function
+
 ## 1.5.3- 2021-12-30
 
 - Performance Improvements
