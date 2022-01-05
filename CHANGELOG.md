@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.6- 2021-01-05
+
+- Repair h function
+
 ## 1.5.5- 2021-01-02
 
 - Improve TypeScript types of $ and $$

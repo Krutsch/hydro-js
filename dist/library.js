@@ -243,11 +243,18 @@ function h(name, props, ...children) {
         //@ts-ignore
         i in elem ? (elem[i] = props[i]) : setAttribute(elem, i, props[i]);
     }
-    elem.append(...children);
+    elem.append(...(children.some((i) => Array.isArray(i))
+        ? children.map(getChildren).flat()
+        : children));
     if (!viewElements) {
         setReactivity(elem);
     }
     return elem;
+}
+function getChildren(child) {
+    return isObject(child) && !isNode(child)
+        ? Object.values(child)
+        : child;
 }
 /* c8 ignore end */
 function setReactivity(DOM, eventFunctions) {
@@ -786,8 +793,8 @@ function reactive(initial) {
     const chainKeysProxy = chainKeys(setter, [key]);
     return chainKeysProxy;
     function setter(val) {
-        const keys = // @ts-ignore
-         (this && Reflect.has(this, reactiveSymbol) ? this : chainKeysProxy)[keysSymbol.description];
+        const keys = ( // @ts-ignore
+        this && Reflect.has(this, reactiveSymbol) ? this : chainKeysProxy)[keysSymbol.description];
         const [resolvedValue, resolvedObj] = resolveObject(keys);
         const lastProp = keys[keys.length - 1];
         if (isFunction(val)) {
