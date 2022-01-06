@@ -1234,11 +1234,11 @@ function onCleanup(
 }
 
 // Core of the library
-function generateProxy(obj = {}): hydroObject {
+function generateProxy(obj?: Record<PropertyKey, unknown>): hydroObject {
   const handlers = Symbol("handlers"); // For observer pattern
   const boundFunctions = new WeakMap<Function, Function>();
 
-  const proxy = new Proxy(obj, {
+  const proxy = new Proxy(obj ?? {}, {
     // If receiver is a getter, then it is the object on which the search first started for the property|key -> Proxy
     set(target, key, val, receiver) {
       if (trackDeps) {
@@ -1412,7 +1412,7 @@ function generateProxy(obj = {}): hydroObject {
       }
 
       // If oldVal is a Proxy - clean it
-      !reuseElements && cleanProxy(oldVal);
+      !reuseElements && oldVal && cleanProxy(oldVal);
 
       return returnSet;
     },
@@ -1489,12 +1489,9 @@ function generateProxy(obj = {}): hydroObject {
     },
     configurable: true,
   });
-  if (!Reflect.has(proxy, _boundFunctions))
-    queueMicrotask(() => {
-      if (proxy === hydro)
-        Reflect.defineProperty(proxy, _boundFunctions, {
-          value: boundFunctions,
-        });
+  if (!obj)
+    Reflect.defineProperty(proxy, _boundFunctions, {
+      value: boundFunctions,
     });
 
   return proxy as hydroObject;
@@ -1663,6 +1660,7 @@ function view(
   rootElem.append(...elements);
   for (const elem of elements) runLifecyle(elem as Element, onRenderMap);
   if (rootElem.hasChildNodes()) setReactivity(rootElem);
+  onCleanup(unset, rootElem, data);
 
   viewElements = false;
   observe(data, (newData: typeof data, oldData: typeof data) => {
@@ -1675,6 +1673,7 @@ function view(
       (!reuseElements && newData?.length === oldData?.length)
     ) {
       rootElem.textContent = "";
+      schedule(() => oldData.forEach((data) => (data = null)));
     } else if (reuseElements) {
       for (let i = 0; i < oldData?.length && newData?.length; i++) {
         oldData[i].id = newData[i].id;
@@ -1684,7 +1683,11 @@ function view(
     }
 
     // Add to existing
-    if (oldData?.length && newData?.length > oldData?.length) {
+    if (
+      oldData?.length &&
+      newData?.length > oldData?.length &&
+      newData[0] === oldData[0]
+    ) {
       const length = oldData.length;
       const slicedData = newData.slice(length);
       const newElements = slicedData.map((item, i) =>
@@ -1696,6 +1699,11 @@ function view(
 
     // Add new
     else if (oldData?.length === 0 || (!reuseElements && newData?.length)) {
+      if (!reuseElements && oldData?.length && rootElem.hasChildNodes()) {
+        rootElem.textContent = "";
+        schedule(() => oldData.forEach((data) => (data = null)));
+      }
+
       const elements = newData.map(renderFunction);
       rootElem.append(...elements);
       for (const elem of elements) runLifecyle(elem as Element, onRenderMap);

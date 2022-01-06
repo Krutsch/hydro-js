@@ -938,10 +938,10 @@ function onCleanup(fn, elem, ...args) {
     onCleanupMap.set(elem, args.length ? fn.bind(fn, ...args) : fn);
 }
 // Core of the library
-function generateProxy(obj = {}) {
+function generateProxy(obj) {
     const handlers = Symbol("handlers"); // For observer pattern
     const boundFunctions = new WeakMap();
-    const proxy = new Proxy(obj, {
+    const proxy = new Proxy(obj ?? {}, {
         // If receiver is a getter, then it is the object on which the search first started for the property|key -> Proxy
         set(target, key, val, receiver) {
             if (trackDeps) {
@@ -1102,7 +1102,7 @@ function generateProxy(obj = {}) {
                     ?.forEach((handler) => handler(newVal, oldVal));
             }
             // If oldVal is a Proxy - clean it
-            !reuseElements && cleanProxy(oldVal);
+            !reuseElements && oldVal && cleanProxy(oldVal);
             return returnSet;
         },
         // fix proxy bugs, e.g Map
@@ -1177,12 +1177,9 @@ function generateProxy(obj = {}) {
         },
         configurable: true,
     });
-    if (!Reflect.has(proxy, _boundFunctions))
-        queueMicrotask(() => {
-            if (proxy === hydro)
-                Reflect.defineProperty(proxy, _boundFunctions, {
-                    value: boundFunctions,
-                });
+    if (!obj)
+        Reflect.defineProperty(proxy, _boundFunctions, {
+            value: boundFunctions,
         });
     return proxy;
 }
@@ -1335,6 +1332,7 @@ function view(root, data, renderFunction) {
         runLifecyle(elem, onRenderMap);
     if (rootElem.hasChildNodes())
         setReactivity(rootElem);
+    onCleanup(unset, rootElem, data);
     viewElements = false;
     observe(data, (newData, oldData) => {
         /* c8 ignore start */
@@ -1343,6 +1341,7 @@ function view(root, data, renderFunction) {
         if (!newData?.length ||
             (!reuseElements && newData?.length === oldData?.length)) {
             rootElem.textContent = "";
+            schedule(() => oldData.forEach((data) => (data = null)));
         }
         else if (reuseElements) {
             for (let i = 0; i < oldData?.length && newData?.length; i++) {
@@ -1352,7 +1351,9 @@ function view(root, data, renderFunction) {
             }
         }
         // Add to existing
-        if (oldData?.length && newData?.length > oldData?.length) {
+        if (oldData?.length &&
+            newData?.length > oldData?.length &&
+            newData[0] === oldData[0]) {
             const length = oldData.length;
             const slicedData = newData.slice(length);
             const newElements = slicedData.map((item, i) => renderFunction(item, i + length));
@@ -1362,6 +1363,10 @@ function view(root, data, renderFunction) {
         }
         // Add new
         else if (oldData?.length === 0 || (!reuseElements && newData?.length)) {
+            if (!reuseElements && oldData?.length && rootElem.hasChildNodes()) {
+                rootElem.textContent = "";
+                schedule(() => oldData.forEach((data) => (data = null)));
+            }
             const elements = newData.map(renderFunction);
             rootElem.append(...elements);
             for (const elem of elements)

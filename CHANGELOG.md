@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.7- 2021-01-06
+
+- Performance and Memory improvements
+
 ## 1.5.6- 2021-01-05
 
 - Repair h function
