@@ -425,7 +425,7 @@ function setReactivity(
 
     let childNode = elem.firstChild;
     while (childNode) {
-      if (isTextNode(childNode)) {
+      if (isTextNode(childNode) && childNode.nodeValue?.includes("{{")) {
         setReactivitySingle(childNode);
       }
       childNode = childNode.nextSibling;
@@ -441,7 +441,7 @@ function setReactivitySingle(
 ): void {
   let attr_OR_text: string, match: RegExpMatchArray | null;
 
-  if (isTextNode(node)) {
+  if (!key) {
     attr_OR_text = node.nodeValue!; // nodeValue is (always) defined on Text Nodes
   } else {
     attr_OR_text = val!;
@@ -450,7 +450,7 @@ function setReactivitySingle(
       attr_OR_text = key!;
 
       if (attr_OR_text.startsWith("{{")) {
-        node.removeAttribute(attr_OR_text);
+        (node as Element).removeAttribute(attr_OR_text);
       }
     }
   }

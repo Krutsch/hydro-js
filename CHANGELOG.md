@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.8- 2021-01-19
+
+- Minor perf upgrade
+- Added code example
+
 ## 1.5.7- 2021-01-06
 
 - Performance and Memory improvements

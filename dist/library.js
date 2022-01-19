@@ -301,7 +301,7 @@ function setReactivity(DOM, eventFunctions) {
         }
         let childNode = elem.firstChild;
         while (childNode) {
-            if (isTextNode(childNode)) {
+            if (isTextNode(childNode) && childNode.nodeValue?.includes("{{")) {
                 setReactivitySingle(childNode);
             }
             childNode = childNode.nextSibling;
@@ -310,7 +310,7 @@ function setReactivity(DOM, eventFunctions) {
 }
 function setReactivitySingle(node, key, val) {
     let attr_OR_text, match;
-    if (isTextNode(node)) {
+    if (!key) {
         attr_OR_text = node.nodeValue; // nodeValue is (always) defined on Text Nodes
     }
     else {

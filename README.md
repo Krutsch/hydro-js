@@ -30,6 +30,7 @@ Alternatively you can use a CDN:
 ## Examples
 
 - [Simple Counter](https://codesandbox.io/s/hydro-js-counter-mwpf4?file=/index.js)
+- [Reactive CSS](https://codesandbox.io/s/reactive-styles-916pr?file=/index.js)
 - [Two Way Data Binding](https://codesandbox.io/s/hydro-js-two-way-data-binding-observe-extpq?file=/index.js)
 - [Show](https://codesandbox.io/s/show-widzf?file=/index.js)
 - [Destructure Attributes](https://codesandbox.io/s/hydro-js-destructure-attributes-zhcx7?file=/index.js)
