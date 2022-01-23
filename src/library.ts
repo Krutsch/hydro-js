@@ -98,7 +98,6 @@ const tmpSwap = new WeakMap<hydroObject, keyToNodeMap>(); // Take over keyToNode
 const onRenderMap = new WeakMap<ReturnType<typeof html>, Function>(); // Lifecycle Hook that is being called after rendering
 const onCleanupMap = new WeakMap<ReturnType<typeof html>, Function>(); // Lifecycle Hook that is being called when unmount function is being called
 const fragmentToElements = new WeakMap<DocumentFragment, Array<ChildNode>>(); // Used to retreive Elements from DocumentFragment after it has been rendered – for diffing
-const setReactivityElements = new WeakSet<ReturnType<typeof html>>(); // Caching
 const _boundFunctions = Symbol("boundFunctions"); // Cache for bound functions in Proxy, so that we create the bound version of each function only once
 const reactiveSymbol = Symbol("reactive");
 const keysSymbol = Symbol("keys");
@@ -400,7 +399,7 @@ function setReactivity(
         const event = eventFunctions[val];
         if (!event) {
           setReactivitySingle(elem, key, val);
-          return;
+          continue;
         }
         elem.removeAttribute(key);
         if (isEventObject(event)) {
@@ -1298,28 +1297,6 @@ function generateProxy(obj?: Record<PropertyKey, unknown>): hydroObject {
         }
 
         return Reflect.deleteProperty(receiver, key);
-      } else if (
-        Array.isArray(oldVal) &&
-        Array.isArray(val) &&
-        val.length === 0
-      ) {
-        // Parent Array null -> set items to null too
-
-        // Optimization Path
-        Reflect.get(target, handlers, receiver)
-          .get(key)
-          ?.forEach((handler: Function) => handler(val, oldVal));
-
-        internReset = true;
-        const length = oldVal.length;
-        for (let i = 0; i < length; i++) {
-          let subItem = receiver[key][i];
-          /* c8 ignore next 3 */
-          if (isObject(subItem) && isProxy(subItem)) {
-            receiver[key][i] = null;
-          }
-        }
-        internReset = false;
       }
 
       // Set the value
@@ -1673,7 +1650,6 @@ function view(
       (!reuseElements && newData?.length === oldData?.length)
     ) {
       rootElem.textContent = "";
-      schedule(() => oldData.forEach((data) => (data = null)));
     } else if (reuseElements) {
       for (let i = 0; i < oldData?.length && newData?.length; i++) {
         oldData[i].id = newData[i].id;
@@ -1701,7 +1677,6 @@ function view(
     else if (oldData?.length === 0 || (!reuseElements && newData?.length)) {
       if (!reuseElements && oldData?.length && rootElem.hasChildNodes()) {
         rootElem.textContent = "";
-        schedule(() => oldData.forEach((data) => (data = null)));
       }
 
       const elements = newData.map(renderFunction);

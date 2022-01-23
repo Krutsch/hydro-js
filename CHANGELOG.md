@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.9- 2021-01-23
+
+- Minor perf upgrade
+- Fix bug where setReactivity returned too early
+
 ## 1.5.8- 2021-01-19
 
 - Minor perf upgrade

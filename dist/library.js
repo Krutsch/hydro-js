@@ -18,7 +18,6 @@ const tmpSwap = new WeakMap(); // Take over keyToNodeMap if the new value is a h
 const onRenderMap = new WeakMap(); // Lifecycle Hook that is being called after rendering
 const onCleanupMap = new WeakMap(); // Lifecycle Hook that is being called when unmount function is being called
 const fragmentToElements = new WeakMap(); // Used to retreive Elements from DocumentFragment after it has been rendered – for diffing
-const setReactivityElements = new WeakSet(); // Caching
 const _boundFunctions = Symbol("boundFunctions"); // Cache for bound functions in Proxy, so that we create the bound version of each function only once
 const reactiveSymbol = Symbol("reactive");
 const keysSymbol = Symbol("keys");
@@ -273,7 +272,7 @@ function setReactivity(DOM, eventFunctions) {
                 const event = eventFunctions[val];
                 if (!event) {
                     setReactivitySingle(elem, key, val);
-                    return;
+                    continue;
                 }
                 elem.removeAttribute(key);
                 if (isEventObject(event)) {
@@ -999,25 +998,6 @@ function generateProxy(obj) {
                 }
                 return Reflect.deleteProperty(receiver, key);
             }
-            else if (Array.isArray(oldVal) &&
-                Array.isArray(val) &&
-                val.length === 0) {
-                // Parent Array null -> set items to null too
-                // Optimization Path
-                Reflect.get(target, handlers, receiver)
-                    .get(key)
-                    ?.forEach((handler) => handler(val, oldVal));
-                internReset = true;
-                const length = oldVal.length;
-                for (let i = 0; i < length; i++) {
-                    let subItem = receiver[key][i];
-                    /* c8 ignore next 3 */
-                    if (isObject(subItem) && isProxy(subItem)) {
-                        receiver[key][i] = null;
-                    }
-                }
-                internReset = false;
-            }
             // Set the value
             if (isPromise(val)) {
                 const promise = val;
@@ -1341,7 +1321,6 @@ function view(root, data, renderFunction) {
         if (!newData?.length ||
             (!reuseElements && newData?.length === oldData?.length)) {
             rootElem.textContent = "";
-            schedule(() => oldData.forEach((data) => (data = null)));
         }
         else if (reuseElements) {
             for (let i = 0; i < oldData?.length && newData?.length; i++) {
@@ -1365,7 +1344,6 @@ function view(root, data, renderFunction) {
         else if (oldData?.length === 0 || (!reuseElements && newData?.length)) {
             if (!reuseElements && oldData?.length && rootElem.hasChildNodes()) {
                 rootElem.textContent = "";
-                schedule(() => oldData.forEach((data) => (data = null)));
             }
             const elements = newData.map(renderFunction);
             rootElem.append(...elements);
