@@ -443,7 +443,7 @@ function setTraces(start, end, node, hydroKey, resolvedObj, key) {
         allNodeChanges.get(node).push(change);
     }
     else {
-        allNodeChanges.set(node, changeArr);
+        allNodeChanges.set(node, [change]); // Use own version. Otherwise changes, will lead to incorrect changes in the DOM.
     }
     if (reactivityMap.has(resolvedObj)) {
         const keyToNodeMap = reactivityMap.get(resolvedObj);
@@ -792,8 +792,8 @@ function reactive(initial) {
     const chainKeysProxy = chainKeys(setter, [key]);
     return chainKeysProxy;
     function setter(val) {
-        const keys = ( // @ts-ignore
-        this && Reflect.has(this, reactiveSymbol) ? this : chainKeysProxy)[keysSymbol.description];
+        const keys = // @ts-ignore
+         (this && Reflect.has(this, reactiveSymbol) ? this : chainKeysProxy)[keysSymbol.description];
         const [resolvedValue, resolvedObj] = resolveObject(keys);
         const lastProp = keys[keys.length - 1];
         if (isFunction(val)) {

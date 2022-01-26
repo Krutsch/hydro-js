@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.10- 2021-01-27
+
+- Fix intense memory bug, that lead to Bug too
+
 ## 1.5.9- 2021-01-23
 
 - Minor perf upgrade
