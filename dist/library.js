@@ -239,8 +239,10 @@ function h(name, props, ...children) {
         return name({ ...props, children });
     const elem = document.createElement(name);
     for (let i in props) {
-        //@ts-ignore
-        i in elem ? (elem[i] = props[i]) : setAttribute(elem, i, props[i]);
+        i in elem && !boolAttrList.includes(i)
+            ? //@ts-ignore
+                (elem[i] = props[i])
+            : setAttribute(elem, i, props[i]);
     }
     elem.append(...(children.some((i) => Array.isArray(i))
         ? children.map(getChildren).flat()
@@ -401,7 +403,6 @@ function setReactivitySingle(node, key, val) {
                         addEventListener(node, subKey.replace(onEventRegex, ""), subVal);
                     }
                     else {
-                        lastProp = subKey;
                         if (setAttribute(node, subKey, subVal)) {
                             end = start + String(subVal).length;
                         }
@@ -1202,6 +1203,7 @@ function checkReactivityMap(obj, key, val, oldVal) {
     }
 }
 function updateDOM(nodeToChangeMap, val, oldVal) {
+    let valCopy = val, oldValCopy = oldVal;
     nodeToChangeMap.forEach((entry) => {
         // Circular reference in order to keep Memory low
         if (isNode(entry)) {
@@ -1268,6 +1270,11 @@ function updateDOM(nodeToChangeMap, val, oldVal) {
                         }
                         else {
                             setAttribute(node, subKey, subVal);
+                            if (subKey === key) {
+                                useStartEnd = true;
+                                oldValCopy = oldVal[subKey];
+                                valCopy = subVal;
+                            }
                         }
                     }
                 }
@@ -1285,7 +1292,7 @@ function updateDOM(nodeToChangeMap, val, oldVal) {
             }
             if (useStartEnd) {
                 // Update end
-                change[1] = start + String(val).length;
+                change[1] = start + String(valCopy).length;
                 // Because we updated the end, we also have to update the start and end for every other reactive change in the node, for the same key
                 if (allNodeChanges.has(node)) {
                     let passedNode = false;
@@ -1295,7 +1302,7 @@ function updateDOM(nodeToChangeMap, val, oldVal) {
                             continue;
                         }
                         if (passedNode && (isTextNode(node) || key === nodeChange[2])) {
-                            const difference = String(oldVal).length - String(val).length;
+                            const difference = String(oldValCopy).length - String(valCopy).length;
                             nodeChange[0] -= difference;
                             nodeChange[1] -= difference;
                         }

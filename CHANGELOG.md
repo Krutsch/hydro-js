@@ -1,32 +1,37 @@
 # Changelog
 
-## 1.5.11- 2021-04-30
+## 1.5.12- 2022-04-30
+
+- Fix bug where attribute was set twice
+- Fix bug where bool attribute was incorrectly set on JSX elements with reactive function
+
+## 1.5.11- 2022-04-30
 
 - Fix bug where old events where not correctly removed
 
-## 1.5.10- 2021-01-27
+## 1.5.10- 2022-01-27
 
 - Fix intense memory bug, that lead to Bug too
 
-## 1.5.9- 2021-01-23
+## 1.5.9- 2022-01-23
 
 - Minor perf upgrade
 - Fix bug where setReactivity returned too early
 
-## 1.5.8- 2021-01-19
+## 1.5.8- 2022-01-19
 
 - Minor perf upgrade
 - Added code example
 
-## 1.5.7- 2021-01-06
+## 1.5.7- 2022-01-06
 
 - Performance and Memory improvements
 
-## 1.5.6- 2021-01-05
+## 1.5.6- 2022-01-05
 
 - Repair h function
 
-## 1.5.5- 2021-01-02
+## 1.5.5- 2022-01-02
 
 - Improve TypeScript types of $ and $$
 

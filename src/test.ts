@@ -60,7 +60,25 @@ const results: Array<{ name: string; success: boolean }> = [];
 // --------- TESTS START ------------
 
 let condition = true;
-describe("library", () => {
+const props = reactive({
+  onclick: () => console.log(1),
+  disabled: false,
+});
+
+// render(html`<button ${props}>Test HTML</button>`);
+render(
+  h("button", { onClick: props.onclick, disabled: props.disabled }, [
+    "Test JSX",
+  ])
+);
+
+setTimeout(() => {
+  props({
+    onclick: () => console.log(2),
+    disabled: true,
+  });
+}, 1000);
+xdescribe("library", () => {
   describe("functions", () => {
     describe("h", () => {
       it("handles functions correctly", () => {
