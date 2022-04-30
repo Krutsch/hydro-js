@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.13- 2022-04-30
+
+- Undo attribute set twice bugfix as the reactive value was called falsly
+
 ## 1.5.12- 2022-04-30
 
 - Fix bug where attribute was set twice

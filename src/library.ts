@@ -547,6 +547,7 @@ function setReactivitySingle(
           if (isFunction(subVal) || isEventObject(subVal)) {
             addEventListener(node, subKey.replace(onEventRegex, ""), subVal);
           } else {
+            lastProp = subKey;
             if (setAttribute(node, subKey, subVal)) {
               end = start + String(subVal).length;
             } else {
@@ -1517,8 +1518,6 @@ function checkReactivityMap(obj: any, key: PropertyKey, val: any, oldVal: any) {
 }
 
 function updateDOM(nodeToChangeMap: nodeToChangeMap, val: any, oldVal: any) {
-  let valCopy = val,
-    oldValCopy = oldVal;
   nodeToChangeMap.forEach((entry) => {
     // Circular reference in order to keep Memory low
     if (isNode(entry as Text)) {
@@ -1593,12 +1592,6 @@ function updateDOM(nodeToChangeMap: nodeToChangeMap, val: any, oldVal: any) {
               addEventListener(node, eventName, subVal);
             } else {
               setAttribute(node, subKey, subVal);
-
-              if (subKey === key) {
-                useStartEnd = true;
-                oldValCopy = oldVal[subKey];
-                valCopy = subVal;
-              }
             }
           }
         } else {
@@ -1615,7 +1608,7 @@ function updateDOM(nodeToChangeMap: nodeToChangeMap, val: any, oldVal: any) {
 
       if (useStartEnd) {
         // Update end
-        change[1] = start + String(valCopy).length;
+        change[1] = start + String(val).length;
 
         // Because we updated the end, we also have to update the start and end for every other reactive change in the node, for the same key
         if (allNodeChanges.has(node)) {
@@ -1627,8 +1620,7 @@ function updateDOM(nodeToChangeMap: nodeToChangeMap, val: any, oldVal: any) {
             }
 
             if (passedNode && (isTextNode(node) || key === nodeChange[2])) {
-              const difference =
-                String(oldValCopy).length - String(valCopy).length;
+              const difference = String(oldVal).length - String(val).length;
               nodeChange[0] -= difference;
               nodeChange[1] -= difference;
             }
