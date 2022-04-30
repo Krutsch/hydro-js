@@ -1039,9 +1039,9 @@ function reactive<T>(initial: T): reactiveObject<T> {
 
   function setter<U>(val: U) {
     const keys = // @ts-ignore
-    (this && Reflect.has(this, reactiveSymbol) ? this : chainKeysProxy)[
-      keysSymbol.description!
-    ];
+      (this && Reflect.has(this, reactiveSymbol) ? this : chainKeysProxy)[
+        keysSymbol.description!
+      ];
     const [resolvedValue, resolvedObj] = resolveObject(keys);
     const lastProp = keys[keys.length - 1];
 
@@ -1575,7 +1575,7 @@ function updateDOM(nodeToChangeMap: nodeToChangeMap, val: any, oldVal: any) {
           const eventName = key!.replace(onEventRegex, "");
           node.removeEventListener(
             eventName,
-            isFunction(val) ? val : val.event
+            isFunction(oldVal) ? oldVal : oldVal.event
           );
           addEventListener(node, eventName, val);
         } else if (isObject(val)) {
@@ -1584,7 +1584,9 @@ function updateDOM(nodeToChangeMap: nodeToChangeMap, val: any, oldVal: any) {
               const eventName = subKey.replace(onEventRegex, "");
               node.removeEventListener(
                 eventName,
-                isFunction(subVal) ? subVal : subVal.event
+                isFunction(oldVal[subKey])
+                  ? oldVal[subKey]
+                  : oldVal[subKey].event
               );
               addEventListener(node, eventName, subVal);
             } else {

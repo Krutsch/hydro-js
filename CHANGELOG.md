@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.11- 2021-04-30
+
+- Fix bug where old events where not correctly removed
+
 ## 1.5.10- 2021-01-27
 
 - Fix intense memory bug, that lead to Bug too

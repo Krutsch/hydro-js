@@ -1254,14 +1254,16 @@ function updateDOM(nodeToChangeMap, val, oldVal) {
                 }
                 else if (isFunction(val) || isEventObject(val)) {
                     const eventName = key.replace(onEventRegex, "");
-                    node.removeEventListener(eventName, isFunction(val) ? val : val.event);
+                    node.removeEventListener(eventName, isFunction(oldVal) ? oldVal : oldVal.event);
                     addEventListener(node, eventName, val);
                 }
                 else if (isObject(val)) {
                     for (const [subKey, subVal] of Object.entries(val)) {
                         if (isFunction(subVal) || isEventObject(subVal)) {
                             const eventName = subKey.replace(onEventRegex, "");
-                            node.removeEventListener(eventName, isFunction(subVal) ? subVal : subVal.event);
+                            node.removeEventListener(eventName, isFunction(oldVal[subKey])
+                                ? oldVal[subKey]
+                                : oldVal[subKey].event);
                             addEventListener(node, eventName, subVal);
                         }
                         else {
