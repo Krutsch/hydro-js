@@ -8,7 +8,7 @@ window.requestIdleCallback =
         }));
 // Safari Polyfills END
 const range = document.createRange();
-range.selectNodeContents(range.createContextualFragment(`<${"template" /* template */}>`).lastChild);
+range.selectNodeContents(range.createContextualFragment(`<${"template" /* Placeholder.template */}>`).lastChild);
 const parser = range.createContextualFragment.bind(range);
 const allNodeChanges = new WeakMap(); // Maps a Node against an array of changes. An array is necessary because a node can have multiple variables for one text / attribute.
 const elemEventFunctions = new WeakMap(); // Stores event functions in order to compare Elements against each other.
@@ -68,7 +68,7 @@ function isObject(obj) {
     return obj != null && typeof obj === "object";
 }
 function isFunction(func) {
-    return typeof func === "function" /* function */;
+    return typeof func === "function" /* Placeholder.function */;
 }
 function isTextNode(node) {
     return node.splitText !== undefined;
@@ -80,10 +80,10 @@ function isDocumentFragment(node) {
     return node.nodeType === 11;
 }
 function isEventObject(obj) {
-    return (isObject(obj) && "event" /* event */ in obj && "options" /* options */ in obj);
+    return (isObject(obj) && "event" /* Placeholder.event */ in obj && "options" /* Placeholder.options */ in obj);
 }
 function isProxy(hydroObject) {
-    return Reflect.get(hydroObject, "isProxy" /* isProxy */);
+    return Reflect.get(hydroObject, "isProxy" /* Placeholder.isProxy */);
 }
 function isPromise(obj) {
     return isObject(obj) && typeof obj.then === "function";
@@ -111,7 +111,7 @@ function setShouldSetReactivity(willSet) {
     shouldSetReactivity = willSet;
 }
 function setHydroRecursive(obj) {
-    Reflect.set(obj, "asyncUpdate" /* asyncUpdate */, globalSchedule);
+    Reflect.set(obj, "asyncUpdate" /* Placeholder.asyncUpdate */, globalSchedule);
     for (const value of Object.values(obj)) {
         if (isObject(value) && isProxy(value)) {
             setHydroRecursive(value);
@@ -134,7 +134,7 @@ function html(htmlArray, ...variables) {
     let insertNodes = []; // Nodes, that will be added after the parsing
     const resolvedVariables = [];
     for (const variable of variables) {
-        const template = `<${"template" /* template */} id="lbInsertNodes"></${"template" /* template */}>`;
+        const template = `<${"template" /* Placeholder.template */} id="lbInsertNodes"></${"template" /* Placeholder.template */}>`;
         switch (variable) {
             case isNode(variable) && variable: {
                 insertNodes.push(variable);
@@ -143,7 +143,7 @@ function html(htmlArray, ...variables) {
             }
             case ([
                 "number",
-                "string" /* string */,
+                "string" /* Placeholder.string */,
                 "symbol",
                 "boolean",
                 "bigint",
@@ -191,7 +191,7 @@ function html(htmlArray, ...variables) {
     }
     // Find elements <html|head|body>, as they cannot be created by the parser. Replace them by fake Custom Elements and replace them afterwards.
     let DOMString = String.raw(htmlArray, ...resolvedVariables).trim();
-    DOMString = DOMString.replace(HTML_FIND_INVALID, `<$1$2${"-dummy" /* dummy */}$3`);
+    DOMString = DOMString.replace(HTML_FIND_INVALID, `<$1$2${"-dummy" /* Placeholder.dummy */}$3`);
     const DOM = parser(DOMString);
     // Delay Element iteration and manipulation after the elements have been added to the DOM.
     if (!viewElements) {
@@ -209,14 +209,14 @@ function html(htmlArray, ...variables) {
 function fillDOM(elem, insertNodes, eventFunctions) {
     const root = document.createNodeIterator(elem, NodeFilter.SHOW_ELEMENT, {
         acceptNode(element) {
-            return element.localName.endsWith("-dummy" /* dummy */)
+            return element.localName.endsWith("-dummy" /* Placeholder.dummy */)
                 ? NodeFilter.FILTER_ACCEPT
                 : NodeFilter.FILTER_REJECT;
         },
     });
     let nextNode;
     while ((nextNode = root.nextNode())) {
-        const tag = nextNode.localName.replace("-dummy" /* dummy */, "");
+        const tag = nextNode.localName.replace("-dummy" /* Placeholder.dummy */, "");
         const replacement = document.createElement(tag);
         replacement.append(...nextNode.childNodes);
         /* c8 ignore next 3 */
@@ -367,20 +367,20 @@ function setReactivitySingle(node, key, val) {
                 }
                 continue;
             }
-            else if (key === "two-way" /* twoWay */) {
+            else if (key === "two-way" /* Placeholder.twoWay */) {
                 if (node instanceof HTMLSelectElement) {
                     node.value = resolvedValue;
-                    changeAttrVal("change" /* change */, node, resolvedObj, lastProp);
+                    changeAttrVal("change" /* Placeholder.change */, node, resolvedObj, lastProp);
                 }
                 else if (node instanceof HTMLInputElement &&
-                    node.type === "radio" /* radio */) {
+                    node.type === "radio" /* Placeholder.radio */) {
                     node.checked = node.value === resolvedValue;
-                    changeAttrVal("change" /* change */, node, resolvedObj, lastProp);
+                    changeAttrVal("change" /* Placeholder.change */, node, resolvedObj, lastProp);
                 }
                 else if (node instanceof HTMLInputElement &&
-                    node.type === "checkbox" /* checkbox */) {
+                    node.type === "checkbox" /* Placeholder.checkbox */) {
                     node.checked = resolvedValue;
-                    changeAttrVal("change" /* change */, node, resolvedObj, lastProp, true);
+                    changeAttrVal("change" /* Placeholder.change */, node, resolvedObj, lastProp, true);
                 }
                 else if (node instanceof HTMLTextAreaElement ||
                     node instanceof HTMLInputElement) {
@@ -388,7 +388,7 @@ function setReactivitySingle(node, key, val) {
                     changeAttrVal("input", node, resolvedObj, lastProp);
                 }
                 attr_OR_text = attr_OR_text.replace(hydroMatch, "");
-                node.setAttribute("two-way" /* twoWay */, "");
+                node.setAttribute("two-way" /* Placeholder.twoWay */, "");
             }
             else if (isFunction(resolvedValue) || isEventObject(resolvedValue)) {
                 attr_OR_text = attr_OR_text.replace(hydroMatch, "");
@@ -576,7 +576,7 @@ function render(elem, where = "", shouldSchedule = globalSchedule) {
         document.body.append(elem);
     }
     else {
-        if (typeof where === "string" /* string */) {
+        if (typeof where === "string" /* Placeholder.string */) {
             const resolveStringToElement = $(where);
             if (resolveStringToElement) {
                 where = resolveStringToElement;
@@ -660,7 +660,7 @@ function treeDiff(elem, where) {
     }
     let template;
     if (insertBeforeDiffing) {
-        template = document.createElement("template" /* template */);
+        template = document.createElement("template" /* Placeholder.template */);
         /* c8 ignore next 3 */
         if (where === document.documentElement) {
             where.append(template);
@@ -1108,17 +1108,17 @@ function generateProxy(obj) {
             return boundFunctions.get(value);
         },
     });
-    Reflect.defineProperty(proxy, "isProxy" /* isProxy */, {
+    Reflect.defineProperty(proxy, "isProxy" /* Placeholder.isProxy */, {
         value: true,
     });
-    Reflect.defineProperty(proxy, "asyncUpdate" /* asyncUpdate */, {
+    Reflect.defineProperty(proxy, "asyncUpdate" /* Placeholder.asyncUpdate */, {
         value: globalSchedule,
         writable: true,
     });
     Reflect.defineProperty(proxy, handlers, {
         value: new Map(),
     });
-    Reflect.defineProperty(proxy, "observe" /* observe */, {
+    Reflect.defineProperty(proxy, "observe" /* Placeholder.observe */, {
         value(key, handler) {
             const map = Reflect.get(proxy, handlers);
             if (map.has(key)) {
@@ -1130,13 +1130,13 @@ function generateProxy(obj) {
         },
         configurable: true,
     });
-    Reflect.defineProperty(proxy, "getObservers" /* getObservers */, {
+    Reflect.defineProperty(proxy, "getObservers" /* Placeholder.getObservers */, {
         value() {
             return Reflect.get(proxy, handlers);
         },
         configurable: true,
     });
-    Reflect.defineProperty(proxy, "unobserve" /* unobserve */, {
+    Reflect.defineProperty(proxy, "unobserve" /* Placeholder.unobserve */, {
         value(key, handler) {
             const map = Reflect.get(proxy, handlers);
             if (key) {
@@ -1180,7 +1180,7 @@ function checkReactivityMap(obj, key, val, oldVal) {
     const nodeToChangeMap = keyToNodeMap.get(String(key));
     if (nodeToChangeMap) {
         /* c8 ignore next 5 */
-        if (Reflect.get(obj, "asyncUpdate" /* asyncUpdate */)) {
+        if (Reflect.get(obj, "asyncUpdate" /* Placeholder.asyncUpdate */)) {
             schedule(updateDOM, nodeToChangeMap, val, oldVal);
         }
         else {
@@ -1193,7 +1193,7 @@ function checkReactivityMap(obj, key, val, oldVal) {
             const nodeToChangeMap = keyToNodeMap.get(subKey);
             if (nodeToChangeMap) {
                 /* c8 ignore next 5 */
-                if (Reflect.get(obj, "asyncUpdate" /* asyncUpdate */)) {
+                if (Reflect.get(obj, "asyncUpdate" /* Placeholder.asyncUpdate */)) {
                     schedule(updateDOM, nodeToChangeMap, subVal, subOldVal);
                 }
                 else {
@@ -1237,15 +1237,15 @@ function updateDOM(nodeToChangeMap, val, oldVal) {
                     text.substring(0, start) + String(val) + text.substring(end);
             }
             else {
-                if (key === "two-way" /* twoWay */) {
+                if (key === "two-way" /* Placeholder.twoWay */) {
                     if (node instanceof HTMLInputElement &&
-                        node.type === "radio" /* radio */) {
+                        node.type === "radio" /* Placeholder.radio */) {
                         node.checked = Array.isArray(val)
                             ? val.includes(node.name)
                             : String(val) === node.value;
                     }
                     else if (node instanceof HTMLInputElement &&
-                        node.type === "checkbox" /* checkbox */) {
+                        node.type === "checkbox" /* Placeholder.checkbox */) {
                         node.checked = val;
                     }
                     else if (node instanceof HTMLTextAreaElement ||

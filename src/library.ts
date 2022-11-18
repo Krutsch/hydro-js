@@ -1210,7 +1210,7 @@ function watchEffect(fn: Function) {
 
 function getValue<T extends object>(reactiveHydro: T): T {
   const [resolvedValue] = resolveObject(
-    Reflect.get(reactiveHydro, keysSymbol.description!)
+    Reflect.get(reactiveHydro, keysSymbol.description!) as PropertyKey[]
   );
   return resolvedValue;
 }
@@ -1430,10 +1430,13 @@ function generateProxy(obj?: Record<PropertyKey, unknown>): hydroObject {
   });
   Reflect.defineProperty(proxy, Placeholder.observe, {
     value(key: PropertyKey, handler: Function) {
-      const map = Reflect.get(proxy, handlers);
+      const map = Reflect.get(proxy, handlers) as Map<
+        PropertyKey,
+        Set<Function>
+      >;
 
       if (map.has(key)) {
-        map.get(key).add(handler);
+        map.get(key)!.add(handler);
       } else {
         map.set(key, new Set([handler]));
       }
@@ -1448,7 +1451,10 @@ function generateProxy(obj?: Record<PropertyKey, unknown>): hydroObject {
   });
   Reflect.defineProperty(proxy, Placeholder.unobserve, {
     value(key: PropertyKey, handler: Function) {
-      const map = Reflect.get(proxy, handlers);
+      const map = Reflect.get(proxy, handlers) as Map<
+        PropertyKey,
+        Set<Function>
+      >;
 
       if (key) {
         if (map.has(key)) {

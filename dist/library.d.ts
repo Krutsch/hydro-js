@@ -27,7 +27,7 @@ declare global {
         };
     }
 }
-declare type isInputPendingOptions = {
+type isInputPendingOptions = {
     includeContinuous: boolean;
 };
 interface hydroObject extends Record<PropertyKey, any> {
@@ -41,8 +41,8 @@ interface EventObject {
     event: EventListener;
     options: AddEventListenerOptions;
 }
-declare type reactiveObject<T> = T & hydroObject & ((setter: any) => void);
-declare type eventFunctions = Record<string, EventListener | EventObject>;
+type reactiveObject<T> = T & hydroObject & ((setter: any) => void);
+type eventFunctions = Record<string, EventListener | EventObject>;
 declare function setGlobalSchedule(willSchedule: boolean): void;
 declare function setReuseElements(willReuse: boolean): void;
 declare function setInsertDiffing(willInsert: boolean): void;
@@ -67,20 +67,20 @@ declare function view(root: string, data: reactiveObject<Array<any>>, renderFunc
 declare const hydro: hydroObject;
 declare const $: <T extends string>(query: T) => MatchEachElement<GetEachElementName<Split<T, ",">, []>, null>;
 declare const $$: <T extends string>(query: T) => [] | NonNullable<MatchEachElement<GetEachElementName<Split<T, ",">, []>, null>>[];
-declare type Split<S extends string, D extends string> = S extends `${infer T}${D}${infer U}` ? [T, ...Split<U, D>] : [S];
-declare type TakeLast<V> = V extends [] ? never : V extends [string] ? V[0] : V extends [string, ...infer R] ? TakeLast<R> : never;
-declare type TrimLeft<V extends string> = V extends ` ${infer R}` ? TrimLeft<R> : V;
-declare type TrimRight<V extends string> = V extends `${infer R} ` ? TrimRight<R> : V;
-declare type Trim<V extends string> = TrimLeft<TrimRight<V>>;
-declare type StripModifier<V extends string, M extends string> = V extends `${infer L}${M}${infer A}` ? L : V;
-declare type StripModifiers<V extends string> = StripModifier<StripModifier<StripModifier<StripModifier<V, ".">, "#">, "[">, ":">;
-declare type TakeLastAfterToken<V extends string, T extends string> = StripModifiers<TakeLast<Split<Trim<V>, T>>>;
-declare type GetLastElementName<V extends string> = TakeLastAfterToken<TakeLastAfterToken<V, " ">, ">">;
-declare type GetEachElementName<V, L extends string[] = []> = V extends [] ? L : V extends [string] ? [...L, GetLastElementName<V[0]>] : V extends [string, ...infer R] ? GetEachElementName<R, [...L, GetLastElementName<V[0]>]> : [];
-declare type GetElementNames<V extends string> = GetEachElementName<Split<V, ",">>;
-declare type ElementByName<V extends string> = V extends keyof HTMLElementTagNameMap ? HTMLElementTagNameMap[V] : V extends keyof SVGElementTagNameMap ? SVGElementTagNameMap[V] : Element;
-declare type MatchEachElement<V, L extends Element | null = null> = V extends [] ? L : V extends [string] ? L | ElementByName<V[0]> : V extends [string, ...infer R] ? MatchEachElement<R, L | ElementByName<V[0]>> : L;
-declare type QueryResult<T extends string> = MatchEachElement<GetElementNames<T>>;
+type Split<S extends string, D extends string> = S extends `${infer T}${D}${infer U}` ? [T, ...Split<U, D>] : [S];
+type TakeLast<V> = V extends [] ? never : V extends [string] ? V[0] : V extends [string, ...infer R] ? TakeLast<R> : never;
+type TrimLeft<V extends string> = V extends ` ${infer R}` ? TrimLeft<R> : V;
+type TrimRight<V extends string> = V extends `${infer R} ` ? TrimRight<R> : V;
+type Trim<V extends string> = TrimLeft<TrimRight<V>>;
+type StripModifier<V extends string, M extends string> = V extends `${infer L}${M}${infer A}` ? L : V;
+type StripModifiers<V extends string> = StripModifier<StripModifier<StripModifier<StripModifier<V, ".">, "#">, "[">, ":">;
+type TakeLastAfterToken<V extends string, T extends string> = StripModifiers<TakeLast<Split<Trim<V>, T>>>;
+type GetLastElementName<V extends string> = TakeLastAfterToken<TakeLastAfterToken<V, " ">, ">">;
+type GetEachElementName<V, L extends string[] = []> = V extends [] ? L : V extends [string] ? [...L, GetLastElementName<V[0]>] : V extends [string, ...infer R] ? GetEachElementName<R, [...L, GetLastElementName<V[0]>]> : [];
+type GetElementNames<V extends string> = GetEachElementName<Split<V, ",">>;
+type ElementByName<V extends string> = V extends keyof HTMLElementTagNameMap ? HTMLElementTagNameMap[V] : V extends keyof SVGElementTagNameMap ? SVGElementTagNameMap[V] : Element;
+type MatchEachElement<V, L extends Element | null = null> = V extends [] ? L : V extends [string] ? L | ElementByName<V[0]> : V extends [string, ...infer R] ? MatchEachElement<R, L | ElementByName<V[0]>> : L;
+type QueryResult<T extends string> = MatchEachElement<GetElementNames<T>>;
 declare const internals: {
     compare: typeof compare;
 };
