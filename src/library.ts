@@ -116,7 +116,7 @@ const onEventRegex = /^on/;
 
 // https://html.spec.whatwg.org/#attributes-3
 // if value for bool attr is falsy, then remove attr
-// INFO: draggable and spellcheck are actually using booleans as string! Might consider to add 'translate' (yes and no as string)
+// INFO: draggable and spellcheck are actually using booleans as string! Also, hidden is not really a bool attr, but is making use of the empty string too. Might consider to add 'translate' (yes and no as string)
 const boolAttrList = [
   "allowfullscreen",
   "async",
@@ -130,6 +130,7 @@ const boolAttrList = [
   "disabled",
   "formnovalidate",
   "hidden",
+  "inert",
   "ismap",
   "itemscope",
   "loop",
