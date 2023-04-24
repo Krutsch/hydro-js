@@ -29,7 +29,7 @@
   "devDependencies": {
     "@esm-bundle/chai": "^4.3.4",
     "@types/concurrently": "^7.0.0",
-    "@web/test-runner": "^0.15.3",
+    "@web/test-runner": "^0.16.1",
     "@web/test-runner-playwright": "^0.10.0",
     "concurrently": "^8.0.1",
     "serve": "^14.2.0",
