@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.14- 2023-04-04
+
+- feat: add inert boolean attribute
+
 ## 1.5.13- 2022-04-30
 
 - Undo attribute set twice bugfix as the reactive value was called falsly
