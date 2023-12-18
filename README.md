@@ -313,7 +313,7 @@ args:
 
 ```js
 const data = reactive([{ id: 4, label: "Red Onions" }])
-view('.table', data, (item, i) => <tr>Reactive: {data[i].id}, Non-reactive: {item.id}<tr>)
+view('.table', data, (item, i) => <tr>Reactive: {data[i].id}, Non-reactive: {item.id}</tr>)
 ```
 
 ### emit
