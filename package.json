@@ -1,6 +1,6 @@
 {
   "name": "hydro-js",
-  "version": "1.5.14",
+  "version": "1.5.15",
   "description": "A lightweight reactive library",
   "type": "module",
   "main": "./dist/library.js",
@@ -31,9 +31,9 @@
     "@types/concurrently": "^7.0.0",
     "@web/test-runner": "^0.18.0",
     "@web/test-runner-playwright": "^0.11.0",
-    "concurrently": "^8.0.1",
-    "serve": "^14.2.0",
-    "typescript": "^5.0.4"
+    "concurrently": "^8.2.2",
+    "serve": "^14.2.1",
+    "typescript": "^5.3.3"
   },
   "repository": {
     "type": "git",

@@ -238,7 +238,7 @@ function fillDOM(elem, insertNodes, eventFunctions) {
 function h(name, props, ...children) {
     if (isFunction(name))
         return name({ ...props, children });
-    const elem = document.createElement(name);
+    const elem = document.createElement(name, props?.hasOwnProperty("is") ? { is: props["is"] } : undefined);
     for (let i in props) {
         i in elem && !boolAttrList.includes(i)
             ? //@ts-ignore
