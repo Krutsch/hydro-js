@@ -367,6 +367,12 @@ describe("library", () => {
         });
       });
 
+      it("handles false variables correctly", () => {
+        return (
+          html`<input type="checkbox" required=${false} />`.textContent === ""
+        );
+      });
+
       it("handles a new html doc correctly", () => {
         const elem = html`<html>
           <head></head>
@@ -2120,7 +2126,7 @@ describe("library", () => {
           $("ul")!.textContent!.includes("Red Onions") &&
           $("ul")!.textContent!.includes("Green Socks");
 
-        data[0].setter((curr: typeof data[number]) => {
+        data[0].setter((curr: (typeof data)[number]) => {
           curr.id = 6;
           curr.label = "Orange Hat";
         });
@@ -2166,7 +2172,7 @@ describe("library", () => {
           $("ul")!.textContent!.includes("Red Onions") &&
           $("ul")!.textContent!.includes("Green Socks");
 
-        data[0].setter((curr: typeof data[number]) => {
+        data[0].setter((curr: (typeof data)[number]) => {
           curr.id = 6;
           curr.label = "Orange Hat";
         });

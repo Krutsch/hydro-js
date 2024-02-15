@@ -138,6 +138,10 @@ function html(htmlArray, ...variables) {
         const template = `<${"template" /* Placeholder.template */} id="lbInsertNodes"></${"template" /* Placeholder.template */}>`;
         switch (variable) {
             case isNode(variable) && variable: {
+                if (variable === false) {
+                    resolvedVariables.push(String(variable));
+                    break;
+                }
                 insertNodes.push(variable);
                 resolvedVariables.push(template);
                 break;

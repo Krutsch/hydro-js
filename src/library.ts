@@ -244,6 +244,10 @@ function html(
 
     switch (variable) {
       case isNode(variable) && variable: {
+        if (variable === false) {
+          resolvedVariables.push(String(variable));
+          break;
+        }
         insertNodes.push(variable);
         resolvedVariables.push(template);
         break;

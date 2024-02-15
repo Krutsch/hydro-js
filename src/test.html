@@ -346,6 +346,13 @@
                 });
               });
 
+              it("returns empty text node", () => {
+                expect(
+                  html`<input type="checkbox" required=${false} />`
+                    .textContent === ""
+                ).to.be.true;
+              });
+
               it("handles a new html doc correctly", () => {
                 const elem = html`<html>
                   <head></head>

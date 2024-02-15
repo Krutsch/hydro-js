@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.5.16- 2024-02-16
+
+- Fix bug where false variable matched incorrectly in the switch
+
+## 1.5.15- 2024-02-14
+
+- Fix bug where web components where not registered correctly in the h function
+
 ## 1.5.14- 2023-04-04
 
 - feat: add inert boolean attribute
