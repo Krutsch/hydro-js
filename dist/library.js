@@ -136,63 +136,43 @@ function html(htmlArray, ...variables) {
     const resolvedVariables = [];
     for (const variable of variables) {
         const template = `<${"template" /* Placeholder.template */} id="lbInsertNodes"></${"template" /* Placeholder.template */}>`;
-        switch (variable) {
-            case isNode(variable) && variable: {
-                if (variable === false) {
-                    resolvedVariables.push(String(variable));
-                    break;
-                }
-                insertNodes.push(variable);
-                resolvedVariables.push(template);
-                break;
-            }
-            case ([
-                "number",
-                "string" /* Placeholder.string */,
-                "symbol",
-                "boolean",
-                "bigint",
-            ].includes(typeof variable) ||
-                Reflect.has(variable, reactiveSymbol)) &&
-                variable:
-                {
-                    resolvedVariables.push(String(variable));
-                    break;
-                }
-            case (isFunction(variable) || isEventObject(variable)) && variable: {
-                const funcName = randomText();
-                Reflect.set(eventFunctions, funcName, variable);
-                resolvedVariables.push(funcName);
-                break;
-            }
-            case Array.isArray(variable) && variable: {
-                for (let index = 0; index < variable.length; index++) {
-                    const item = variable[index];
-                    if (isNode(item)) {
-                        insertNodes.push(item);
-                        variable[index] = template;
-                    }
-                }
-                resolvedVariables.push(variable.join(""));
-                break;
-            }
-            case isObject(variable) && variable: {
-                let result = "";
-                for (const [key, value] of Object.entries(variable)) {
-                    if (isFunction(value) || isEventObject(value)) {
-                        const funcName = randomText();
-                        Reflect.set(eventFunctions, funcName, value);
-                        result += `${key}="${funcName}"`;
-                    }
-                    else {
-                        result += `${key}="${value}"`;
-                    }
-                }
-                resolvedVariables.push(result);
-                break;
-            }
+        if (isNode(variable)) {
+            insertNodes.push(variable);
+            resolvedVariables.push(template);
         }
-        /* c8 ignore next 1 */
+        else if (["number", "string" /* Placeholder.string */, "symbol", "boolean", "bigint"].includes(typeof variable) ||
+            Reflect.has(variable, reactiveSymbol)) {
+            resolvedVariables.push(String(variable));
+        }
+        else if (isFunction(variable) || isEventObject(variable)) {
+            const funcName = randomText();
+            Reflect.set(eventFunctions, funcName, variable);
+            resolvedVariables.push(funcName);
+        }
+        else if (Array.isArray(variable)) {
+            for (let index = 0; index < variable.length; index++) {
+                const item = variable[index];
+                if (isNode(item)) {
+                    insertNodes.push(item);
+                    variable[index] = template;
+                }
+            }
+            resolvedVariables.push(variable.join(""));
+        }
+        else if (isObject(variable)) {
+            let result = "";
+            for (const [key, value] of Object.entries(variable)) {
+                if (isFunction(value) || isEventObject(value)) {
+                    const funcName = randomText();
+                    Reflect.set(eventFunctions, funcName, value);
+                    result += `${key}="${funcName}"`;
+                }
+                else {
+                    result += `${key}="${value}"`;
+                }
+            }
+            resolvedVariables.push(result);
+        }
     }
     // Find elements <html|head|body>, as they cannot be created by the parser. Replace them by fake Custom Elements and replace them afterwards.
     let DOMString = String.raw(htmlArray, ...resolvedVariables).trim();
