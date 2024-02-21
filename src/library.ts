@@ -336,24 +336,31 @@ function fillDOM(
   if (shouldSetReactivity) setReactivity(elem, eventFunctions);
 }
 /* c8 ignore start */
+type FragmentCase = { children: ReturnType<typeof h>[] };
 function h(
-  name: string | ((...args: any[]) => ReturnType<typeof h>),
+  name: string | ((...args: any[]) => ReturnType<typeof h>) | FragmentCase,
   props: Record<keyof any, any> | null,
   ...children: Array<any>
 ): ReturnType<typeof html> {
   if (isFunction(name)) return name({ ...props, children });
 
-  const elem = document.createElement(
-    name,
-    props?.hasOwnProperty("is") ? { is: props["is"] } : undefined
-  );
+  const elem =
+    typeof name === Placeholder.string
+      ? document.createElement(
+          name as string,
+          props?.hasOwnProperty("is") ? { is: props["is"] } : undefined
+        )
+      : document.createDocumentFragment();
   for (let i in props) {
     i in elem && !boolAttrList.includes(i)
       ? //@ts-ignore
         (elem[i] = props[i])
-      : setAttribute(elem, i, props[i]);
+      : setAttribute(elem as HTMLElement, i, props[i]);
   }
 
+  if (isDocumentFragment(elem)) {
+    children = (name as FragmentCase).children;
+  }
   elem.append(
     ...(children.some((i) => Array.isArray(i))
       ? children.map(getChildren).flat()

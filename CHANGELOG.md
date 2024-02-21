@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.5.18 2024-02-21
+
+- enable DocumentFragment in h function
+
+## 1.5.17 2024-02-16
+
+- little refactor of html function
+
 ## 1.5.16- 2024-02-16
 
 - Fix bug where false variable matched incorrectly in the switch

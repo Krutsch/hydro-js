@@ -61,6 +61,13 @@
                     1
                 ).to.be.true;
               });
+
+              it("handles documentFragment", () => {
+                expect(
+                  h(h, null, h("p", null, "hi"), h("p", null, "ho"))
+                    .nodeType === 11
+                ).to.be.true;
+              });
             });
 
             describe("documentFragment", () => {

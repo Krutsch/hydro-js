@@ -78,6 +78,13 @@ describe("library", () => {
         return (h("div", null, [test]) as Element).localName === "div";
       });
 
+      it("handles documentFragment", () => {
+        return (
+          (h(h, null, h("p", null, "hi"), h("p", null, "ho")) as Element)
+            .nodeType === 11
+        );
+      });
+
       it("returns a valid element when it has children", () => {
         return h("div", null, [h("p", null, ["test"])]).childNodes.length === 1;
       });

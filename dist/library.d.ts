@@ -48,7 +48,10 @@ declare function setReuseElements(willReuse: boolean): void;
 declare function setInsertDiffing(willInsert: boolean): void;
 declare function setShouldSetReactivity(willSet: boolean): void;
 declare function html(htmlArray: TemplateStringsArray, ...variables: Array<any>): Element | DocumentFragment | Text;
-declare function h(name: string | ((...args: any[]) => ReturnType<typeof h>), props: Record<keyof any, any> | null, ...children: Array<any>): ReturnType<typeof html>;
+type FragmentCase = {
+    children: ReturnType<typeof h>[];
+};
+declare function h(name: string | ((...args: any[]) => ReturnType<typeof h>) | FragmentCase, props: Record<keyof any, any> | null, ...children: Array<any>): ReturnType<typeof html>;
 declare function setReactivity(DOM: ReturnType<typeof html>, eventFunctions?: eventFunctions): void;
 declare function compare(elem: Element | DocumentFragment, where: Element | DocumentFragment | Text, onlyTextChildren?: boolean): boolean;
 declare function render(elem: ReturnType<typeof html> | reactiveObject<any>, where?: ReturnType<typeof html> | string, shouldSchedule?: boolean): ChildNode["remove"];
