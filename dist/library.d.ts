@@ -47,6 +47,7 @@ declare function setGlobalSchedule(willSchedule: boolean): void;
 declare function setReuseElements(willReuse: boolean): void;
 declare function setInsertDiffing(willInsert: boolean): void;
 declare function setShouldSetReactivity(willSet: boolean): void;
+declare function setIgnoreIsConnected(ignore: boolean): void;
 declare function html(htmlArray: TemplateStringsArray, ...variables: Array<any>): Element | DocumentFragment | Text;
 type FragmentCase = {
     children: ReturnType<typeof h>[];
@@ -68,8 +69,8 @@ declare function onRender(fn: Function, elem: ReturnType<typeof html>, ...args: 
 declare function onCleanup(fn: Function, elem: ReturnType<typeof html>, ...args: Array<any>): void;
 declare function view(root: string, data: reactiveObject<Array<any>>, renderFunction: (value: any, index: number) => Node): void;
 declare const hydro: hydroObject;
-declare const $: <T extends string>(query: T) => MatchEachElement<GetEachElementName<Split<T, ",">, []>, null>;
-declare const $$: <T extends string>(query: T) => [] | NonNullable<MatchEachElement<GetEachElementName<Split<T, ",">, []>, null>>[];
+declare const $: <T extends string>(query: T) => QueryResult<T>;
+declare const $$: <T extends string>(query: T) => Array<NonNullable<QueryResult<T>>> | [];
 type Split<S extends string, D extends string> = S extends `${infer T}${D}${infer U}` ? [T, ...Split<U, D>] : [S];
 type TakeLast<V> = V extends [] ? never : V extends [string] ? V[0] : V extends [string, ...infer R] ? TakeLast<R> : never;
 type TrimLeft<V extends string> = V extends ` ${infer R}` ? TrimLeft<R> : V;
@@ -87,4 +88,4 @@ type QueryResult<T extends string> = MatchEachElement<GetElementNames<T>>;
 declare const internals: {
     compare: typeof compare;
 };
-export { render, html, h, hydro, setGlobalSchedule, setReuseElements, setInsertDiffing, setShouldSetReactivity, reactive, unset, setAsyncUpdate, unobserve, observe, ternary, emit, watchEffect, internals, getValue, onRender, onCleanup, setReactivity, $, $$, view, };
+export { render, html, h, hydro, setGlobalSchedule, setReuseElements, setInsertDiffing, setShouldSetReactivity, setIgnoreIsConnected, reactive, unset, setAsyncUpdate, unobserve, observe, ternary, emit, watchEffect, internals, getValue, onRender, onCleanup, setReactivity, $, $$, view, };

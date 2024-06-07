@@ -107,6 +107,7 @@ let reuseElements = true; // Reuses Elements when rendering
 let insertBeforeDiffing = false; // Makes sense in Chrome only
 let shouldSetReactivity = true;
 let viewElements = false;
+let ignoreIsConnected = false;
 
 const reactivityRegex = /\{\{([^]*?)\}\}/;
 const HTML_FIND_INVALID = /<(\/?)(html|head|body)(>|\s.*?>)/g;
@@ -199,6 +200,9 @@ function setInsertDiffing(willInsert: boolean): void {
 }
 function setShouldSetReactivity(willSet: boolean): void {
   shouldSetReactivity = willSet;
+}
+function setIgnoreIsConnected(ignore: boolean): void {
+  ignoreIsConnected = ignore;
 }
 function setHydroRecursive(obj: hydroObject) {
   Reflect.set(obj, Placeholder.asyncUpdate, globalSchedule);
@@ -1003,7 +1007,7 @@ function unmount<T = ReturnType<typeof html> | Array<ChildNode>>(elem: T) {
 }
 
 function removeElement(elem: Text | Element) {
-  if (elem.isConnected) {
+  if (!ignoreIsConnected && elem.isConnected) {
     elem.remove();
     runLifecyle(elem, onCleanupMap);
   }
@@ -1524,7 +1528,7 @@ function updateDOM(nodeToChangeMap: nodeToChangeMap, val: any, oldVal: any) {
     // Circular reference in order to keep Memory low
     if (isNode(entry as Text)) {
       /* c8 ignore next 5 */
-      if (!(entry as Node).isConnected) {
+      if (!ignoreIsConnected && !(entry as Node).isConnected) {
         const tmpChange = nodeToChangeMap.get(entry)!;
         nodeToChangeMap.delete(entry);
         nodeToChangeMap.delete(tmpChange);
@@ -1769,6 +1773,7 @@ export {
   setReuseElements,
   setInsertDiffing,
   setShouldSetReactivity,
+  setIgnoreIsConnected,
   reactive,
   unset,
   setAsyncUpdate,

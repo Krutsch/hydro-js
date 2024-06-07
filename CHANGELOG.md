@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.18 2024-06-07
+
+- add function to toggle whether connected should be considered (defaults to false). This can be useful with non-rendered elements in combination with a router
+
 ## 1.5.18 2024-02-21
 
 - enable DocumentFragment in h function

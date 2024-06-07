@@ -26,6 +26,7 @@ let reuseElements = true; // Reuses Elements when rendering
 let insertBeforeDiffing = false; // Makes sense in Chrome only
 let shouldSetReactivity = true;
 let viewElements = false;
+let ignoreIsConnected = false;
 const reactivityRegex = /\{\{([^]*?)\}\}/;
 const HTML_FIND_INVALID = /<(\/?)(html|head|body)(>|\s.*?>)/g;
 const newLineRegex = /\n/g;
@@ -110,6 +111,9 @@ function setInsertDiffing(willInsert) {
 }
 function setShouldSetReactivity(willSet) {
     shouldSetReactivity = willSet;
+}
+function setIgnoreIsConnected(ignore) {
+    ignoreIsConnected = ignore;
 }
 function setHydroRecursive(obj) {
     Reflect.set(obj, "asyncUpdate" /* Placeholder.asyncUpdate */, globalSchedule);
@@ -754,7 +758,7 @@ function unmount(elem) {
     }
 }
 function removeElement(elem) {
-    if (elem.isConnected) {
+    if (!ignoreIsConnected && elem.isConnected) {
         elem.remove();
         runLifecyle(elem, onCleanupMap);
     }
@@ -1197,7 +1201,7 @@ function updateDOM(nodeToChangeMap, val, oldVal) {
         // Circular reference in order to keep Memory low
         if (isNode(entry)) {
             /* c8 ignore next 5 */
-            if (!entry.isConnected) {
+            if (!ignoreIsConnected && !entry.isConnected) {
                 const tmpChange = nodeToChangeMap.get(entry);
                 nodeToChangeMap.delete(entry);
                 nodeToChangeMap.delete(tmpChange);
@@ -1355,4 +1359,4 @@ const $$ = document.querySelectorAll.bind(document);
 const internals = {
     compare,
 };
-export { render, html, h, hydro, setGlobalSchedule, setReuseElements, setInsertDiffing, setShouldSetReactivity, reactive, unset, setAsyncUpdate, unobserve, observe, ternary, emit, watchEffect, internals, getValue, onRender, onCleanup, setReactivity, $, $$, view, };
+export { render, html, h, hydro, setGlobalSchedule, setReuseElements, setInsertDiffing, setShouldSetReactivity, setIgnoreIsConnected, reactive, unset, setAsyncUpdate, unobserve, observe, ternary, emit, watchEffect, internals, getValue, onRender, onCleanup, setReactivity, $, $$, view, };
