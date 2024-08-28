@@ -29,15 +29,15 @@ Alternatively you can use a CDN:
 
 ## Examples
 
-- [Simple Counter](https://codesandbox.io/s/hydro-js-counter-mwpf4?file=/index.js)
-- [Reactive CSS](https://codesandbox.io/s/reactive-styles-916pr?file=/index.js)
-- [Two Way Data Binding](https://codesandbox.io/s/hydro-js-two-way-data-binding-observe-extpq?file=/index.js)
-- [Show](https://codesandbox.io/s/show-widzf?file=/index.js)
-- [Destructure Attributes](https://codesandbox.io/s/hydro-js-destructure-attributes-zhcx7?file=/index.js)
-- [Ternary](https://codesandbox.io/s/hydro-js-ternary-c01h2?file=/index.js)
-- [Promise Handling](https://codesandbox.io/s/hydro-js-promise-handling-eo90f?file=/index.js)
-- [Nested Reactivity](https://codesandbox.io/s/hydro-js-nested-reactivity-myjpt?file=/index.js)
-- [Nested Reactivity 2](https://codesandbox.io/s/hydro-js-nested-reactivity-2-6xy42?file=/index.js)
+- [Simple Counter](https://stackblitz.com/edit/hydro-simple-counter)
+- [Reactive CSS](https://stackblitz.com/edit/hydro-reactive-styles)
+- [Two Way Data Binding](https://stackblitz.com/edit/hydro-two-way-data)
+- [Show](https://stackblitz.com/edit/hydro-show-ternary)
+- [Destructure Attributes](https://stackblitz.com/edit/hydro-destructure-attributes)
+- [Ternary](https://stackblitz.com/edit/hydro-ternary)
+- [Promise Handling](https://stackblitz.com/edit/hydro-promise)
+- [Nested Reactivity](https://stackblitz.com/edit/hydro-nested-reactivity)
+- [Nested Reactivity 2](https://stackblitz.com/edit/hydro-nested-reactivity-2)
 
 ## Concept
 
