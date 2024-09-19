@@ -30,13 +30,14 @@ declare global {
 type isInputPendingOptions = {
     includeContinuous: boolean;
 };
-interface hydroObject extends Record<PropertyKey, any> {
+export interface hydroObject extends Record<PropertyKey, any> {
     isProxy: boolean;
     asyncUpdate: boolean;
     observe: (key: PropertyKey, fn: Function) => any;
     getObservers: () => Map<string, Set<Function>>;
     unobserve: (key?: PropertyKey, handler?: Function) => undefined;
 }
+type nodeChanges = Array<[number, number, string | undefined, hydroObject]>;
 interface EventObject {
     event: EventListener;
     options: AddEventListenerOptions;
@@ -87,5 +88,7 @@ type MatchEachElement<V, L extends Element | null = null> = V extends [] ? L : V
 type QueryResult<T extends string> = MatchEachElement<GetElementNames<T>>;
 declare const internals: {
     compare: typeof compare;
+    allNodeChanges: WeakMap<Element | Text, nodeChanges>;
+    hydroToReactive: WeakMap<WeakKey, any>;
 };
 export { render, html, h, hydro, setGlobalSchedule, setReuseElements, setInsertDiffing, setShouldSetReactivity, setIgnoreIsConnected, reactive, unset, setAsyncUpdate, unobserve, observe, ternary, emit, watchEffect, internals, getValue, onRender, onCleanup, setReactivity, $, $$, view, };

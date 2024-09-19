@@ -18,6 +18,7 @@ const tmpSwap = new WeakMap(); // Take over keyToNodeMap if the new value is a h
 const onRenderMap = new WeakMap(); // Lifecycle Hook that is being called after rendering
 const onCleanupMap = new WeakMap(); // Lifecycle Hook that is being called when unmount function is being called
 const fragmentToElements = new WeakMap(); // Used to retreive Elements from DocumentFragment after it has been rendered – for diffing
+const hydroToReactive = new WeakMap(); // Used for internal mapping from hydroKeys to the the Proxy created by the reactive function
 const _boundFunctions = Symbol("boundFunctions"); // Cache for bound functions in Proxy, so that we create the bound version of each function only once
 const reactiveSymbol = Symbol("reactive");
 const keysSymbol = Symbol("keys");
@@ -124,11 +125,16 @@ function setHydroRecursive(obj) {
     }
 }
 function setAttribute(node, key, val) {
-    if (boolAttrList.includes(key) && !val) {
+    const isBoolAttr = boolAttrList.includes(key);
+    if (isBoolAttr && !val) {
         node.removeAttribute(key);
         return false;
     }
-    node.setAttribute(key, val);
+    node.setAttribute(key, isFunction(val) && Reflect.has(val, reactiveSymbol)
+        ? val
+        : isBoolAttr
+            ? ""
+            : val);
     return true;
 }
 function addEventListener(node, eventName, obj) {
@@ -381,7 +387,7 @@ function setReactivitySingle(node, key, val) {
                     changeAttrVal("input", node, resolvedObj, lastProp);
                 }
                 attr_OR_text = attr_OR_text.replace(hydroMatch, "");
-                node.setAttribute("two-way" /* Placeholder.twoWay */, "");
+                node.toggleAttribute("two-way" /* Placeholder.twoWay */);
             }
             else if (isFunction(resolvedValue) || isEventObject(resolvedValue)) {
                 attr_OR_text = attr_OR_text.replace(hydroMatch, "");
@@ -432,7 +438,7 @@ function changeAttrVal(eventName, node, resolvedObj, lastProp, isChecked = false
 }
 function setTraces(start, end, node, hydroKey, resolvedObj, key) {
     // Set WeakMaps, that will be used to track a change for a Node but also to check if a Node has any other changes.
-    const change = [start, end, key];
+    const change = [start, end, key, resolvedObj];
     const changeArr = [change];
     if (allNodeChanges.has(node)) {
         allNodeChanges.get(node).push(change);
@@ -601,7 +607,7 @@ function executeLifecycle(node, lifecyleMap) {
     if (lifecyleMap.has(node)) {
         const fn = lifecyleMap.get(node);
         if (globalSchedule) {
-            window.requestIdleCallback(fn);
+            schedule(fn);
         }
         else {
             fn();
@@ -764,14 +770,10 @@ function removeElement(elem) {
     }
 }
 /* c8 ignore next 13 */
-function schedule(fn, ...args) {
-    if (navigator.scheduling) {
-        if (navigator.scheduling.isInputPending()) {
-            setTimeout(schedule, 0, fn, ...args);
-        }
-        else {
-            fn(...args);
-        }
+async function schedule(fn, ...args) {
+    if ("scheduler" in window) {
+        // @ts-ignore
+        scheduler.postTask(fn.bind(fn, ...args), { priority: "background" });
     }
     else {
         window.requestIdleCallback(() => fn(...args));
@@ -785,6 +787,9 @@ function reactive(initial) {
     Reflect.set(hydro, key, initial);
     Reflect.set(setter, reactiveSymbol, true);
     const chainKeysProxy = chainKeys(setter, [key]);
+    if (isObject(initial)) {
+        hydroToReactive.set(Reflect.get(hydro, key), chainKeysProxy);
+    }
     return chainKeysProxy;
     function setter(val) {
         const keys = // @ts-ignore
@@ -827,6 +832,9 @@ function unset(reactiveHydro) {
     const [lastProp, oneKey] = getReactiveKeys(reactiveHydro);
     if (oneKey) {
         Reflect.set(hydro, lastProp, null);
+        if (hydroToReactive.has(hydro[lastProp])) {
+            hydroToReactive.delete(hydro[lastProp]);
+        }
     }
     else {
         const [_, resolvedObj] = resolveObject(reactiveHydro[keysSymbol.description]);
@@ -1358,5 +1366,7 @@ const $ = document.querySelector.bind(document);
 const $$ = document.querySelectorAll.bind(document);
 const internals = {
     compare,
+    allNodeChanges,
+    hydroToReactive,
 };
 export { render, html, h, hydro, setGlobalSchedule, setReuseElements, setInsertDiffing, setShouldSetReactivity, setIgnoreIsConnected, reactive, unset, setAsyncUpdate, unobserve, observe, ternary, emit, watchEffect, internals, getValue, onRender, onCleanup, setReactivity, $, $$, view, };

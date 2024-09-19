@@ -31,14 +31,14 @@ type isInputPendingOptions = {
   includeContinuous: boolean;
 };
 
-interface hydroObject extends Record<PropertyKey, any> {
+export interface hydroObject extends Record<PropertyKey, any> {
   isProxy: boolean;
   asyncUpdate: boolean;
   observe: (key: PropertyKey, fn: Function) => any;
   getObservers: () => Map<string, Set<Function>>;
   unobserve: (key?: PropertyKey, handler?: Function) => undefined;
 }
-type nodeChanges = Array<[number, number, string | undefined]>;
+type nodeChanges = Array<[number, number, string | undefined, hydroObject]>;
 
 // Circular reference
 type nodeToChangeMap = Map<
@@ -98,6 +98,7 @@ const tmpSwap = new WeakMap<hydroObject, keyToNodeMap>(); // Take over keyToNode
 const onRenderMap = new WeakMap<ReturnType<typeof html>, Function>(); // Lifecycle Hook that is being called after rendering
 const onCleanupMap = new WeakMap<ReturnType<typeof html>, Function>(); // Lifecycle Hook that is being called when unmount function is being called
 const fragmentToElements = new WeakMap<DocumentFragment, Array<ChildNode>>(); // Used to retreive Elements from DocumentFragment after it has been rendered – for diffing
+const hydroToReactive = new WeakMap(); // Used for internal mapping from hydroKeys to the the Proxy created by the reactive function
 const _boundFunctions = Symbol("boundFunctions"); // Cache for bound functions in Proxy, so that we create the bound version of each function only once
 const reactiveSymbol = Symbol("reactive");
 const keysSymbol = Symbol("keys");
@@ -215,12 +216,20 @@ function setHydroRecursive(obj: hydroObject) {
 }
 
 function setAttribute(node: Element, key: string, val: any): boolean {
-  if (boolAttrList.includes(key) && !val) {
+  const isBoolAttr = boolAttrList.includes(key);
+  if (isBoolAttr && !val) {
     node.removeAttribute(key);
     return false;
   }
 
-  node.setAttribute(key, val);
+  node.setAttribute(
+    key,
+    isFunction(val) && Reflect.has(val, reactiveSymbol)
+      ? val
+      : isBoolAttr
+      ? ""
+      : val
+  );
   return true;
 }
 function addEventListener(
@@ -534,7 +543,7 @@ function setReactivitySingle(
         }
 
         attr_OR_text = attr_OR_text.replace(hydroMatch, "");
-        node.setAttribute(Placeholder.twoWay, "");
+        node.toggleAttribute(Placeholder.twoWay);
       } else if (isFunction(resolvedValue) || isEventObject(resolvedValue)) {
         attr_OR_text = attr_OR_text.replace(hydroMatch, "");
         node.removeAttribute(key!);
@@ -616,7 +625,7 @@ function setTraces(
   key?: string
 ): void {
   // Set WeakMaps, that will be used to track a change for a Node but also to check if a Node has any other changes.
-  const change = [start, end, key] as nodeChanges[number];
+  const change = [start, end, key, resolvedObj] as nodeChanges[number];
   const changeArr = [change];
 
   if (allNodeChanges.has(node)) {
@@ -832,7 +841,7 @@ function executeLifecycle(
     const fn = lifecyleMap.get(node)!;
 
     if (globalSchedule) {
-      window.requestIdleCallback(fn as IdleRequestCallback);
+      schedule(fn);
     } else {
       fn();
     }
@@ -1014,13 +1023,10 @@ function removeElement(elem: Text | Element) {
 }
 
 /* c8 ignore next 13 */
-function schedule(fn: Function, ...args: any): void {
-  if (navigator.scheduling) {
-    if (navigator.scheduling.isInputPending()) {
-      setTimeout(schedule, 0, fn, ...args);
-    } else {
-      fn(...args);
-    }
+async function schedule(fn: Function, ...args: any): Promise<void> {
+  if ("scheduler" in window) {
+    // @ts-ignore
+    scheduler.postTask(fn.bind(fn, ...args), { priority: "background" });
   } else {
     window.requestIdleCallback(() => fn(...args));
   }
@@ -1036,6 +1042,9 @@ function reactive<T>(initial: T): reactiveObject<T> {
   Reflect.set(setter, reactiveSymbol, true);
 
   const chainKeysProxy = chainKeys(setter, [key]);
+  if (isObject(initial)) {
+    hydroToReactive.set(Reflect.get(hydro, key), chainKeysProxy);
+  }
   return chainKeysProxy;
 
   function setter<U>(val: U) {
@@ -1084,6 +1093,9 @@ function unset(reactiveHydro: reactiveObject<any>): void {
 
   if (oneKey) {
     Reflect.set(hydro, lastProp, null);
+    if (hydroToReactive.has(hydro[lastProp])) {
+      hydroToReactive.delete(hydro[lastProp]);
+    }
   } else {
     const [_, resolvedObj] = resolveObject(
       reactiveHydro[keysSymbol.description!]
@@ -1763,6 +1775,8 @@ type QueryResult<T extends string> = MatchEachElement<GetElementNames<T>>;
 
 const internals = {
   compare,
+  allNodeChanges,
+  hydroToReactive,
 };
 export {
   render,

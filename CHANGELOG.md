@@ -1,6 +1,12 @@
 # Changelog
 
-## 1.5.18 2024-06-07
+## 1.5.20 2024-09-19
+
+- fix correct boolean setting for attr
+- add new internal variables for a new project
+- improve scheduling
+
+## 1.5.19 2024-06-07
 
 - add function to toggle whether connected should be considered (defaults to false). This can be useful with non-rendered elements in combination with a router
 
