@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.5.20 2024-09-25
+- fix a TypeScript type
+
 ## 1.5.20 2024-09-19
 
 - fix correct boolean setting for attr
