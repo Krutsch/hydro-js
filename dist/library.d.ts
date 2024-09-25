@@ -89,6 +89,6 @@ type QueryResult<T extends string> = MatchEachElement<GetElementNames<T>>;
 declare const internals: {
     compare: typeof compare;
     allNodeChanges: WeakMap<Element | Text, nodeChanges>;
-    hydroToReactive: WeakMap<WeakKey, any>;
+    hydroToReactive: WeakMap<hydroObject, any>;
 };
 export { render, html, h, hydro, setGlobalSchedule, setReuseElements, setInsertDiffing, setShouldSetReactivity, setIgnoreIsConnected, reactive, unset, setAsyncUpdate, unobserve, observe, ternary, emit, watchEffect, internals, getValue, onRender, onCleanup, setReactivity, $, $$, view, };
