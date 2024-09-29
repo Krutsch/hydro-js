@@ -1,6 +1,9 @@
 # Changelog
 
-## 1.5.20 2024-09-25
+## 1.5.22 2024-09-29
+- export bool attrs
+
+## 1.5.21 2024-09-25
 - fix a TypeScript type
 
 ## 1.5.20 2024-09-19

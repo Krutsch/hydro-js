@@ -1777,6 +1777,7 @@ const internals = {
   compare,
   allNodeChanges,
   hydroToReactive,
+  boolAttrList,
 };
 export {
   render,

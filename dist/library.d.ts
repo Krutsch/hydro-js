@@ -90,5 +90,6 @@ declare const internals: {
     compare: typeof compare;
     allNodeChanges: WeakMap<Element | Text, nodeChanges>;
     hydroToReactive: WeakMap<hydroObject, any>;
+    boolAttrList: string[];
 };
 export { render, html, h, hydro, setGlobalSchedule, setReuseElements, setInsertDiffing, setShouldSetReactivity, setIgnoreIsConnected, reactive, unset, setAsyncUpdate, unobserve, observe, ternary, emit, watchEffect, internals, getValue, onRender, onCleanup, setReactivity, $, $$, view, };
