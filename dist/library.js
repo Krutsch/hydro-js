@@ -2,9 +2,9 @@
 window.requestIdleCallback =
     /* c8 ignore next 4 */
     window.requestIdleCallback ||
-        ((cb, _, start = performance.now()) => setTimeout(cb, 0, {
+        ((cb, _, start = window.performance.now()) => window.setTimeout(cb, 0, {
             didTimeout: false,
-            timeRemaining: () => Math.max(0, 5 - (performance.now() - start)),
+            timeRemaining: () => Math.max(0, 5 - (window.performance.now() - start)),
         }));
 // Safari Polyfills END
 const range = document.createRange();
@@ -77,7 +77,7 @@ function isTextNode(node) {
     return node.splitText !== undefined;
 }
 function isNode(node) {
-    return node instanceof Node;
+    return node instanceof window.Node;
 }
 function isDocumentFragment(node) {
     return node.nodeType === 11;
@@ -202,11 +202,11 @@ function html(htmlArray, ...variables) {
     return DOM.firstChild;
 }
 function fillDOM(elem, insertNodes, eventFunctions) {
-    const root = document.createNodeIterator(elem, NodeFilter.SHOW_ELEMENT, {
+    const root = document.createNodeIterator(elem, window.NodeFilter.SHOW_ELEMENT, {
         acceptNode(element) {
             return element.localName.endsWith("-dummy" /* Placeholder.dummy */)
-                ? NodeFilter.FILTER_ACCEPT
-                : NodeFilter.FILTER_REJECT;
+                ? window.NodeFilter.FILTER_ACCEPT
+                : window.NodeFilter.FILTER_REJECT;
         },
     });
     let nextNode;
@@ -344,7 +344,7 @@ function setReactivitySingle(node, key, val) {
         // Set Text or set Attribute
         if (isTextNode(node)) {
             const textContent = isObject(resolvedValue)
-                ? JSON.stringify(resolvedValue)
+                ? window.JSON.stringify(resolvedValue)
                 : resolvedValue ?? "";
             attr_OR_text = attr_OR_text.replace(hydroMatch, textContent);
             if (attr_OR_text != null) {
@@ -367,22 +367,22 @@ function setReactivitySingle(node, key, val) {
                 continue;
             }
             else if (key === "two-way" /* Placeholder.twoWay */) {
-                if (node instanceof HTMLSelectElement) {
+                if (node instanceof window.HTMLSelectElement) {
                     node.value = resolvedValue;
                     changeAttrVal("change" /* Placeholder.change */, node, resolvedObj, lastProp);
                 }
-                else if (node instanceof HTMLInputElement &&
+                else if (node instanceof window.HTMLInputElement &&
                     node.type === "radio" /* Placeholder.radio */) {
                     node.checked = node.value === resolvedValue;
                     changeAttrVal("change" /* Placeholder.change */, node, resolvedObj, lastProp);
                 }
-                else if (node instanceof HTMLInputElement &&
+                else if (node instanceof window.HTMLInputElement &&
                     node.type === "checkbox" /* Placeholder.checkbox */) {
                     node.checked = resolvedValue;
                     changeAttrVal("change" /* Placeholder.change */, node, resolvedObj, lastProp, true);
                 }
-                else if (node instanceof HTMLTextAreaElement ||
-                    node instanceof HTMLInputElement) {
+                else if (node instanceof window.HTMLTextAreaElement ||
+                    node instanceof window.HTMLInputElement) {
                     node.value = resolvedValue;
                     changeAttrVal("input", node, resolvedObj, lastProp);
                 }
@@ -773,7 +773,7 @@ function removeElement(elem) {
 async function schedule(fn, ...args) {
     if ("scheduler" in window) {
         // @ts-ignore
-        scheduler.postTask(fn.bind(fn, ...args), { priority: "background" });
+        window.scheduler.postTask(fn.bind(fn, ...args), { priority: "background" });
     }
     else {
         window.requestIdleCallback(() => fn(...args));
@@ -1239,19 +1239,19 @@ function updateDOM(nodeToChangeMap, val, oldVal) {
             }
             else {
                 if (key === "two-way" /* Placeholder.twoWay */) {
-                    if (node instanceof HTMLInputElement &&
+                    if (node instanceof window.HTMLInputElement &&
                         node.type === "radio" /* Placeholder.radio */) {
                         node.checked = Array.isArray(val)
                             ? val.includes(node.name)
                             : String(val) === node.value;
                     }
-                    else if (node instanceof HTMLInputElement &&
+                    else if (node instanceof window.HTMLInputElement &&
                         node.type === "checkbox" /* Placeholder.checkbox */) {
                         node.checked = val;
                     }
-                    else if (node instanceof HTMLTextAreaElement ||
-                        node instanceof HTMLSelectElement ||
-                        node instanceof HTMLInputElement) {
+                    else if (node instanceof window.HTMLTextAreaElement ||
+                        node instanceof window.HTMLSelectElement ||
+                        node instanceof window.HTMLInputElement) {
                         node.value = String(val);
                     }
                 }

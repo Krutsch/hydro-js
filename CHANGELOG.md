@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.5.23 2025-04-02
+- make use of window object in order to work on the server for upcoming SSR
+
 ## 1.5.22 2024-09-29
 - export bool attrs
 
