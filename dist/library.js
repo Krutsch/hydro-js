@@ -262,7 +262,7 @@ function setReactivity(DOM, eventFunctions) {
         setReactivitySingle(DOM);
         return;
     }
-    const elems = document.createNodeIterator(DOM, NodeFilter.SHOW_ELEMENT);
+    const elems = document.createNodeIterator(DOM, window.NodeFilter.SHOW_ELEMENT);
     let elem;
     while ((elem = elems.nextNode())) {
         for (const key of elem.getAttributeNames()) {
@@ -620,7 +620,7 @@ function runLifecyle(node, lifecyleMap) {
         (lifecyleMap === onCleanupMap && !calledOnCleanup))
         return;
     executeLifecycle(node, lifecyleMap);
-    const elements = document.createNodeIterator(node, NodeFilter.SHOW_ELEMENT);
+    const elements = document.createNodeIterator(node, window.NodeFilter.SHOW_ELEMENT);
     let subElem;
     while ((subElem = elements.nextNode())) {
         executeLifecycle(subElem, lifecyleMap);

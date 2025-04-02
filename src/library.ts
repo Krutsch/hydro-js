@@ -403,7 +403,10 @@ function setReactivity(
     return;
   }
 
-  const elems = document.createNodeIterator(DOM, NodeFilter.SHOW_ELEMENT);
+  const elems = document.createNodeIterator(
+    DOM,
+    window.NodeFilter.SHOW_ELEMENT
+  );
   let elem;
   while ((elem = elems.nextNode() as Element)) {
     for (const key of elem.getAttributeNames()) {
@@ -867,7 +870,7 @@ function runLifecyle(
 
   const elements = document.createNodeIterator(
     node as Node,
-    NodeFilter.SHOW_ELEMENT
+    window.NodeFilter.SHOW_ELEMENT
   );
 
   let subElem;

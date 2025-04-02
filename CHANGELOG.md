@@ -1,5 +1,6 @@
 # Changelog
 
+## 1.5.24 2025-04-02
 ## 1.5.23 2025-04-02
 - make use of window object in order to work on the server for upcoming SSR
 
