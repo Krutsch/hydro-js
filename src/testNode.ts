@@ -1,4 +1,17 @@
-import {
+import { JSDOM } from "jsdom";
+const { window } = new JSDOM(`<!doctype html>
+  <html lang="en">
+    <head>
+    </head>
+    <body>
+    </body>
+  </html>`);
+
+// @ts-expect-error
+globalThis.window = window;
+globalThis.document = window.document;
+
+const {
   html,
   h,
   hydro,
@@ -21,7 +34,7 @@ import {
   setAsyncUpdate,
   setReactivity,
   view,
-} from "./library.js";
+} = await import("./library.js");
 
 // Local debugging
 //@ts-ignore

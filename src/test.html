@@ -567,9 +567,9 @@
                 });
 
                 expect(
-                  document.body.innerText.includes("Fabian") &&
-                    document.body.innerText.includes("123") &&
-                    document.body.innerText.includes("0")
+                  document.body.textContent.includes("Fabian") &&
+                    document.body.textContent.includes("123") &&
+                    document.body.textContent.includes("0")
                 ).to.be.true;
               });
 
@@ -693,7 +693,7 @@
                   $("#datetime").value === "2018-06-08T00:00";
 
                 // Code Coverage
-                $("#radio1").dispatchEvent(new Event("change"));
+                $("#radio1").dispatchEvent(new window.Event("change"));
                 $("#checkbox1").click();
 
                 text("haha");

@@ -331,17 +331,22 @@ function fillDOM(
       },
     }
   );
-  let nextNode;
-  while ((nextNode = root.nextNode() as Element)) {
-    const tag = nextNode.localName.replace(Placeholder.dummy, "");
+  const nodes = [];
+  let currentNode;
+  while ((currentNode = root.nextNode())) {
+    nodes.push(currentNode as Element);
+  }
+
+  for (const node of nodes) {
+    const tag = node.localName.replace(Placeholder.dummy, "");
     const replacement = document.createElement(tag);
 
-    replacement.append(...nextNode.childNodes);
     /* c8 ignore next 3 */
-    for (const key of nextNode.getAttributeNames()) {
-      replacement.setAttribute(key, nextNode.getAttribute(key)!);
+    for (const key of node.getAttributeNames()) {
+      replacement.setAttribute(key, node.getAttribute(key)!);
     }
-    nextNode.replaceWith(replacement);
+    replacement.append(...node.childNodes);
+    node.replaceWith(replacement);
   }
 
   // Insert HTML Elements, which were stored in insertNodes
@@ -1186,7 +1191,9 @@ function emit(
   who: EventTarget,
   options: object = { bubbles: true }
 ) {
-  who.dispatchEvent(new CustomEvent(eventName, { ...options, detail: data }));
+  who.dispatchEvent(
+    new window.CustomEvent(eventName, { ...options, detail: data })
+  );
 }
 let trackDeps = false;
 const trackProxies = new Set<hydroObject>();

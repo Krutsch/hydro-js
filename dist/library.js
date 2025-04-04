@@ -209,16 +209,20 @@ function fillDOM(elem, insertNodes, eventFunctions) {
                 : window.NodeFilter.FILTER_REJECT;
         },
     });
-    let nextNode;
-    while ((nextNode = root.nextNode())) {
-        const tag = nextNode.localName.replace("-dummy" /* Placeholder.dummy */, "");
+    const nodes = [];
+    let currentNode;
+    while ((currentNode = root.nextNode())) {
+        nodes.push(currentNode);
+    }
+    for (const node of nodes) {
+        const tag = node.localName.replace("-dummy" /* Placeholder.dummy */, "");
         const replacement = document.createElement(tag);
-        replacement.append(...nextNode.childNodes);
         /* c8 ignore next 3 */
-        for (const key of nextNode.getAttributeNames()) {
-            replacement.setAttribute(key, nextNode.getAttribute(key));
+        for (const key of node.getAttributeNames()) {
+            replacement.setAttribute(key, node.getAttribute(key));
         }
-        nextNode.replaceWith(replacement);
+        replacement.append(...node.childNodes);
+        node.replaceWith(replacement);
     }
     // Insert HTML Elements, which were stored in insertNodes
     if (!isTextNode(elem)) {
@@ -892,7 +896,7 @@ function ternary(condition, trueVal, falseVal, reactiveHydro = condition) {
     return ternaryValue;
 }
 function emit(eventName, data, who, options = { bubbles: true }) {
-    who.dispatchEvent(new CustomEvent(eventName, { ...options, detail: data }));
+    who.dispatchEvent(new window.CustomEvent(eventName, { ...options, detail: data }));
 }
 let trackDeps = false;
 const trackProxies = new Set();
