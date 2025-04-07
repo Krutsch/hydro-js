@@ -110,7 +110,7 @@ let shouldSetReactivity = true;
 let viewElements = false;
 let ignoreIsConnected = false;
 
-const reactivityRegex = /\{\{([^]*?)\}\}/;
+const reactivityRegex = /\{\{([^]*?)\}\}|hydro-([a-zA-Z0-9_.-]+)/;
 const HTML_FIND_INVALID = /<(\/?)(html|head|body)(>|\s.*?>)/g;
 const newLineRegex = /\n/g;
 const propChainRegex = /[\.\[\]]/;
@@ -447,7 +447,11 @@ function setReactivity(
 
     let childNode = elem.firstChild;
     while (childNode) {
-      if (isTextNode(childNode) && childNode.nodeValue?.includes("{{")) {
+      if (
+        isTextNode(childNode) &&
+        (childNode.nodeValue?.includes("{{") ||
+          childNode.nodeValue?.includes("hydro-"))
+      ) {
         setReactivitySingle(childNode);
       }
       childNode = childNode.nextSibling;
@@ -471,7 +475,7 @@ function setReactivitySingle(
       // e.g. checked attribute or two-way attribute
       attr_OR_text = key!;
 
-      if (attr_OR_text.startsWith("{{")) {
+      if (attr_OR_text.startsWith("{{") || attr_OR_text.startsWith("hydro-")) {
         (node as Element).removeAttribute(attr_OR_text);
       }
     }
@@ -480,8 +484,8 @@ function setReactivitySingle(
   while ((match = attr_OR_text.match(reactivityRegex))) {
     // attr_OR_text will be altered in every iteration
 
-    const [hydroMatch, hydroPath] = match;
-    const properties = hydroPath
+    const [hydroMatch, hydroCurlyPath, hydroPath] = match;
+    const properties = (hydroCurlyPath ?? hydroPath)
       .trim()
       .replace(newLineRegex, "")
       .split(propChainRegex)
@@ -923,9 +927,9 @@ function treeDiff(
     if (!isDocumentFragment(where)) whereElements.unshift(where);
   }
 
-  let template: HTMLTemplateElement;
+  let template: HTMLDivElement;
   if (insertBeforeDiffing) {
-    template = document.createElement(Placeholder.template);
+    template = document.createElement("div");
     /* c8 ignore next 3 */
     if (where === document.documentElement) {
       where.append(template);
@@ -977,7 +981,11 @@ function treeDiff(
       for (const e of newElems) oldElems[0].before(e);
       for (const e of oldElems) e.remove();
     } else {
-      where.replaceWith(...newElems);
+      if (where instanceof window.HTMLHtmlElement) {
+        replaceElement(elem, where);
+      } else {
+        where.replaceWith(...newElems);
+      }
     }
     template!.remove();
     runLifecyle(where, onCleanupMap);
@@ -1014,7 +1022,17 @@ function replaceElement(
       }
     }
   } else {
-    where.replaceWith(elem);
+    if (
+      elem instanceof window.HTMLHtmlElement &&
+      where instanceof window.HTMLHtmlElement
+    ) {
+      for (const key of elem.getAttributeNames()) {
+        setAttribute(where, key, elem.getAttribute(key));
+      }
+      where.replaceChildren(...elem.childNodes);
+    } else {
+      where.replaceWith(elem);
+    }
   }
   runLifecyle(where, onCleanupMap);
 }
@@ -1087,7 +1105,7 @@ function chainKeys(initial: Function | any, keys: Array<PropertyKey>): any {
       }
 
       if (subKey === Symbol.toPrimitive) {
-        return () => `{{${keys.join(".")}}}`;
+        return () => `hydro-${keys.join(".")}`;
       }
 
       return chainKeys(target, [...keys, subKey]) as hydroObject &
@@ -1568,14 +1586,12 @@ function updateDOM(nodeToChangeMap: nodeToChangeMap, val: any, oldVal: any) {
       const [start, end, key] = change;
       let useStartEnd = false;
 
-      if (isNode(val)) {
+      if (isNode(val) && val !== node) {
         replaceElement(val as Element, node);
-        if (val !== node) {
-          nodeToChangeMap.delete(node);
-          if (!isDocumentFragment(val)) {
-            nodeToChangeMap.set(val as Element, entry);
-            nodeToChangeMap.set(entry, val as Element);
-          }
+        nodeToChangeMap.delete(node);
+        if (!isDocumentFragment(val)) {
+          nodeToChangeMap.set(val as Element, entry);
+          nodeToChangeMap.set(entry, val as Element);
         }
       } else if (isTextNode(node)) {
         useStartEnd = true;
