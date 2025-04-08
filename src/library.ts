@@ -71,6 +71,7 @@ const enum Placeholder {
   radio = "radio",
   checkbox = "checkbox",
   dummy = "-dummy",
+  reactiveKey = "hydro-reactive-",
 }
 
 // Safari Polyfills
@@ -110,7 +111,9 @@ let shouldSetReactivity = true;
 let viewElements = false;
 let ignoreIsConnected = false;
 
-const reactivityRegex = /\{\{([^]*?)\}\}|hydro-([a-zA-Z0-9_.-]+)/;
+const reactivityRegex = new RegExp(
+  `\\{\\{([^]*?)\\}\\}|${Placeholder.reactiveKey}([a-zA-Z0-9_.-]+)`
+);
 const HTML_FIND_INVALID = /<(\/?)(html|head|body)(>|\s.*?>)/g;
 const newLineRegex = /\n/g;
 const propChainRegex = /[\.\[\]]/;
@@ -450,7 +453,7 @@ function setReactivity(
       if (
         isTextNode(childNode) &&
         (childNode.nodeValue?.includes("{{") ||
-          childNode.nodeValue?.includes("hydro-"))
+          childNode.nodeValue?.includes(Placeholder.reactiveKey))
       ) {
         setReactivitySingle(childNode);
       }
@@ -475,7 +478,10 @@ function setReactivitySingle(
       // e.g. checked attribute or two-way attribute
       attr_OR_text = key!;
 
-      if (attr_OR_text.startsWith("{{") || attr_OR_text.startsWith("hydro-")) {
+      if (
+        attr_OR_text.startsWith("{{") ||
+        attr_OR_text.startsWith(Placeholder.reactiveKey)
+      ) {
         (node as Element).removeAttribute(attr_OR_text);
       }
     }
@@ -1105,7 +1111,7 @@ function chainKeys(initial: Function | any, keys: Array<PropertyKey>): any {
       }
 
       if (subKey === Symbol.toPrimitive) {
-        return () => `hydro-${keys.join(".")}`;
+        return () => `${Placeholder.reactiveKey}${keys.join(".")}`;
       }
 
       return chainKeys(target, [...keys, subKey]) as hydroObject &

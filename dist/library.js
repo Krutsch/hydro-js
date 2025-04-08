@@ -28,7 +28,7 @@ let insertBeforeDiffing = false; // Makes sense in Chrome only
 let shouldSetReactivity = true;
 let viewElements = false;
 let ignoreIsConnected = false;
-const reactivityRegex = /\{\{([^]*?)\}\}|hydro-([a-zA-Z0-9_.-]+)/;
+const reactivityRegex = new RegExp(`\\{\\{([^]*?)\\}\\}|${"hydro-reactive-" /* Placeholder.reactiveKey */}([a-zA-Z0-9_.-]+)`);
 const HTML_FIND_INVALID = /<(\/?)(html|head|body)(>|\s.*?>)/g;
 const newLineRegex = /\n/g;
 const propChainRegex = /[\.\[\]]/;
@@ -307,7 +307,7 @@ function setReactivity(DOM, eventFunctions) {
         while (childNode) {
             if (isTextNode(childNode) &&
                 (childNode.nodeValue?.includes("{{") ||
-                    childNode.nodeValue?.includes("hydro-"))) {
+                    childNode.nodeValue?.includes("hydro-reactive-" /* Placeholder.reactiveKey */))) {
                 setReactivitySingle(childNode);
             }
             childNode = childNode.nextSibling;
@@ -324,7 +324,8 @@ function setReactivitySingle(node, key, val) {
         if (attr_OR_text === "") {
             // e.g. checked attribute or two-way attribute
             attr_OR_text = key;
-            if (attr_OR_text.startsWith("{{") || attr_OR_text.startsWith("hydro-")) {
+            if (attr_OR_text.startsWith("{{") ||
+                attr_OR_text.startsWith("hydro-reactive-" /* Placeholder.reactiveKey */)) {
                 node.removeAttribute(attr_OR_text);
             }
         }
@@ -837,7 +838,7 @@ function chainKeys(initial, keys) {
                 return keys;
             }
             if (subKey === Symbol.toPrimitive) {
-                return () => `hydro-${keys.join(".")}`;
+                return () => `${"hydro-reactive-" /* Placeholder.reactiveKey */}${keys.join(".")}`;
             }
             return chainKeys(target, [...keys, subKey]);
         },
