@@ -397,6 +397,7 @@ render(App(), $("#app")); // be aware that you have to render again, if you chan
 
 const html = renderToString();
 ```
+See here for an Integration with Vite: https://github.com/Krutsch/vite-ssr-hydrojs
 
 
 
