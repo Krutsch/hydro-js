@@ -1,6 +1,6 @@
 {
   "name": "hydro-js",
-  "version": "1.8.1",
+  "version": "1.8.2",
   "description": "A lightweight reactive library",
   "type": "module",
   "main": "./dist/library.js",
@@ -42,8 +42,6 @@
     "@web/test-runner": "^0.20.1",
     "@web/test-runner-playwright": "^0.11.0",
     "concurrently": "^9.1.2",
-    "happy-dom": "^17.4.7",
-    "jsdom": "^26.1.0",
     "serve": "^14.2.4",
     "typescript": "^5.8.3"
   },
@@ -51,5 +49,9 @@
     "type": "git",
     "url": "git+https://github.com/Krutsch/hydro-js.git"
   },
-  "bugs": "https://github.com/Krutsch/hydro-js/issues"
+  "bugs": "https://github.com/Krutsch/hydro-js/issues",
+  "dependencies": {
+    "happy-dom": "^17.4.7",
+    "jsdom": "^26.1.0"
+  }
 }

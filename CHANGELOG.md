@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.8.2 2025-05-12
+-fix: move happy-dom and jsdom to deps
+ 
 ## 1.8.1 2025-05-12
 - fix: build the files and fix types
 
