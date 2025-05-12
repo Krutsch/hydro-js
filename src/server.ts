@@ -10,8 +10,12 @@ const library = new Promise((resolve) =>
       resolve({ ...lib, renderToString, setDOMRenderer });
     })
   )
-);
-
+) as Promise<
+  typeof import("./library.js") & {
+    renderToString: typeof renderToString;
+    setDOMRenderer: typeof setDOMRenderer;
+  }
+>;
 async function setDOMRenderer(engine = "happy-dom", filePath = "index.html") {
   const indexFile = await readFile(filePath, "utf-8");
   let window;

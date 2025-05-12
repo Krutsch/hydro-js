@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.8.1 2025-05-12
+- fix: build the files and fix types
+
 ## 1.8.0 2025-05-12
 - ship hydro-js/server for better Vite SSR integration
 
