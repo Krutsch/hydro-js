@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.8.0 2025-05-12
+- ship hydro-js/server for better Vite SSR integration
+
+## 1.7.1 2025-04-08
+- fix reactive bug when using SSR with happy-dom
+
+## 1.7.0 2025-04-07
+- feat: make library happy-dom compatible
+
 ## 1.6.0 2025-04-04
 - improve prev change
 - remove code from previous change

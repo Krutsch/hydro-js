@@ -2,7 +2,7 @@
 
 # hydro-js
 
-> A lightweight (below 5K <em>compressed</em>) reactive UI library via template literal tags.<br> Support in all modern Browsers.
+> A lightweight (below 5K <em>compressed</em>) reactive UI library via template literal tags.<br> Support in all modern Browsers and with Server-Side Rendering!
 
 ## Installation
 
@@ -382,6 +382,23 @@ const data = reactive({ name: "Pet" });
 render(html`<p bind=${data}>${data.name}</p>`);
 setTimeout(() => unset(data), 1000); // will remove the element
 ```
+
+### SSR
+
+- This is being done via happy-dom preferably or jsdom alternately. The Renderer expects a index.html file in the project folder, but the path can be changed when calling the setDOMRenderer.
+
+#### Example
+```js
+import library from "hydro-js/server";
+const { render, renderToString, setDOMRenderer } = await library;
+
+import App from "./App.ts";
+render(App(), $("#app")); // be aware that you have to render again, if you change the DOMRenderer
+
+const html = renderToString();
+```
+
+
 
 ## Further
 
