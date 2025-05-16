@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.8.3 2025-05-16
+- move integrations to own package
+
 ## 1.8.2 2025-05-12
 -fix: move happy-dom and jsdom to deps
  

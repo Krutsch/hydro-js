@@ -385,19 +385,7 @@ setTimeout(() => unset(data), 1000); // will remove the element
 
 ### SSR
 
-- This is being done via happy-dom preferably or jsdom alternately. The Renderer expects a index.html file in the project folder, but the path can be changed when calling the setDOMRenderer.
-
-#### Example
-```js
-import library from "hydro-js/server";
-const { render, renderToString, setDOMRenderer } = await library;
-
-import App from "./App.ts";
-render(App(), $("#app")); // be aware that you have to render again, if you change the DOMRenderer
-
-const html = renderToString();
-```
-See here for an Integration with Vite: https://github.com/Krutsch/vite-ssr-hydrojs
+For Integrations, please refer here: https://github.com/Krutsch/hydro-js-integrations
 
 
 
