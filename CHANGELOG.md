@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.8.5 2025-05-21
+- undo change as the error may be in the integration
+
 ## 1.8.4 2025-05-21
 - fix document instance for jsdom
 
