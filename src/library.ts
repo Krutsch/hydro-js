@@ -821,7 +821,7 @@ function render(
   }
 
   if (!where) {
-    document.body.append(elem);
+    $("body")!.append(elem);
   } else {
     if (typeof where === Placeholder.string) {
       const resolveStringToElement = $(where as string);
@@ -937,7 +937,7 @@ function treeDiff(
   if (insertBeforeDiffing) {
     template = document.createElement("div");
     /* c8 ignore next 3 */
-    if (where === document.documentElement) {
+    if (where === $("html")) {
       where.append(template);
     } else {
       if (isDocumentFragment(where)) {

@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.8.4 2025-05-21
+- fix document instance for jsdom
+
 ## 1.8.3 2025-05-16
 - move integrations to own package
 

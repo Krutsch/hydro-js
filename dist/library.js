@@ -579,7 +579,7 @@ function render(elem, where = "", shouldSchedule = globalSchedule) {
         fragmentToElements.set(elem, elemChildren); // For diffing later
     }
     if (!where) {
-        document.body.append(elem);
+        $("body").append(elem);
     }
     else {
         if (typeof where === "string" /* Placeholder.string */) {
@@ -668,7 +668,7 @@ function treeDiff(elem, where) {
     if (insertBeforeDiffing) {
         template = document.createElement("div");
         /* c8 ignore next 3 */
-        if (where === document.documentElement) {
+        if (where === $("html")) {
             where.append(template);
         }
         else {
