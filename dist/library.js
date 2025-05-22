@@ -38,6 +38,7 @@ const onEventRegex = /^on/;
 // INFO: draggable and spellcheck are actually using booleans as string! Also, hidden is not really a bool attr, but is making use of the empty string too. Might consider to add 'translate' (yes and no as string)
 const boolAttrList = [
     "allowfullscreen",
+    "alpha",
     "async",
     "autofocus",
     "autoplay",
@@ -63,6 +64,10 @@ const boolAttrList = [
     "required",
     "reversed",
     "selected",
+    "shadowrootclonable",
+    "shadowrootcustomelementregistry",
+    "shadowrootdelegatesfocus",
+    "shadowrootserializable",
     "spellcheck",
 ];
 let lastSwapElem = null;

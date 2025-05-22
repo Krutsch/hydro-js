@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.8.6 2025-05-22
+- update bool attr list and testing elements
+
 ## 1.8.5 2025-05-21
 - undo change as the error may be in the integration
 
