@@ -96,6 +96,13 @@ function isProxy(hydroObject) {
 function isPromise(obj) {
     return isObject(obj) && typeof obj.then === "function";
 }
+function isServerSide() {
+    return (window.navigator.userAgent.includes("Node.js") ||
+        window.navigator.userAgent.includes("Deno") ||
+        window.navigator.userAgent.includes("Bun") ||
+        window.navigator.userAgent.includes("HappyDOM") ||
+        window.navigator.userAgent.includes("jsdom"));
+}
 function randomText() {
     const randomChars = "abcdefghijklmnopqrstuvwxyz0123456789";
     let result = "";
@@ -767,7 +774,7 @@ function replaceElement(elem, where) {
             }
         }
     }
-    else {
+    else if (isServerSide()) {
         if (elem instanceof window.HTMLHtmlElement &&
             where instanceof window.HTMLHtmlElement) {
             for (const key of elem.getAttributeNames()) {
@@ -778,6 +785,9 @@ function replaceElement(elem, where) {
         else {
             where.replaceWith(elem);
         }
+    }
+    else {
+        where.replaceWith(elem);
     }
     runLifecyle(where, onCleanupMap);
 }

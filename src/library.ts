@@ -185,6 +185,15 @@ function isProxy(hydroObject: any): hydroObject is hydroObject {
 function isPromise(obj: any): obj is Promise<any> {
   return isObject(obj) && typeof obj.then === "function";
 }
+function isServerSide() {
+  return (
+    window.navigator.userAgent.includes("Node.js") ||
+    window.navigator.userAgent.includes("Deno") ||
+    window.navigator.userAgent.includes("Bun") ||
+    window.navigator.userAgent.includes("HappyDOM") ||
+    window.navigator.userAgent.includes("jsdom")
+  );
+}
 function randomText() {
   const randomChars = "abcdefghijklmnopqrstuvwxyz0123456789";
   let result = "";
@@ -1032,7 +1041,7 @@ function replaceElement(
         }
       }
     }
-  } else {
+  } else if (isServerSide()) {
     if (
       elem instanceof window.HTMLHtmlElement &&
       where instanceof window.HTMLHtmlElement
@@ -1044,6 +1053,8 @@ function replaceElement(
     } else {
       where.replaceWith(elem);
     }
+  } else {
+    where.replaceWith(elem);
   }
   runLifecyle(where, onCleanupMap);
 }
@@ -1846,4 +1857,5 @@ export {
   $,
   $$,
   view,
+  isServerSide,
 };

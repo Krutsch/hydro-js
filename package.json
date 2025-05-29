@@ -1,6 +1,6 @@
 {
   "name": "hydro-js",
-  "version": "1.8.6",
+  "version": "1.8.7",
   "description": "A lightweight reactive library",
   "type": "module",
   "main": "./dist/library.js",
@@ -14,6 +14,7 @@
     "build": "tsc",
     "dev": "concurrently \"serve dist\" \"tsc -w\"",
     "test": "tsc && wtr src/test.html --node-resolve --coverage --playwright --browsers chromium firefox webkit",
+    "test:dom": "node dist/testHAPPYDOM.js && node dist/testJSDOM.js",
     "update": "npx npm-check-updates -u && npx typesync && npm i && npm outdated"
   },
   "keywords": [
