@@ -44,6 +44,7 @@ interface EventObject {
 }
 type reactiveObject<T> = T & hydroObject & ((setter: any) => void);
 type eventFunctions = Record<string, EventListener | EventObject>;
+declare function isServerSide(): boolean;
 declare function setGlobalSchedule(willSchedule: boolean): void;
 declare function setReuseElements(willReuse: boolean): void;
 declare function setInsertDiffing(willInsert: boolean): void;
@@ -92,4 +93,4 @@ declare const internals: {
     hydroToReactive: WeakMap<hydroObject, any>;
     boolAttrList: string[];
 };
-export { render, html, h, hydro, setGlobalSchedule, setReuseElements, setInsertDiffing, setShouldSetReactivity, setIgnoreIsConnected, reactive, unset, setAsyncUpdate, unobserve, observe, ternary, emit, watchEffect, internals, getValue, onRender, onCleanup, setReactivity, $, $$, view, };
+export { render, html, h, hydro, setGlobalSchedule, setReuseElements, setInsertDiffing, setShouldSetReactivity, setIgnoreIsConnected, reactive, unset, setAsyncUpdate, unobserve, observe, ternary, emit, watchEffect, internals, getValue, onRender, onCleanup, setReactivity, $, $$, view, isServerSide, };

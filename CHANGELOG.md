@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.8.8 2025-05-29
+- fix missing function
+
 ## 1.8.7 2025-05-29
 - fix bug when rendering the html element in a html element
 
