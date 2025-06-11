@@ -35,7 +35,7 @@
     "@web/test-runner": "^0.20.2",
     "@web/test-runner-playwright": "^0.11.0",
     "concurrently": "^9.1.2",
-    "happy-dom": "^17.4.7",
+    "happy-dom": "^18.0.1",
     "jsdom": "^26.1.0",
     "serve": "^14.2.4",
     "typescript": "^5.8.3"
