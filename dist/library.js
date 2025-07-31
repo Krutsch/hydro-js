@@ -36,7 +36,7 @@ const onEventRegex = /^on/;
 // https://html.spec.whatwg.org/#attributes-3
 // if value for bool attr is falsy, then remove attr
 // INFO: draggable and spellcheck are actually using booleans as string! Also, hidden is not really a bool attr, but is making use of the empty string too. Might consider to add 'translate' (yes and no as string)
-const boolAttrList = [
+const boolAttrSet = new Set([
     "allowfullscreen",
     "alpha",
     "async",
@@ -69,9 +69,16 @@ const boolAttrList = [
     "shadowrootdelegatesfocus",
     "shadowrootserializable",
     "spellcheck",
-];
+]);
 let lastSwapElem = null;
 let internReset = false;
+const primitiveTypes = new Set([
+    "number",
+    "string",
+    "symbol",
+    "boolean",
+    "bigint",
+]);
 function isObject(obj) {
     return obj != null && typeof obj === "object";
 }
@@ -137,7 +144,7 @@ function setHydroRecursive(obj) {
     }
 }
 function setAttribute(node, key, val) {
-    const isBoolAttr = boolAttrList.includes(key);
+    const isBoolAttr = boolAttrSet.has(key);
     if (isBoolAttr && !val) {
         node.removeAttribute(key);
         return false;
@@ -155,21 +162,24 @@ function addEventListener(node, eventName, obj) {
 function html(htmlArray, ...variables) {
     const eventFunctions = {}; // Temporarily store a mapping for string -> function, because eventListener have to be registered after the Element's creation
     let insertNodes = []; // Nodes, that will be added after the parsing
-    const resolvedVariables = [];
-    for (const variable of variables) {
+    const resolvedVariables = Array.from({
+        length: variables.length,
+    });
+    for (let i = 0; i < variables.length; i++) {
+        const variable = variables[i];
         const template = `<${"template" /* Placeholder.template */} id="lbInsertNodes"></${"template" /* Placeholder.template */}>`;
         if (isNode(variable)) {
             insertNodes.push(variable);
-            resolvedVariables.push(template);
+            resolvedVariables[i] = template;
         }
-        else if (["number", "string" /* Placeholder.string */, "symbol", "boolean", "bigint"].includes(typeof variable) ||
+        else if (primitiveTypes.has(typeof variable) ||
             Reflect.has(variable, reactiveSymbol)) {
-            resolvedVariables.push(String(variable));
+            resolvedVariables[i] = String(variable);
         }
         else if (isFunction(variable) || isEventObject(variable)) {
             const funcName = randomText();
             Reflect.set(eventFunctions, funcName, variable);
-            resolvedVariables.push(funcName);
+            resolvedVariables[i] = funcName;
         }
         else if (Array.isArray(variable)) {
             for (let index = 0; index < variable.length; index++) {
@@ -179,7 +189,7 @@ function html(htmlArray, ...variables) {
                     variable[index] = template;
                 }
             }
-            resolvedVariables.push(variable.join(""));
+            resolvedVariables[i] = variable.join("");
         }
         else if (isObject(variable)) {
             let result = "";
@@ -193,7 +203,7 @@ function html(htmlArray, ...variables) {
                     result += `${key}="${value}"`;
                 }
             }
-            resolvedVariables.push(result);
+            resolvedVariables[i] = result;
         }
     }
     // Find elements <html|head|body>, as they cannot be created by the parser. Replace them by fake Custom Elements and replace them afterwards.
@@ -226,7 +236,8 @@ function fillDOM(elem, insertNodes, eventFunctions) {
     while ((currentNode = root.nextNode())) {
         nodes.push(currentNode);
     }
-    for (const node of nodes) {
+    for (let i = 0; i < nodes.length; i++) {
+        const node = nodes[i];
         const tag = node.localName.replace("-dummy" /* Placeholder.dummy */, "");
         const replacement = document.createElement(tag);
         /* c8 ignore next 3 */
@@ -250,8 +261,8 @@ function h(name, props, ...children) {
     const elem = typeof name === "string" /* Placeholder.string */
         ? document.createElement(name, props?.hasOwnProperty("is") ? { is: props["is"] } : undefined)
         : document.createDocumentFragment();
-    for (let i in props) {
-        i in elem && !boolAttrList.includes(i)
+    for (const i in props) {
+        i in elem && !boolAttrSet.has(i)
             ? //@ts-ignore
                 (elem[i] = props[i])
             : setAttribute(elem, i, props[i]);
@@ -513,23 +524,16 @@ function compareEvents(elem, where, onlyTextChildren) {
     const elemFunctions = [];
     const whereFunctions = [];
     if (isTextNode(elem)) {
-        if (onRenderMap.has(elem)) {
+        if (onRenderMap.has(elem))
             elemFunctions.push(onRenderMap.get(elem));
-        }
-        if (onCleanupMap.has(elem)) {
+        if (onCleanupMap.has(elem))
             elemFunctions.push(onCleanupMap.get(elem));
-        }
-        if (onRenderMap.has(where)) {
+        if (onRenderMap.has(where))
             whereFunctions.push(onRenderMap.get(where));
-        }
-        if (onCleanupMap.has(where)) {
+        if (onCleanupMap.has(where))
             whereFunctions.push(onCleanupMap.get(where));
-        }
-        if (elemFunctions.length !== whereFunctions.length)
-            return false;
-        if (String(elemFunctions) !== String(whereFunctions))
-            return false;
-        return true;
+        return (elemFunctions.length === whereFunctions.length &&
+            String(elemFunctions) === String(whereFunctions));
     }
     if (elemEventFunctions.has(elem)) {
         elemFunctions.push(...elemEventFunctions.get(elem));
@@ -537,34 +541,30 @@ function compareEvents(elem, where, onlyTextChildren) {
     if (elemEventFunctions.has(where)) {
         whereFunctions.push(...elemEventFunctions.get(where));
     }
-    if (onRenderMap.has(elem)) {
+    if (onRenderMap.has(elem))
         elemFunctions.push(onRenderMap.get(elem));
-    }
-    if (onCleanupMap.has(elem)) {
+    if (onCleanupMap.has(elem))
         elemFunctions.push(onCleanupMap.get(elem));
-    }
-    if (onRenderMap.has(where)) {
+    if (onRenderMap.has(where))
         whereFunctions.push(onRenderMap.get(where));
-    }
-    if (onCleanupMap.has(where)) {
+    if (onCleanupMap.has(where))
         whereFunctions.push(onCleanupMap.get(where));
-    }
     if (elemFunctions.length !== whereFunctions.length)
         return false;
     if (String(elemFunctions) !== String(whereFunctions))
         return false;
     for (let i = 0; i < elem.childNodes.length; i++) {
+        const elemChild = elem.childNodes[i];
+        const whereChild = where.childNodes[i];
         if (onlyTextChildren) {
-            if (isTextNode(elem.childNodes[i])) {
-                if (!compareEvents(elem.childNodes[i], where.childNodes[i], onlyTextChildren)) {
+            if (isTextNode(elemChild)) {
+                if (!compareEvents(elemChild, whereChild, onlyTextChildren)) {
                     return false;
                 }
             }
         }
-        else {
-            if (!compareEvents(elem.childNodes[i], where.childNodes[i])) {
-                return false;
-            }
+        else if (!compareEvents(elemChild, whereChild)) {
+            return false;
         }
     }
     return true;
@@ -654,20 +654,20 @@ function runLifecyle(node, lifecyleMap) {
 }
 function filterTag2Elements(tag2Elements, root) {
     for (const [localName, list] of tag2Elements.entries()) {
-        for (let i = 0; i < list.length; i++) {
+        // Process list in reverse to avoid index issues when splicing
+        for (let i = list.length - 1; i >= 0; i--) {
             const elem = list[i];
             if (root.contains(elem) || root.isSameNode(elem)) {
                 list.splice(i, 1);
-                i--;
             }
-            if (list.length === 0) {
-                tag2Elements.delete(localName);
-            }
+        }
+        if (list.length === 0) {
+            tag2Elements.delete(localName);
         }
     }
 }
 function treeDiff(elem, where) {
-    let elemElements = [...elem.querySelectorAll("*")];
+    const elemElements = [...elem.querySelectorAll("*")];
     if (!isDocumentFragment(elem))
         elemElements.unshift(elem);
     let whereElements = [];
@@ -809,7 +809,7 @@ function removeElement(elem) {
 async function schedule(fn, ...args) {
     if ("scheduler" in window) {
         // @ts-ignore
-        window.scheduler.postTask(fn.bind(fn, ...args), { priority: "background" });
+        window.scheduler.postTask(() => fn(...args), { priority: "user-blocking" });
     }
     else {
         window.requestIdleCallback(() => fn(...args));
@@ -1039,8 +1039,7 @@ function generateProxy(obj) {
             }
             // Set the value
             if (isPromise(val)) {
-                const promise = val;
-                promise
+                val
                     .then((value) => {
                     // No Reflect in order to trigger the Getter
                     receiver[key] = value;
@@ -1225,7 +1224,9 @@ function checkReactivityMap(obj, key, val, oldVal) {
         }
     }
     if (isObject(val)) {
-        for (const [subKey, subVal] of Object.entries(val)) {
+        const entries = Object.entries(val);
+        for (let i = 0; i < entries.length; i++) {
+            const [subKey, subVal] = entries[i];
             const subOldVal = (isObject(oldVal) && Reflect.get(oldVal, subKey)) || oldVal;
             const nodeToChangeMap = keyToNodeMap.get(subKey);
             if (nodeToChangeMap) {
@@ -1295,7 +1296,9 @@ function updateDOM(nodeToChangeMap, val, oldVal) {
                     addEventListener(node, eventName, val);
                 }
                 else if (isObject(val)) {
-                    for (const [subKey, subVal] of Object.entries(val)) {
+                    const entries = Object.entries(val);
+                    for (let i = 0; i < entries.length; i++) {
+                        const [subKey, subVal] = entries[i];
                         if (isFunction(subVal) || isEventObject(subVal)) {
                             const eventName = subKey.replace(onEventRegex, "");
                             node.removeEventListener(eventName, isFunction(oldVal[subKey])
@@ -1402,6 +1405,6 @@ const internals = {
     compare,
     allNodeChanges,
     hydroToReactive,
-    boolAttrList,
+    boolAttrList: Array.from(boolAttrSet),
 };
 export { render, html, h, hydro, setGlobalSchedule, setReuseElements, setInsertDiffing, setShouldSetReactivity, setIgnoreIsConnected, reactive, unset, setAsyncUpdate, unobserve, observe, ternary, emit, watchEffect, internals, getValue, onRender, onCleanup, setReactivity, $, $$, view, isServerSide, };

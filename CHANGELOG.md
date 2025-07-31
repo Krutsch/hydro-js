@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.8.9 2025-07-31
+- minor code refactoring
+- increase priority for scheduler
+
 ## 1.8.8 2025-05-29
 - fix missing function
 
