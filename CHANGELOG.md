@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.8.10 2025-08-03
+- fix bug in view function where event functions were not added in combination with html function
+
 ## 1.8.9 2025-07-31
 - minor code refactoring
 - increase priority for scheduler

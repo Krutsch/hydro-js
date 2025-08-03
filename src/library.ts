@@ -103,6 +103,7 @@ const hydroToReactive = new WeakMap<hydroObject, reactiveObject<any>>(); // Used
 const _boundFunctions = Symbol("boundFunctions"); // Cache for bound functions in Proxy, so that we create the bound version of each function only once
 const reactiveSymbol = Symbol("reactive");
 const keysSymbol = Symbol("keys");
+let viewElementsEventFunctions = {};
 
 let globalSchedule = true; // Decides whether to schedule rendering and updating (async)
 let reuseElements = true; // Reuses Elements when rendering
@@ -205,7 +206,7 @@ function isServerSide() {
 function randomText() {
   const randomChars = "abcdefghijklmnopqrstuvwxyz0123456789";
   let result = "";
-  for (var i = 0; i < 6; i++) {
+  for (let i = 0; i < 6; i++) {
     result += randomChars.charAt(
       Math.floor(Math.random() * randomChars.length)
     );
@@ -294,6 +295,8 @@ function html(
     } else if (isFunction(variable) || isEventObject(variable)) {
       const funcName = randomText();
       Reflect.set(eventFunctions, funcName, variable);
+      viewElements &&
+        Reflect.set(viewElementsEventFunctions, funcName, variable);
       resolvedVariables[i] = funcName;
     } else if (Array.isArray(variable)) {
       for (let index = 0; index < variable.length; index++) {
@@ -310,6 +313,8 @@ function html(
         if (isFunction(value) || isEventObject(value)) {
           const funcName = randomText();
           Reflect.set(eventFunctions, funcName, value);
+          viewElements &&
+            Reflect.set(viewElementsEventFunctions, funcName, value);
           result += `${key}="${funcName}"`;
         } else {
           result += `${key}="${value}"`;
@@ -1696,7 +1701,10 @@ function view(
   const elements = getValue(data).map(renderFunction);
   rootElem.append(...elements);
   for (const elem of elements) runLifecyle(elem as Element, onRenderMap);
-  if (rootElem.hasChildNodes()) setReactivity(rootElem);
+  if (rootElem.hasChildNodes()) {
+    setReactivity(rootElem, viewElementsEventFunctions);
+    viewElementsEventFunctions = {};
+  }
   onCleanup(unset, rootElem, data);
 
   viewElements = false;
@@ -1743,7 +1751,10 @@ function view(
       rootElem.append(...elements);
       for (const elem of elements) runLifecyle(elem as Element, onRenderMap);
     }
-    if (rootElem.hasChildNodes()) setReactivity(rootElem);
+    if (rootElem.hasChildNodes()) {
+      setReactivity(rootElem, viewElementsEventFunctions);
+      viewElementsEventFunctions = {};
+    }
     viewElements = false;
     /* c8 ignore end */
   });

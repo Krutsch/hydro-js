@@ -22,6 +22,7 @@ const hydroToReactive = new WeakMap(); // Used for internal mapping from hydroKe
 const _boundFunctions = Symbol("boundFunctions"); // Cache for bound functions in Proxy, so that we create the bound version of each function only once
 const reactiveSymbol = Symbol("reactive");
 const keysSymbol = Symbol("keys");
+let viewElementsEventFunctions = {};
 let globalSchedule = true; // Decides whether to schedule rendering and updating (async)
 let reuseElements = true; // Reuses Elements when rendering
 let insertBeforeDiffing = false; // Makes sense in Chrome only
@@ -113,7 +114,7 @@ function isServerSide() {
 function randomText() {
     const randomChars = "abcdefghijklmnopqrstuvwxyz0123456789";
     let result = "";
-    for (var i = 0; i < 6; i++) {
+    for (let i = 0; i < 6; i++) {
         result += randomChars.charAt(Math.floor(Math.random() * randomChars.length));
     }
     return result;
@@ -179,6 +180,8 @@ function html(htmlArray, ...variables) {
         else if (isFunction(variable) || isEventObject(variable)) {
             const funcName = randomText();
             Reflect.set(eventFunctions, funcName, variable);
+            viewElements &&
+                Reflect.set(viewElementsEventFunctions, funcName, variable);
             resolvedVariables[i] = funcName;
         }
         else if (Array.isArray(variable)) {
@@ -197,6 +200,8 @@ function html(htmlArray, ...variables) {
                 if (isFunction(value) || isEventObject(value)) {
                     const funcName = randomText();
                     Reflect.set(eventFunctions, funcName, value);
+                    viewElements &&
+                        Reflect.set(viewElementsEventFunctions, funcName, value);
                     result += `${key}="${funcName}"`;
                 }
                 else {
@@ -1352,8 +1357,10 @@ function view(root, data, renderFunction) {
     rootElem.append(...elements);
     for (const elem of elements)
         runLifecyle(elem, onRenderMap);
-    if (rootElem.hasChildNodes())
-        setReactivity(rootElem);
+    if (rootElem.hasChildNodes()) {
+        setReactivity(rootElem, viewElementsEventFunctions);
+        viewElementsEventFunctions = {};
+    }
     onCleanup(unset, rootElem, data);
     viewElements = false;
     observe(data, (newData, oldData) => {
@@ -1392,8 +1399,10 @@ function view(root, data, renderFunction) {
             for (const elem of elements)
                 runLifecyle(elem, onRenderMap);
         }
-        if (rootElem.hasChildNodes())
-            setReactivity(rootElem);
+        if (rootElem.hasChildNodes()) {
+            setReactivity(rootElem, viewElementsEventFunctions);
+            viewElementsEventFunctions = {};
+        }
         viewElements = false;
         /* c8 ignore end */
     });

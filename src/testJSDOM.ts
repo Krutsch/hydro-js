@@ -2130,6 +2130,7 @@ describe("library", () => {
     describe("view", () => {
       it("creates a view that will handle add, delete and swap", async () => {
         let condition: boolean;
+        let triggeredEvent = false;
 
         const data = reactive([
           { id: 4, label: "Red Onions" },
@@ -2140,10 +2141,18 @@ describe("library", () => {
           "ul",
           data,
           (item, i) =>
-            html`<li>Reactive: ${data[i].id}, Non-reactive: ${item.label}</li>`
+            html`<li
+              onclick="${() => {
+                triggeredEvent = true;
+              }}"
+            >
+              Reactive: ${data[i].id}, Non-reactive: ${item.label}
+            </li>`
         );
 
         await sleep(300);
+
+        ($("ul")!.firstElementChild as HTMLElement).click();
 
         condition =
           $("ul")!.textContent!.includes("Red Onions") &&
@@ -2170,7 +2179,7 @@ describe("library", () => {
           unmount();
         }, 300);
 
-        return condition;
+        return triggeredEvent && condition;
       });
 
       it("creates a view that will handle add, delete and swap with (keyed)", async () => {
@@ -2190,6 +2199,8 @@ describe("library", () => {
         );
 
         await sleep(300);
+
+        ($("ul")!.firstElementChild as HTMLElement).click();
 
         condition =
           $("ul")!.textContent!.includes("Red Onions") &&
