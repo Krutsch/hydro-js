@@ -1683,8 +1683,9 @@ describe("library", () => {
                     { id: 4, label: "Red Onions" },
                     { id: 5, label: "Green Socks" },
                 ]);
-                const unmount = render(html `<ul></ul>`);
-                view("ul", data, (item, i) => html `<li
+                const list = html `<ul id="view"></ul>`;
+                const unmount = render(list);
+                view("#view", data, (item, i) => html `<li
               onclick="${() => {
                     triggeredEvent = true;
                 }}"
@@ -1692,18 +1693,18 @@ describe("library", () => {
               Reactive: ${data[i].id}, Non-reactive: ${item.label}
             </li>`);
                 await sleep(300);
-                $("ul").firstElementChild.click();
+                list.firstElementChild.click();
                 condition =
-                    $("ul").textContent.includes("Red Onions") &&
-                        $("ul").textContent.includes("Green Socks");
+                    list.textContent.includes("Red Onions") &&
+                        list.textContent.includes("Green Socks");
                 data[0].setter((curr) => {
                     curr.id = 6;
                     curr.label = "Orange Hat";
                 });
                 condition =
                     condition &&
-                        !$("ul").textContent.includes("Orange Hat") &&
-                        $("ul").textContent.includes("6");
+                        !list.textContent.includes("Orange Hat") &&
+                        list.textContent.includes("6");
                 data((curr) => {
                     [curr[0], curr[1]] = [curr[1], curr[0]];
                 });
@@ -1717,25 +1718,33 @@ describe("library", () => {
             it("creates a view that will handle add, delete and swap with (keyed)", async () => {
                 setReuseElements(false);
                 let condition;
+                let triggeredEvent = false;
                 const data = reactive([
                     { id: 4, label: "Red Onions" },
                     { id: 5, label: "Green Socks" },
                 ]);
-                const unmount = render(html `<ul></ul>`);
-                view("ul", data, (item, i) => html `<li>Reactive: ${data[i].id}, Non-reactive: ${item.label}</li>`);
+                const list = html `<ul id="keyed"></ul>`;
+                const unmount = render(list);
+                view("#keyed", data, (item, i) => html `<li
+              onclick="${() => {
+                    triggeredEvent = true;
+                }}"
+            >
+              Reactive: ${data[i].id}, Non-reactive: ${item.label}
+            </li>`);
                 await sleep(300);
-                $("ul").firstElementChild.click();
+                list.firstElementChild.click();
                 condition =
-                    $("ul").textContent.includes("Red Onions") &&
-                        $("ul").textContent.includes("Green Socks");
+                    list.textContent.includes("Red Onions") &&
+                        list.textContent.includes("Green Socks");
                 data[0].setter((curr) => {
                     curr.id = 6;
                     curr.label = "Orange Hat";
                 });
                 condition =
                     condition &&
-                        !$("ul").textContent.includes("Orange Hat") &&
-                        $("ul").textContent.includes("6");
+                        !list.textContent.includes("Orange Hat") &&
+                        list.textContent.includes("6");
                 data((curr) => {
                     [curr[0], curr[1]] = [curr[1], curr[0]];
                 });
@@ -1745,7 +1754,7 @@ describe("library", () => {
                     unmount();
                 }, 300);
                 setReuseElements(true);
-                return condition;
+                return triggeredEvent && condition;
             });
         });
     });

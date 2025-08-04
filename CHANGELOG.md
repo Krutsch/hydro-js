@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.8.11 2025-08-04
+- minor refactor to Map
+
 ## 1.8.10 2025-08-03
 - fix bug in view function where event functions were not added in combination with html function
 

@@ -22,7 +22,7 @@ const hydroToReactive = new WeakMap(); // Used for internal mapping from hydroKe
 const _boundFunctions = Symbol("boundFunctions"); // Cache for bound functions in Proxy, so that we create the bound version of each function only once
 const reactiveSymbol = Symbol("reactive");
 const keysSymbol = Symbol("keys");
-let viewElementsEventFunctions = {};
+let viewElementsEventFunctions = new Map();
 let globalSchedule = true; // Decides whether to schedule rendering and updating (async)
 let reuseElements = true; // Reuses Elements when rendering
 let insertBeforeDiffing = false; // Makes sense in Chrome only
@@ -302,7 +302,7 @@ function setReactivity(DOM, eventFunctions) {
             const val = elem.getAttribute(key);
             if (eventFunctions && key.startsWith("on")) {
                 const eventName = key.replace(onEventRegex, "");
-                const event = eventFunctions[val];
+                const event = Reflect.get(eventFunctions, val);
                 if (!event) {
                     setReactivitySingle(elem, key, val);
                     continue;
@@ -1359,7 +1359,7 @@ function view(root, data, renderFunction) {
         runLifecyle(elem, onRenderMap);
     if (rootElem.hasChildNodes()) {
         setReactivity(rootElem, viewElementsEventFunctions);
-        viewElementsEventFunctions = {};
+        viewElementsEventFunctions.clear();
     }
     onCleanup(unset, rootElem, data);
     viewElements = false;
@@ -1401,7 +1401,7 @@ function view(root, data, renderFunction) {
         }
         if (rootElem.hasChildNodes()) {
             setReactivity(rootElem, viewElementsEventFunctions);
-            viewElementsEventFunctions = {};
+            viewElementsEventFunctions.clear();
         }
         viewElements = false;
         /* c8 ignore end */

@@ -44,6 +44,7 @@ interface EventObject {
 }
 type reactiveObject<T> = T & hydroObject & ((setter: any) => void);
 type eventFunctions = Record<string, EventListener | EventObject>;
+declare let viewElementsEventFunctions: Map<string, eventFunctions>;
 declare function isServerSide(): boolean;
 declare function setGlobalSchedule(willSchedule: boolean): void;
 declare function setReuseElements(willReuse: boolean): void;
@@ -55,7 +56,7 @@ type FragmentCase = {
     children: ReturnType<typeof h>[];
 };
 declare function h(name: string | ((...args: any[]) => ReturnType<typeof h>) | FragmentCase, props: Record<keyof any, any> | null, ...children: Array<any>): ReturnType<typeof html>;
-declare function setReactivity(DOM: ReturnType<typeof html>, eventFunctions?: eventFunctions): void;
+declare function setReactivity(DOM: ReturnType<typeof html>, eventFunctions?: eventFunctions | typeof viewElementsEventFunctions): void;
 declare function compare(elem: Element | DocumentFragment, where: Element | DocumentFragment | Text, onlyTextChildren?: boolean): boolean;
 declare function render(elem: ReturnType<typeof html> | reactiveObject<any>, where?: ReturnType<typeof html> | string, shouldSchedule?: boolean): ChildNode["remove"];
 declare function reactive<T>(initial: T): reactiveObject<T>;

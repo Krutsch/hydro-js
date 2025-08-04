@@ -103,7 +103,7 @@ const hydroToReactive = new WeakMap<hydroObject, reactiveObject<any>>(); // Used
 const _boundFunctions = Symbol("boundFunctions"); // Cache for bound functions in Proxy, so that we create the bound version of each function only once
 const reactiveSymbol = Symbol("reactive");
 const keysSymbol = Symbol("keys");
-let viewElementsEventFunctions = {};
+let viewElementsEventFunctions = new Map<string, eventFunctions>();
 
 let globalSchedule = true; // Decides whether to schedule rendering and updating (async)
 let reuseElements = true; // Reuses Elements when rendering
@@ -433,7 +433,7 @@ function getChildren(child: unknown) {
 /* c8 ignore end */
 function setReactivity(
   DOM: ReturnType<typeof html>,
-  eventFunctions?: eventFunctions
+  eventFunctions?: eventFunctions | typeof viewElementsEventFunctions
 ) {
   if (isTextNode(DOM)) {
     setReactivitySingle(DOM);
@@ -451,7 +451,7 @@ function setReactivity(
       const val = elem.getAttribute(key)!;
       if (eventFunctions && key.startsWith("on")) {
         const eventName = key.replace(onEventRegex, "");
-        const event = eventFunctions[val];
+        const event = Reflect.get(eventFunctions, val);
         if (!event) {
           setReactivitySingle(elem, key, val);
           continue;
@@ -1703,7 +1703,7 @@ function view(
   for (const elem of elements) runLifecyle(elem as Element, onRenderMap);
   if (rootElem.hasChildNodes()) {
     setReactivity(rootElem, viewElementsEventFunctions);
-    viewElementsEventFunctions = {};
+    viewElementsEventFunctions.clear();
   }
   onCleanup(unset, rootElem, data);
 
@@ -1753,7 +1753,7 @@ function view(
     }
     if (rootElem.hasChildNodes()) {
       setReactivity(rootElem, viewElementsEventFunctions);
-      viewElementsEventFunctions = {};
+      viewElementsEventFunctions.clear();
     }
     viewElements = false;
     /* c8 ignore end */
