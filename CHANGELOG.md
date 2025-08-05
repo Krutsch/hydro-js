@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.8.13 2025-08-05
+- cache the serverside function
+
 ## 1.8.12 2025-08-05
 - refactor some code back with the help of the isServerCode function
 

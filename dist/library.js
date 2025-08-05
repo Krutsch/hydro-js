@@ -22,14 +22,15 @@ const hydroToReactive = new WeakMap(); // Used for internal mapping from hydroKe
 const _boundFunctions = Symbol("boundFunctions"); // Cache for bound functions in Proxy, so that we create the bound version of each function only once
 const reactiveSymbol = Symbol("reactive");
 const keysSymbol = Symbol("keys");
-let viewElementsEventFunctions = new Map();
+const viewElementsEventFunctions = new Map();
+const isServerSideCached = isServerSide();
 let globalSchedule = true; // Decides whether to schedule rendering and updating (async)
 let reuseElements = true; // Reuses Elements when rendering
 let insertBeforeDiffing = false; // Makes sense in Chrome only
 let shouldSetReactivity = true;
 let viewElements = false;
 let ignoreIsConnected = false;
-const reactivityRegex = new RegExp(isServerSide()
+const reactivityRegex = new RegExp(isServerSideCached
     ? `\\{\\{([^]*?)\\}\\}|${"hydro-reactive-" /* Placeholder.reactiveKey */}([a-zA-Z0-9_.-]+)`
     : `\\{\\{([^]*?)\\}\\}`);
 const HTML_FIND_INVALID = /<(\/?)(html|head|body)(>|\s.*?>)/g;
@@ -336,7 +337,7 @@ function setReactivity(DOM, eventFunctions) {
         while (childNode) {
             if (isTextNode(childNode) &&
                 (childNode.nodeValue?.includes("{{") ||
-                    (isServerSide() &&
+                    (isServerSideCached &&
                         childNode.nodeValue?.includes("hydro-reactive-" /* Placeholder.reactiveKey */)))) {
                 setReactivitySingle(childNode);
             }
@@ -355,7 +356,7 @@ function setReactivitySingle(node, key, val) {
             // e.g. checked attribute or two-way attribute
             attr_OR_text = key;
             if (attr_OR_text.startsWith("{{") ||
-                (isServerSide() && attr_OR_text.startsWith("hydro-reactive-" /* Placeholder.reactiveKey */))) {
+                (isServerSideCached && attr_OR_text.startsWith("hydro-reactive-" /* Placeholder.reactiveKey */))) {
                 node.removeAttribute(attr_OR_text);
             }
         }
@@ -685,7 +686,7 @@ function treeDiff(elem, where) {
     }
     let template;
     if (insertBeforeDiffing) {
-        template = document.createElement(isServerSide() ? "div" : "template");
+        template = document.createElement(isServerSideCached ? "div" : "template");
         /* c8 ignore next 3 */
         if (where === document.documentElement) {
             where.append(template);
@@ -781,8 +782,8 @@ function replaceElement(elem, where) {
             }
         }
     }
-    else if (isServerSide()) {
-        if (isServerSide() &&
+    else if (isServerSideCached) {
+        if (isServerSideCached &&
             elem instanceof window.HTMLHtmlElement &&
             where instanceof window.HTMLHtmlElement) {
             for (const key of elem.getAttributeNames()) {
@@ -861,7 +862,7 @@ function chainKeys(initial, keys) {
                 return keys;
             }
             if (subKey === Symbol.toPrimitive) {
-                return () => isServerSide()
+                return () => isServerSideCached
                     ? `${"hydro-reactive-" /* Placeholder.reactiveKey */}${keys.join(".")}`
                     : `{{${keys.join(".")}}}`;
             }
@@ -1267,9 +1268,9 @@ function updateDOM(nodeToChangeMap, val, oldVal) {
             const node = nodeToChangeMap.get(entry);
             const [start, end, key] = change;
             let useStartEnd = false;
-            if (isNode(val) && (!isServerSide() || val !== node)) {
+            if (isNode(val) && (!isServerSideCached || val !== node)) {
                 replaceElement(val, node);
-                if (isServerSide() || val !== node) {
+                if (isServerSideCached || val !== node) {
                     nodeToChangeMap.delete(node);
                     if (!isDocumentFragment(val)) {
                         nodeToChangeMap.set(val, entry);

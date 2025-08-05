@@ -103,7 +103,8 @@ const hydroToReactive = new WeakMap<hydroObject, reactiveObject<any>>(); // Used
 const _boundFunctions = Symbol("boundFunctions"); // Cache for bound functions in Proxy, so that we create the bound version of each function only once
 const reactiveSymbol = Symbol("reactive");
 const keysSymbol = Symbol("keys");
-let viewElementsEventFunctions = new Map<string, eventFunctions>();
+const viewElementsEventFunctions = new Map<string, eventFunctions>();
+const isServerSideCached = isServerSide();
 
 let globalSchedule = true; // Decides whether to schedule rendering and updating (async)
 let reuseElements = true; // Reuses Elements when rendering
@@ -113,7 +114,7 @@ let viewElements = false;
 let ignoreIsConnected = false;
 
 const reactivityRegex = new RegExp(
-  isServerSide()
+  isServerSideCached
     ? `\\{\\{([^]*?)\\}\\}|${Placeholder.reactiveKey}([a-zA-Z0-9_.-]+)`
     : `\\{\\{([^]*?)\\}\\}`
 );
@@ -483,7 +484,7 @@ function setReactivity(
       if (
         isTextNode(childNode) &&
         (childNode.nodeValue?.includes("{{") ||
-          (isServerSide() &&
+          (isServerSideCached &&
             childNode.nodeValue?.includes(Placeholder.reactiveKey)))
       ) {
         setReactivitySingle(childNode);
@@ -511,7 +512,7 @@ function setReactivitySingle(
 
       if (
         attr_OR_text.startsWith("{{") ||
-        (isServerSide() && attr_OR_text.startsWith(Placeholder.reactiveKey))
+        (isServerSideCached && attr_OR_text.startsWith(Placeholder.reactiveKey))
       ) {
         (node as Element).removeAttribute(attr_OR_text);
       }
@@ -939,7 +940,7 @@ function treeDiff(
 
   let template: HTMLTemplateElement | HTMLDivElement;
   if (insertBeforeDiffing) {
-    template = document.createElement(isServerSide() ? "div" : "template");
+    template = document.createElement(isServerSideCached ? "div" : "template");
     /* c8 ignore next 3 */
     if (where === document.documentElement) {
       where.append(template);
@@ -1031,9 +1032,9 @@ function replaceElement(
         }
       }
     }
-  } else if (isServerSide()) {
+  } else if (isServerSideCached) {
     if (
-      isServerSide() &&
+      isServerSideCached &&
       elem instanceof window.HTMLHtmlElement &&
       where instanceof window.HTMLHtmlElement
     ) {
@@ -1119,7 +1120,7 @@ function chainKeys(initial: Function | any, keys: Array<PropertyKey>): any {
 
       if (subKey === Symbol.toPrimitive) {
         return () =>
-          isServerSide()
+          isServerSideCached
             ? `${Placeholder.reactiveKey}${keys.join(".")}`
             : `{{${keys.join(".")}}}`;
       }
@@ -1602,9 +1603,9 @@ function updateDOM(nodeToChangeMap: nodeToChangeMap, val: any, oldVal: any) {
       const [start, end, key] = change;
       let useStartEnd = false;
 
-      if (isNode(val) && (!isServerSide() || val !== node)) {
+      if (isNode(val) && (!isServerSideCached || val !== node)) {
         replaceElement(val as Element, node);
-        if (isServerSide() || val !== node) {
+        if (isServerSideCached || val !== node) {
           nodeToChangeMap.delete(node);
           if (!isDocumentFragment(val)) {
             nodeToChangeMap.set(val as Element, entry);

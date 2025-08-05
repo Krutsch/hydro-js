@@ -44,7 +44,7 @@ interface EventObject {
 }
 type reactiveObject<T> = T & hydroObject & ((setter: any) => void);
 type eventFunctions = Record<string, EventListener | EventObject>;
-declare let viewElementsEventFunctions: Map<string, eventFunctions>;
+declare const viewElementsEventFunctions: Map<string, eventFunctions>;
 declare function isServerSide(): boolean;
 declare function setGlobalSchedule(willSchedule: boolean): void;
 declare function setReuseElements(willReuse: boolean): void;
