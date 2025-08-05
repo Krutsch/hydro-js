@@ -1,6 +1,6 @@
 {
   "name": "hydro-js",
-  "version": "1.8.11",
+  "version": "1.8.12",
   "description": "A lightweight reactive library",
   "type": "module",
   "main": "./dist/library.js",
@@ -38,7 +38,7 @@
     "happy-dom": "^18.0.1",
     "jsdom": "^26.1.0",
     "serve": "^14.2.4",
-    "typescript": "^5.8.3"
+    "typescript": "^5.9.2"
   },
   "repository": {
     "type": "git",

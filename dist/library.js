@@ -29,7 +29,9 @@ let insertBeforeDiffing = false; // Makes sense in Chrome only
 let shouldSetReactivity = true;
 let viewElements = false;
 let ignoreIsConnected = false;
-const reactivityRegex = new RegExp(`\\{\\{([^]*?)\\}\\}|${"hydro-reactive-" /* Placeholder.reactiveKey */}([a-zA-Z0-9_.-]+)`);
+const reactivityRegex = new RegExp(isServerSide()
+    ? `\\{\\{([^]*?)\\}\\}|${"hydro-reactive-" /* Placeholder.reactiveKey */}([a-zA-Z0-9_.-]+)`
+    : `\\{\\{([^]*?)\\}\\}`);
 const HTML_FIND_INVALID = /<(\/?)(html|head|body)(>|\s.*?>)/g;
 const newLineRegex = /\n/g;
 const propChainRegex = /[\.\[\]]/;
@@ -241,8 +243,7 @@ function fillDOM(elem, insertNodes, eventFunctions) {
     while ((currentNode = root.nextNode())) {
         nodes.push(currentNode);
     }
-    for (let i = 0; i < nodes.length; i++) {
-        const node = nodes[i];
+    for (const node of nodes) {
         const tag = node.localName.replace("-dummy" /* Placeholder.dummy */, "");
         const replacement = document.createElement(tag);
         /* c8 ignore next 3 */
@@ -335,7 +336,8 @@ function setReactivity(DOM, eventFunctions) {
         while (childNode) {
             if (isTextNode(childNode) &&
                 (childNode.nodeValue?.includes("{{") ||
-                    childNode.nodeValue?.includes("hydro-reactive-" /* Placeholder.reactiveKey */))) {
+                    (isServerSide() &&
+                        childNode.nodeValue?.includes("hydro-reactive-" /* Placeholder.reactiveKey */)))) {
                 setReactivitySingle(childNode);
             }
             childNode = childNode.nextSibling;
@@ -353,7 +355,7 @@ function setReactivitySingle(node, key, val) {
             // e.g. checked attribute or two-way attribute
             attr_OR_text = key;
             if (attr_OR_text.startsWith("{{") ||
-                attr_OR_text.startsWith("hydro-reactive-" /* Placeholder.reactiveKey */)) {
+                (isServerSide() && attr_OR_text.startsWith("hydro-reactive-" /* Placeholder.reactiveKey */))) {
                 node.removeAttribute(attr_OR_text);
             }
         }
@@ -683,7 +685,7 @@ function treeDiff(elem, where) {
     }
     let template;
     if (insertBeforeDiffing) {
-        template = document.createElement("div");
+        template = document.createElement(isServerSide() ? "div" : "template");
         /* c8 ignore next 3 */
         if (where === document.documentElement) {
             where.append(template);
@@ -780,7 +782,8 @@ function replaceElement(elem, where) {
         }
     }
     else if (isServerSide()) {
-        if (elem instanceof window.HTMLHtmlElement &&
+        if (isServerSide() &&
+            elem instanceof window.HTMLHtmlElement &&
             where instanceof window.HTMLHtmlElement) {
             for (const key of elem.getAttributeNames()) {
                 setAttribute(where, key, elem.getAttribute(key));
@@ -858,7 +861,9 @@ function chainKeys(initial, keys) {
                 return keys;
             }
             if (subKey === Symbol.toPrimitive) {
-                return () => `${"hydro-reactive-" /* Placeholder.reactiveKey */}${keys.join(".")}`;
+                return () => isServerSide()
+                    ? `${"hydro-reactive-" /* Placeholder.reactiveKey */}${keys.join(".")}`
+                    : `{{${keys.join(".")}}}`;
             }
             return chainKeys(target, [...keys, subKey]);
         },
@@ -1230,8 +1235,7 @@ function checkReactivityMap(obj, key, val, oldVal) {
     }
     if (isObject(val)) {
         const entries = Object.entries(val);
-        for (let i = 0; i < entries.length; i++) {
-            const [subKey, subVal] = entries[i];
+        for (const [subKey, subVal] of entries) {
             const subOldVal = (isObject(oldVal) && Reflect.get(oldVal, subKey)) || oldVal;
             const nodeToChangeMap = keyToNodeMap.get(subKey);
             if (nodeToChangeMap) {
@@ -1263,12 +1267,14 @@ function updateDOM(nodeToChangeMap, val, oldVal) {
             const node = nodeToChangeMap.get(entry);
             const [start, end, key] = change;
             let useStartEnd = false;
-            if (isNode(val) && val !== node) {
+            if (isNode(val) && (!isServerSide() || val !== node)) {
                 replaceElement(val, node);
-                nodeToChangeMap.delete(node);
-                if (!isDocumentFragment(val)) {
-                    nodeToChangeMap.set(val, entry);
-                    nodeToChangeMap.set(entry, val);
+                if (isServerSide() || val !== node) {
+                    nodeToChangeMap.delete(node);
+                    if (!isDocumentFragment(val)) {
+                        nodeToChangeMap.set(val, entry);
+                        nodeToChangeMap.set(entry, val);
+                    }
                 }
             }
             else if (isTextNode(node)) {
@@ -1302,8 +1308,7 @@ function updateDOM(nodeToChangeMap, val, oldVal) {
                 }
                 else if (isObject(val)) {
                     const entries = Object.entries(val);
-                    for (let i = 0; i < entries.length; i++) {
-                        const [subKey, subVal] = entries[i];
+                    for (const [subKey, subVal] of entries) {
                         if (isFunction(subVal) || isEventObject(subVal)) {
                             const eventName = subKey.replace(onEventRegex, "");
                             node.removeEventListener(eventName, isFunction(oldVal[subKey])

@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.8.12 2025-08-05
+- refactor some code back with the help of the isServerCode function
+
 ## 1.8.11 2025-08-04
 - minor refactor to Map
 

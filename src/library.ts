@@ -113,7 +113,9 @@ let viewElements = false;
 let ignoreIsConnected = false;
 
 const reactivityRegex = new RegExp(
-  `\\{\\{([^]*?)\\}\\}|${Placeholder.reactiveKey}([a-zA-Z0-9_.-]+)`
+  isServerSide()
+    ? `\\{\\{([^]*?)\\}\\}|${Placeholder.reactiveKey}([a-zA-Z0-9_.-]+)`
+    : `\\{\\{([^]*?)\\}\\}`
 );
 const HTML_FIND_INVALID = /<(\/?)(html|head|body)(>|\s.*?>)/g;
 const newLineRegex = /\n/g;
@@ -368,8 +370,7 @@ function fillDOM(
     nodes.push(currentNode as Element);
   }
 
-  for (let i = 0; i < nodes.length; i++) {
-    const node = nodes[i];
+  for (const node of nodes) {
     const tag = node.localName.replace(Placeholder.dummy, "");
     const replacement = document.createElement(tag);
 
@@ -482,7 +483,8 @@ function setReactivity(
       if (
         isTextNode(childNode) &&
         (childNode.nodeValue?.includes("{{") ||
-          childNode.nodeValue?.includes(Placeholder.reactiveKey))
+          (isServerSide() &&
+            childNode.nodeValue?.includes(Placeholder.reactiveKey)))
       ) {
         setReactivitySingle(childNode);
       }
@@ -509,7 +511,7 @@ function setReactivitySingle(
 
       if (
         attr_OR_text.startsWith("{{") ||
-        attr_OR_text.startsWith(Placeholder.reactiveKey)
+        (isServerSide() && attr_OR_text.startsWith(Placeholder.reactiveKey))
       ) {
         (node as Element).removeAttribute(attr_OR_text);
       }
@@ -935,9 +937,9 @@ function treeDiff(
     if (!isDocumentFragment(where)) whereElements.unshift(where);
   }
 
-  let template: HTMLDivElement;
+  let template: HTMLTemplateElement | HTMLDivElement;
   if (insertBeforeDiffing) {
-    template = document.createElement("div");
+    template = document.createElement(isServerSide() ? "div" : "template");
     /* c8 ignore next 3 */
     if (where === document.documentElement) {
       where.append(template);
@@ -1031,6 +1033,7 @@ function replaceElement(
     }
   } else if (isServerSide()) {
     if (
+      isServerSide() &&
       elem instanceof window.HTMLHtmlElement &&
       where instanceof window.HTMLHtmlElement
     ) {
@@ -1115,7 +1118,10 @@ function chainKeys(initial: Function | any, keys: Array<PropertyKey>): any {
       }
 
       if (subKey === Symbol.toPrimitive) {
-        return () => `${Placeholder.reactiveKey}${keys.join(".")}`;
+        return () =>
+          isServerSide()
+            ? `${Placeholder.reactiveKey}${keys.join(".")}`
+            : `{{${keys.join(".")}}}`;
       }
 
       return chainKeys(target, [...keys, subKey]) as hydroObject &
@@ -1561,8 +1567,7 @@ function checkReactivityMap(obj: any, key: PropertyKey, val: any, oldVal: any) {
 
   if (isObject(val)) {
     const entries = Object.entries(val);
-    for (let i = 0; i < entries.length; i++) {
-      const [subKey, subVal] = entries[i];
+    for (const [subKey, subVal] of entries) {
       const subOldVal =
         (isObject(oldVal) && Reflect.get(oldVal, subKey)) || oldVal;
       const nodeToChangeMap = keyToNodeMap.get(subKey);
@@ -1597,12 +1602,14 @@ function updateDOM(nodeToChangeMap: nodeToChangeMap, val: any, oldVal: any) {
       const [start, end, key] = change;
       let useStartEnd = false;
 
-      if (isNode(val) && val !== node) {
+      if (isNode(val) && (!isServerSide() || val !== node)) {
         replaceElement(val as Element, node);
-        nodeToChangeMap.delete(node);
-        if (!isDocumentFragment(val)) {
-          nodeToChangeMap.set(val as Element, entry);
-          nodeToChangeMap.set(entry, val as Element);
+        if (isServerSide() || val !== node) {
+          nodeToChangeMap.delete(node);
+          if (!isDocumentFragment(val)) {
+            nodeToChangeMap.set(val as Element, entry);
+            nodeToChangeMap.set(entry, val as Element);
+          }
         }
       } else if (isTextNode(node)) {
         useStartEnd = true;
@@ -1640,8 +1647,7 @@ function updateDOM(nodeToChangeMap: nodeToChangeMap, val: any, oldVal: any) {
           addEventListener(node, eventName, val);
         } else if (isObject(val)) {
           const entries = Object.entries(val);
-          for (let i = 0; i < entries.length; i++) {
-            const [subKey, subVal] = entries[i];
+          for (const [subKey, subVal] of entries) {
             if (isFunction(subVal) || isEventObject(subVal)) {
               const eventName = subKey.replace(onEventRegex, "");
               node.removeEventListener(
