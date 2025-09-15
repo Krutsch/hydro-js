@@ -266,10 +266,12 @@ function addEventListener(
   eventName: string,
   obj: EventObject | EventListener
 ) {
+  const isFn = isFunction(obj);
+
   node.addEventListener(
     eventName,
-    isFunction(obj) ? obj : obj.event,
-    isFunction(obj) ? {} : obj.options
+    isFn ? obj : obj.event,
+    isFn ? {} : obj.options
   );
 }
 

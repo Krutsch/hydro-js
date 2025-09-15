@@ -34,10 +34,10 @@
     "@types/jsdom": "^21.1.7",
     "@web/test-runner": "^0.20.2",
     "@web/test-runner-playwright": "^0.11.1",
-    "concurrently": "^9.2.0",
+    "concurrently": "^9.2.1",
     "happy-dom": "^18.0.1",
-    "jsdom": "^26.1.0",
-    "serve": "^14.2.4",
+    "jsdom": "^27.0.0",
+    "serve": "^14.2.5",
     "typescript": "^5.9.2"
   },
   "repository": {

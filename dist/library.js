@@ -161,7 +161,8 @@ function setAttribute(node, key, val) {
     return true;
 }
 function addEventListener(node, eventName, obj) {
-    node.addEventListener(eventName, isFunction(obj) ? obj : obj.event, isFunction(obj) ? {} : obj.options);
+    const isFn = isFunction(obj);
+    node.addEventListener(eventName, isFn ? obj : obj.event, isFn ? {} : obj.options);
 }
 function html(htmlArray, ...variables) {
     const eventFunctions = {}; // Temporarily store a mapping for string -> function, because eventListener have to be registered after the Element's creation
