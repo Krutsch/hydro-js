@@ -34,7 +34,7 @@ type isInputPendingOptions = {
 export interface hydroObject extends Record<PropertyKey, any> {
   isProxy: boolean;
   asyncUpdate: boolean;
-  observe: (key: PropertyKey, fn: Function) => any;
+  observe: (key: PropertyKey, fn: Function) => (() => void) | undefined;
   getObservers: () => Map<string, Set<Function>>;
   unobserve: (key?: PropertyKey, handler?: Function) => undefined;
 }
@@ -51,7 +51,8 @@ interface EventObject {
   options: AddEventListenerOptions;
 }
 type reactiveObject<T> = T & hydroObject & ((setter: any) => void);
-type eventFunctions = Record<string, EventListener | EventObject>;
+type eventType = EventListener | EventObject;
+type eventFunctions = Map<string, eventType>;
 
 const enum Placeholder {
   attribute = "attribute",
@@ -92,7 +93,10 @@ range.selectNodeContents(
 const parser = range.createContextualFragment.bind(range);
 
 const allNodeChanges = new WeakMap<Text | Element, nodeChanges>(); // Maps a Node against an array of changes. An array is necessary because a node can have multiple variables for one text / attribute.
-const elemEventFunctions = new WeakMap<Element, Array<EventListener>>(); // Stores event functions in order to compare Elements against each other.
+const elemEventFunctions = new WeakMap<
+  Element,
+  Map<string, Set<EventListener>>
+>(); // Stores event functions in order to compare Elements against each other.
 const reactivityMap = new WeakMap<hydroObject, keyToNodeMap>(); // Maps Proxy Objects to another Map(proxy-key, node).
 const bindMap = new WeakMap<hydroObject, Array<Element>>(); // Bind an Element to data. If the data is being unset, the DOM Element disappears too.
 const tmpSwap = new WeakMap<hydroObject, keyToNodeMap>(); // Take over keyToNodeMap if the new value is a hydro Proxy. Save old reactivityMap entry here, in case for a swap operation.
@@ -103,7 +107,7 @@ const hydroToReactive = new WeakMap<hydroObject, reactiveObject<any>>(); // Used
 const _boundFunctions = Symbol("boundFunctions"); // Cache for bound functions in Proxy, so that we create the bound version of each function only once
 const reactiveSymbol = Symbol("reactive");
 const keysSymbol = Symbol("keys");
-const viewElementsEventFunctions = new Map<string, eventFunctions>();
+const viewElementsEventFunctions = new Map() as eventFunctions;
 const isServerSideCached = isServerSide();
 
 let globalSchedule = true; // Decides whether to schedule rendering and updating (async)
@@ -192,7 +196,11 @@ function isEventObject(obj: object | unknown): obj is EventObject {
   );
 }
 function isProxy(hydroObject: any): hydroObject is hydroObject {
-  return Reflect.get(hydroObject, Placeholder.isProxy);
+  const wasTracking = trackDeps;
+  if (wasTracking) trackDeps = false;
+  const result = Reflect.get(hydroObject, Placeholder.isProxy);
+  if (wasTracking) trackDeps = true;
+  return result;
 }
 function isPromise(obj: any): obj is Promise<any> {
   return isObject(obj) && typeof obj.then === "function";
@@ -275,16 +283,35 @@ function addEventListener(
   );
 }
 
+function removeTrackedEventListener(
+  node: Element,
+  eventName: string,
+  handler: EventListener
+) {
+  node.removeEventListener(eventName, handler);
+  const map = elemEventFunctions.get(node);
+  if (!map) return;
+
+  const handlers = map.get(eventName);
+  if (!handlers) return;
+
+  handlers.delete(handler);
+  if (handlers.size === 0) {
+    map.delete(eventName);
+  }
+  if (map.size === 0) {
+    elemEventFunctions.delete(node);
+  }
+}
+
 function html(
   htmlArray: TemplateStringsArray,
   ...variables: Array<any>
 ): Element | DocumentFragment | Text {
-  const eventFunctions: eventFunctions = {}; // Temporarily store a mapping for string -> function, because eventListener have to be registered after the Element's creation
+  const eventFunctions: eventFunctions = new Map(); // Temporarily store a mapping for string -> function, because eventListener have to be registered after the Element's creation
   let insertNodes: Node[] = []; // Nodes, that will be added after the parsing
 
-  const resolvedVariables: Array<string> = Array.from({
-    length: variables.length,
-  });
+  const resolvedVariables = new Array<string>(variables.length);
   for (let i = 0; i < variables.length; i++) {
     const variable = variables[i];
     const template = `<${Placeholder.template} id="lbInsertNodes"></${Placeholder.template}>`;
@@ -299,9 +326,8 @@ function html(
       resolvedVariables[i] = String(variable);
     } else if (isFunction(variable) || isEventObject(variable)) {
       const funcName = randomText();
-      Reflect.set(eventFunctions, funcName, variable);
-      viewElements &&
-        Reflect.set(viewElementsEventFunctions, funcName, variable);
+      eventFunctions.set(funcName, variable);
+      viewElements && viewElementsEventFunctions.set(funcName, variable);
       resolvedVariables[i] = funcName;
     } else if (Array.isArray(variable)) {
       for (let index = 0; index < variable.length; index++) {
@@ -317,9 +343,8 @@ function html(
       for (const [key, value] of Object.entries(variable)) {
         if (isFunction(value) || isEventObject(value)) {
           const funcName = randomText();
-          Reflect.set(eventFunctions, funcName, value);
-          viewElements &&
-            Reflect.set(viewElementsEventFunctions, funcName, value);
+          eventFunctions.set(funcName, value);
+          viewElements && viewElementsEventFunctions.set(funcName, value);
           result += `${key}="${funcName}"`;
         } else {
           result += `${key}="${value}"`;
@@ -437,7 +462,7 @@ function getChildren(child: unknown) {
 /* c8 ignore end */
 function setReactivity(
   DOM: ReturnType<typeof html>,
-  eventFunctions?: eventFunctions | typeof viewElementsEventFunctions
+  eventFunctions?: eventFunctions | Record<string, eventType>
 ) {
   if (isTextNode(DOM)) {
     setReactivitySingle(DOM);
@@ -455,7 +480,10 @@ function setReactivity(
       const val = elem.getAttribute(key)!;
       if (eventFunctions && key.startsWith("on")) {
         const eventName = key.replace(onEventRegex, "");
-        const event = Reflect.get(eventFunctions, val);
+        if (!(eventFunctions instanceof Map)) {
+          eventFunctions = new Map(Object.entries(eventFunctions));
+        }
+        const event = eventFunctions?.get(val);
         if (!event) {
           setReactivitySingle(elem, key, val);
           continue;
@@ -464,16 +492,22 @@ function setReactivity(
         if (isEventObject(event)) {
           elem.addEventListener(eventName, event.event, event.options);
           if (elemEventFunctions.has(elem)) {
-            elemEventFunctions.get(elem)!.push(event.event);
+            elemEventFunctions.get(elem)!.get(eventName)?.add(event.event);
           } else {
-            elemEventFunctions.set(elem, [event.event]);
+            elemEventFunctions.set(
+              elem,
+              new Map().set(eventName, new Set([event.event]))
+            );
           }
         } else {
           elem.addEventListener(eventName, event);
           if (elemEventFunctions.has(elem)) {
-            elemEventFunctions.get(elem)!.push(event);
+            elemEventFunctions.get(elem)!.get(eventName)?.add(event);
           } else {
-            elemEventFunctions.set(elem, [event]);
+            elemEventFunctions.set(
+              elem,
+              new Map().set(eventName, new Set([event]))
+            );
           }
         }
       } else {
@@ -762,10 +796,14 @@ function compareEvents(
   }
 
   if (elemEventFunctions.has(elem)) {
-    elemFunctions.push(...elemEventFunctions.get(elem)!);
+    elemEventFunctions.get(elem)!.forEach((handlers) => {
+      handlers.forEach((handler) => elemFunctions.push(handler));
+    });
   }
   if (elemEventFunctions.has(where as Element)) {
-    whereFunctions.push(...elemEventFunctions.get(where as Element)!);
+    elemEventFunctions.get(where as Element)!.forEach((handlers) => {
+      handlers.forEach((handler) => whereFunctions.push(handler));
+    });
   }
 
   if (onRenderMap.has(elem)) elemFunctions.push(onRenderMap.get(elem)!);
@@ -1171,12 +1209,12 @@ function observe(reactiveHydro: reactiveObject<any>, fn: Function) {
   const [lastProp, oneKey] = getReactiveKeys(reactiveHydro);
 
   if (oneKey) {
-    hydro.observe(lastProp, fn);
+    return hydro.observe(lastProp, fn);
   } else {
     const [_, resolvedObj] = resolveObject(
       reactiveHydro[keysSymbol.description!]
     );
-    resolvedObj.observe(lastProp, fn);
+    return resolvedObj.observe(lastProp, fn);
   }
 }
 function unobserve(reactiveHydro: reactiveObject<any>) {
@@ -1241,8 +1279,14 @@ const unobserveMap = new WeakMap<
 >();
 function watchEffect(fn: Function) {
   trackDeps = true;
-  fn();
-  trackDeps = false;
+  const res = fn();
+  if (isPromise(res)) {
+    res.then(() => {
+      trackDeps = false;
+    });
+  } else {
+    trackDeps = false;
+  }
 
   const reRun = (newVal: PropertyKey) => {
     if (newVal !== null) fn();
@@ -1265,10 +1309,11 @@ function watchEffect(fn: Function) {
 
   trackProxies.clear();
 
-  return () =>
-    unobserveMap
-      .get(reRun)!
-      .forEach((entry) => entry.proxy.unobserve(entry.key, reRun));
+  return () => {
+    const entries = unobserveMap.get(reRun)!;
+    entries.forEach((entry) => entry.proxy.unobserve(entry.key, reRun));
+    unobserveMap.delete(reRun);
+  };
 }
 
 function getValue<T extends object>(reactiveHydro: T): T {
@@ -1342,6 +1387,7 @@ function generateProxy(obj?: Record<PropertyKey, unknown>): hydroObject {
 
         // If oldVal is a Proxy - clean it
         if (isObject(oldVal) && isProxy(oldVal)) {
+          oldVal.unobserve();
           reactivityMap.delete(oldVal);
           if (bindMap.has(oldVal)) {
             bindMap.get(oldVal)!.forEach(removeElement);
@@ -1502,6 +1548,16 @@ function generateProxy(obj?: Record<PropertyKey, unknown>): hydroObject {
       } else {
         map.set(key, new Set([handler]));
       }
+
+      return () => {
+        const handlersForKey = map.get(key);
+        if (!handlersForKey) return;
+
+        handlersForKey.delete(handler);
+        if (handlersForKey.size === 0) {
+          map.delete(key);
+        }
+      };
     },
     configurable: true,
   });
@@ -1546,6 +1602,7 @@ function generateProxy(obj?: Record<PropertyKey, unknown>): hydroObject {
 
 function cleanProxy(proxy: any) {
   if (isObject(proxy) && isProxy(proxy)) {
+    proxy.unobserve();
     reactivityMap.delete(proxy);
     /* c8 ignore next 4 */
     if (bindMap.has(proxy)) {
@@ -1609,6 +1666,7 @@ function updateDOM(nodeToChangeMap: nodeToChangeMap, val: any, oldVal: any) {
         replaceElement(val as Element, node);
         if (isServerSideCached || val !== node) {
           nodeToChangeMap.delete(node);
+          nodeToChangeMap.delete(entry);
           if (!isDocumentFragment(val)) {
             nodeToChangeMap.set(val as Element, entry);
             nodeToChangeMap.set(entry, val as Element);
@@ -1643,22 +1701,19 @@ function updateDOM(nodeToChangeMap: nodeToChangeMap, val: any, oldVal: any) {
           }
         } else if (isFunction(val) || isEventObject(val)) {
           const eventName = key!.replace(onEventRegex, "");
-          node.removeEventListener(
-            eventName,
-            isFunction(oldVal) ? oldVal : oldVal.event
-          );
+          const handlerToRemove = isFunction(oldVal) ? oldVal : oldVal.event;
+          removeTrackedEventListener(node, eventName, handlerToRemove);
           addEventListener(node, eventName, val);
         } else if (isObject(val)) {
           const entries = Object.entries(val);
           for (const [subKey, subVal] of entries) {
             if (isFunction(subVal) || isEventObject(subVal)) {
               const eventName = subKey.replace(onEventRegex, "");
-              node.removeEventListener(
-                eventName,
-                isFunction(oldVal[subKey])
-                  ? oldVal[subKey]
-                  : oldVal[subKey].event
-              );
+              const previousHandler = oldVal?.[subKey];
+              const handlerToRemove = isFunction(previousHandler)
+                ? previousHandler
+                : previousHandler.event;
+              removeTrackedEventListener(node, eventName, handlerToRemove);
               addEventListener(node, eventName, subVal);
             } else {
               setAttribute(node, subKey, subVal);
@@ -1717,56 +1772,61 @@ function view(
   onCleanup(unset, rootElem, data);
 
   viewElements = false;
-  observe(data, (newData: typeof data, oldData: typeof data) => {
-    /* c8 ignore start */
-    viewElements = true;
+  const stopViewObserver = observe(
+    data,
+    (newData: typeof data, oldData: typeof data) => {
+      /* c8 ignore start */
+      viewElements = true;
 
-    // Reset or re-use
-    if (
-      !newData?.length ||
-      (!reuseElements && newData?.length === oldData?.length)
-    ) {
-      rootElem.textContent = "";
-    } else if (reuseElements) {
-      for (let i = 0; i < oldData?.length && newData?.length; i++) {
-        oldData[i].id = newData[i].id;
-        oldData[i].label = newData[i].label;
-        newData[i] = oldData[i];
-      }
-    }
-
-    // Add to existing
-    if (
-      oldData?.length &&
-      newData?.length > oldData?.length &&
-      newData[0] === oldData[0]
-    ) {
-      const length = oldData.length;
-      const slicedData = newData.slice(length);
-      const newElements = slicedData.map((item, i) =>
-        renderFunction(item, i + length)
-      );
-      rootElem.append(...newElements);
-      for (const elem of newElements) runLifecyle(elem as Element, onRenderMap);
-    }
-
-    // Add new
-    else if (oldData?.length === 0 || (!reuseElements && newData?.length)) {
-      if (!reuseElements && oldData?.length && rootElem.hasChildNodes()) {
+      // Reset or re-use
+      if (
+        !newData?.length ||
+        (!reuseElements && newData?.length === oldData?.length)
+      ) {
         rootElem.textContent = "";
+      } else if (reuseElements) {
+        for (let i = 0; i < oldData?.length && newData?.length; i++) {
+          oldData[i].id = newData[i].id;
+          oldData[i].label = newData[i].label;
+          newData[i] = oldData[i];
+        }
       }
 
-      const elements = newData.map(renderFunction);
-      rootElem.append(...elements);
-      for (const elem of elements) runLifecyle(elem as Element, onRenderMap);
+      // Add to existing
+      if (
+        oldData?.length &&
+        newData?.length > oldData?.length &&
+        newData[0] === oldData[0]
+      ) {
+        const length = oldData.length;
+        const slicedData = newData.slice(length);
+        const newElements = slicedData.map((item, i) =>
+          renderFunction(item, i + length)
+        );
+        rootElem.append(...newElements);
+        for (const elem of newElements)
+          runLifecyle(elem as Element, onRenderMap);
+      }
+
+      // Add new
+      else if (oldData?.length === 0 || (!reuseElements && newData?.length)) {
+        if (!reuseElements && oldData?.length && rootElem.hasChildNodes()) {
+          rootElem.textContent = "";
+        }
+
+        const elements = newData.map(renderFunction);
+        rootElem.append(...elements);
+        for (const elem of elements) runLifecyle(elem as Element, onRenderMap);
+      }
+      if (rootElem.hasChildNodes()) {
+        setReactivity(rootElem, viewElementsEventFunctions);
+        viewElementsEventFunctions.clear();
+      }
+      viewElements = false;
+      /* c8 ignore end */
     }
-    if (rootElem.hasChildNodes()) {
-      setReactivity(rootElem, viewElementsEventFunctions);
-      viewElementsEventFunctions.clear();
-    }
-    viewElements = false;
-    /* c8 ignore end */
-  });
+  )!;
+  onCleanup(stopViewObserver, rootElem);
 }
 
 const hydro = generateProxy();
