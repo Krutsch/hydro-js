@@ -405,7 +405,7 @@ function setReactivitySingle(node, key, val) {
         if (isTextNode(node)) {
             const textContent = isObject(resolvedValue)
                 ? window.JSON.stringify(resolvedValue)
-                : resolvedValue ?? "";
+                : (resolvedValue ?? "");
             attr_OR_text = attr_OR_text.replace(hydroMatch, textContent);
             if (attr_OR_text != null) {
                 node.nodeValue = attr_OR_text;

@@ -35,10 +35,10 @@
     "@web/test-runner": "^0.20.2",
     "@web/test-runner-playwright": "^0.11.1",
     "concurrently": "^9.2.1",
-    "happy-dom": "^20.0.0",
-    "jsdom": "^27.0.0",
+    "happy-dom": "^20.3.7",
+    "jsdom": "^27.4.0",
     "serve": "^14.2.5",
-    "typescript": "^5.9.2"
+    "typescript": "^5.9.3"
   },
   "repository": {
     "type": "git",

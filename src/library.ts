@@ -88,7 +88,7 @@ window.requestIdleCallback =
 
 const range = document.createRange();
 range.selectNodeContents(
-  range.createContextualFragment(`<${Placeholder.template}>`).lastChild!
+  range.createContextualFragment(`<${Placeholder.template}>`).lastChild!,
 );
 const parser = range.createContextualFragment.bind(range);
 
@@ -120,7 +120,7 @@ let ignoreIsConnected = false;
 const reactivityRegex = new RegExp(
   isServerSideCached
     ? `\\{\\{([^]*?)\\}\\}|${Placeholder.reactiveKey}([a-zA-Z0-9_.-]+)`
-    : `\\{\\{([^]*?)\\}\\}`
+    : `\\{\\{([^]*?)\\}\\}`,
 );
 const HTML_FIND_INVALID = /<(\/?)(html|head|body)(>|\s.*?>)/g;
 const newLineRegex = /\n/g;
@@ -219,7 +219,7 @@ function randomText() {
   let result = "";
   for (let i = 0; i < 6; i++) {
     result += randomChars.charAt(
-      Math.floor(Math.random() * randomChars.length)
+      Math.floor(Math.random() * randomChars.length),
     );
   }
   return result;
@@ -264,29 +264,29 @@ function setAttribute(node: Element, key: string, val: any): boolean {
     isFunction(val) && Reflect.has(val, reactiveSymbol)
       ? val
       : isBoolAttr
-      ? ""
-      : val
+        ? ""
+        : val,
   );
   return true;
 }
 function addEventListener(
   node: Element,
   eventName: string,
-  obj: EventObject | EventListener
+  obj: EventObject | EventListener,
 ) {
   const isFn = isFunction(obj);
 
   node.addEventListener(
     eventName,
     isFn ? obj : obj.event,
-    isFn ? {} : obj.options
+    isFn ? {} : obj.options,
   );
 }
 
 function removeTrackedEventListener(
   node: Element,
   eventName: string,
-  handler: EventListener
+  handler: EventListener,
 ) {
   node.removeEventListener(eventName, handler);
   const map = elemEventFunctions.get(node);
@@ -358,7 +358,7 @@ function html(
   let DOMString = String.raw(htmlArray, ...resolvedVariables).trim();
   DOMString = DOMString.replace(
     HTML_FIND_INVALID,
-    `<$1$2${Placeholder.dummy}$3`
+    `<$1$2${Placeholder.dummy}$3`,
   );
   const DOM = parser(DOMString);
 
@@ -379,7 +379,7 @@ function html(
 function fillDOM(
   elem: ReturnType<typeof html>,
   insertNodes: Node[],
-  eventFunctions: eventFunctions
+  eventFunctions: eventFunctions,
 ) {
   const root = document.createNodeIterator(
     elem,
@@ -390,7 +390,7 @@ function fillDOM(
           ? window.NodeFilter.FILTER_ACCEPT
           : window.NodeFilter.FILTER_REJECT;
       },
-    }
+    },
   );
   const nodes = [];
   let currentNode;
@@ -431,7 +431,7 @@ function h(
     typeof name === Placeholder.string
       ? document.createElement(
           name as string,
-          props?.hasOwnProperty("is") ? { is: props["is"] } : undefined
+          props?.hasOwnProperty("is") ? { is: props["is"] } : undefined,
         )
       : document.createDocumentFragment();
   for (const i in props) {
@@ -447,7 +447,7 @@ function h(
   elem.append(
     ...(children.some((i) => Array.isArray(i))
       ? children.map(getChildren).flat()
-      : children)
+      : children),
   );
   if (!viewElements) {
     setReactivity(elem);
@@ -462,7 +462,7 @@ function getChildren(child: unknown) {
 /* c8 ignore end */
 function setReactivity(
   DOM: ReturnType<typeof html>,
-  eventFunctions?: eventFunctions | Record<string, eventType>
+  eventFunctions?: eventFunctions | Record<string, eventType>,
 ) {
   if (isTextNode(DOM)) {
     setReactivitySingle(DOM);
@@ -471,7 +471,7 @@ function setReactivity(
 
   const elems = document.createNodeIterator(
     DOM,
-    window.NodeFilter.SHOW_ELEMENT
+    window.NodeFilter.SHOW_ELEMENT,
   );
   let elem;
   while ((elem = elems.nextNode() as Element)) {
@@ -496,7 +496,7 @@ function setReactivity(
           } else {
             elemEventFunctions.set(
               elem,
-              new Map().set(eventName, new Set([event.event]))
+              new Map().set(eventName, new Set([event.event])),
             );
           }
         } else {
@@ -506,7 +506,7 @@ function setReactivity(
           } else {
             elemEventFunctions.set(
               elem,
-              new Map().set(eventName, new Set([event]))
+              new Map().set(eventName, new Set([event])),
             );
           }
         }
@@ -534,7 +534,7 @@ function setReactivitySingle(node: Element, key: string, val: string): void; // 
 function setReactivitySingle(
   node: Element | Text,
   key?: string,
-  val?: string
+  val?: string,
 ): void {
   let attr_OR_text: string, match: RegExpMatchArray | null;
 
@@ -578,7 +578,7 @@ function setReactivitySingle(
         resolvedValue as Element | Text,
         lastProp,
         resolvedObj,
-        key
+        key,
       );
       return;
     }
@@ -587,7 +587,7 @@ function setReactivitySingle(
     if (isTextNode(node)) {
       const textContent = isObject(resolvedValue)
         ? window.JSON.stringify(resolvedValue)
-        : resolvedValue ?? "";
+        : (resolvedValue ?? "");
 
       attr_OR_text = attr_OR_text.replace(hydroMatch, textContent);
       if (attr_OR_text != null) {
@@ -660,7 +660,7 @@ function setReactivitySingle(
             node,
             lastProp,
             resolvedValue as hydroObject,
-            subKey
+            subKey,
           );
         }
 
@@ -674,7 +674,7 @@ function setReactivitySingle(
             key!,
             attr_OR_text === String(resolvedValue)
               ? resolvedValue
-              : attr_OR_text
+              : attr_OR_text,
           )
         ) {
           attr_OR_text = attr_OR_text.replace(resolvedValue, "");
@@ -691,7 +691,7 @@ function changeAttrVal(
   node: HTMLTextAreaElement | HTMLInputElement | HTMLSelectElement,
   resolvedObj: hydroObject,
   lastProp: string,
-  isChecked: boolean = false
+  isChecked: boolean = false,
 ) {
   node.addEventListener(eventName, changeHandler);
   onCleanup(() => node.removeEventListener(eventName, changeHandler), node);
@@ -702,7 +702,7 @@ function changeAttrVal(
       lastProp,
       isChecked
         ? (target as HTMLInputElement).checked
-        : (target as HTMLInputElement).value
+        : (target as HTMLInputElement).value,
     );
   }
 }
@@ -712,7 +712,7 @@ function setTraces(
   node: Text | Element,
   hydroKey: string,
   resolvedObj: hydroObject,
-  key?: string
+  key?: string,
 ): void {
   // Set WeakMaps, that will be used to track a change for a Node but also to check if a Node has any other changes.
   const change: nodeChanges[number] = [start, end, key, resolvedObj];
@@ -742,7 +742,7 @@ function setTraces(
         new Map([
           [changeArr, node],
           [node, changeArr],
-        ])
+        ]),
       );
     }
   } else {
@@ -757,7 +757,7 @@ function setTraces(
             [node, changeArr],
           ]),
         ],
-      ])
+      ]),
     );
   }
 }
@@ -778,7 +778,7 @@ function resolveObject(propertyArray: Array<PropertyKey>): [any, hydroObject] {
 function compareEvents(
   elem: Element | Text,
   where: Element | Text,
-  onlyTextChildren?: boolean
+  onlyTextChildren?: boolean,
 ): boolean {
   const elemFunctions: Function[] = [];
   const whereFunctions: Function[] = [];
@@ -834,7 +834,7 @@ function compareEvents(
 function compare(
   elem: Element | DocumentFragment,
   where: Element | DocumentFragment | Text,
-  onlyTextChildren?: boolean
+  onlyTextChildren?: boolean,
 ): boolean {
   if (isDocumentFragment(elem) || isDocumentFragment(where)) return false;
   return (
@@ -845,7 +845,7 @@ function compare(
 function render(
   elem: ReturnType<typeof html> | reactiveObject<any>,
   where: ReturnType<typeof html> | string = "",
-  shouldSchedule = globalSchedule
+  shouldSchedule = globalSchedule,
 ): ChildNode["remove"] {
   /* c8 ignore next 4 */
   if (shouldSchedule) {
@@ -885,7 +885,7 @@ function render(
       } else if (!compare(elem, where as Element | DocumentFragment | Text)) {
         treeDiff(
           elem as Element | DocumentFragment,
-          where as Element | DocumentFragment | Text
+          where as Element | DocumentFragment | Text,
         );
       }
     }
@@ -902,7 +902,7 @@ function noop() {}
 
 function executeLifecycle(
   node: ReturnType<typeof html>,
-  lifecyleMap: typeof onRenderMap | typeof onCleanupMap
+  lifecyleMap: typeof onRenderMap | typeof onCleanupMap,
 ) {
   if (lifecyleMap.has(node)) {
     const fn = lifecyleMap.get(node)!;
@@ -918,7 +918,7 @@ function executeLifecycle(
 }
 function runLifecyle(
   node: ReturnType<typeof html>,
-  lifecyleMap: typeof onRenderMap | typeof onCleanupMap
+  lifecyleMap: typeof onRenderMap | typeof onCleanupMap,
 ) {
   if (
     (lifecyleMap === onRenderMap && !calledOnRender) ||
@@ -930,7 +930,7 @@ function runLifecyle(
 
   const elements = document.createNodeIterator(
     node as Node,
-    window.NodeFilter.SHOW_ELEMENT
+    window.NodeFilter.SHOW_ELEMENT,
   );
 
   let subElem;
@@ -949,7 +949,7 @@ function runLifecyle(
 
 function filterTag2Elements(
   tag2Elements: Map<string, Array<Element>>,
-  root: Element
+  root: Element,
 ) {
   for (const [localName, list] of tag2Elements.entries()) {
     // Process list in reverse to avoid index issues when splicing
@@ -967,7 +967,7 @@ function filterTag2Elements(
 }
 function treeDiff(
   elem: Element | DocumentFragment,
-  where: Element | DocumentFragment | Text
+  where: Element | DocumentFragment | Text,
 ) {
   const elemElements = [...elem.querySelectorAll("*")];
   if (!isDocumentFragment(elem)) elemElements.unshift(elem);
@@ -1048,7 +1048,7 @@ function treeDiff(
 
 function replaceElement(
   elem: ReturnType<typeof html>,
-  where: ReturnType<typeof html>
+  where: ReturnType<typeof html>,
 ) {
   if (isDocumentFragment(where)) {
     const fragmentChildren = fragmentToElements.get(where)!;
@@ -1185,14 +1185,14 @@ function unset(reactiveHydro: reactiveObject<any>): void {
     }
   } else {
     const [_, resolvedObj] = resolveObject(
-      reactiveHydro[keysSymbol.description!]
+      reactiveHydro[keysSymbol.description!],
     );
     Reflect.set(resolvedObj, lastProp, null);
   }
 }
 function setAsyncUpdate(
   reactiveHydro: reactiveObject<any>,
-  asyncUpdate: boolean
+  asyncUpdate: boolean,
 ) {
   const [_, oneKey] = getReactiveKeys(reactiveHydro);
 
@@ -1200,7 +1200,7 @@ function setAsyncUpdate(
     hydro.asyncUpdate = asyncUpdate;
   } else {
     const [_, resolvedObj] = resolveObject(
-      reactiveHydro[keysSymbol.description!]
+      reactiveHydro[keysSymbol.description!],
     );
     resolvedObj.asyncUpdate = asyncUpdate;
   }
@@ -1212,7 +1212,7 @@ function observe(reactiveHydro: reactiveObject<any>, fn: Function) {
     return hydro.observe(lastProp, fn);
   } else {
     const [_, resolvedObj] = resolveObject(
-      reactiveHydro[keysSymbol.description!]
+      reactiveHydro[keysSymbol.description!],
     );
     return resolvedObj.observe(lastProp, fn);
   }
@@ -1224,7 +1224,7 @@ function unobserve(reactiveHydro: reactiveObject<any>) {
     hydro.unobserve(lastProp);
   } else {
     const [_, resolvedObj] = resolveObject(
-      reactiveHydro[keysSymbol.description!]
+      reactiveHydro[keysSymbol.description!],
     );
     resolvedObj.unobserve(lastProp);
   }
@@ -1233,22 +1233,22 @@ function ternary(
   condition: Function | reactiveObject<any>,
   trueVal: any,
   falseVal: any,
-  reactiveHydro: reactiveObject<any> = condition
+  reactiveHydro: reactiveObject<any> = condition,
 ) {
   const checkCondition = (cond: any) =>
     (
       !Reflect.has(condition, reactiveSymbol) && isFunction(condition)
         ? condition(cond)
         : isPromise(cond)
-        ? false
-        : cond
+          ? false
+          : cond
     )
       ? isFunction(trueVal)
         ? trueVal()
         : trueVal
       : isFunction(falseVal)
-      ? falseVal()
-      : falseVal;
+        ? falseVal()
+        : falseVal;
 
   const ternaryValue = reactive(checkCondition(getValue(reactiveHydro)));
 
@@ -1264,10 +1264,10 @@ function emit(
   eventName: string,
   data: any,
   who: EventTarget,
-  options: object = { bubbles: true }
+  options: object = { bubbles: true },
 ) {
   who.dispatchEvent(
-    new window.CustomEvent(eventName, { ...options, detail: data })
+    new window.CustomEvent(eventName, { ...options, detail: data }),
   );
 }
 let trackDeps = false;
@@ -1318,7 +1318,7 @@ function watchEffect(fn: Function) {
 
 function getValue<T extends object>(reactiveHydro: T): T {
   const [resolvedValue] = resolveObject(
-    Reflect.get(reactiveHydro, keysSymbol.description!) as PropertyKey[]
+    Reflect.get(reactiveHydro, keysSymbol.description!) as PropertyKey[],
   );
   return resolvedValue;
 }
@@ -1758,7 +1758,7 @@ function updateDOM(nodeToChangeMap: nodeToChangeMap, val: any, oldVal: any) {
 function view(
   root: string,
   data: reactiveObject<Array<any>>,
-  renderFunction: (value: any, index: number) => Node
+  renderFunction: (value: any, index: number) => Node,
 ) {
   viewElements = true;
   const rootElem = $(root)!;
@@ -1801,7 +1801,7 @@ function view(
         const length = oldData.length;
         const slicedData = newData.slice(length);
         const newElements = slicedData.map((item, i) =>
-          renderFunction(item, i + length)
+          renderFunction(item, i + length),
         );
         rootElem.append(...newElements);
         for (const elem of newElements)
@@ -1824,39 +1824,39 @@ function view(
       }
       viewElements = false;
       /* c8 ignore end */
-    }
+    },
   )!;
   onCleanup(stopViewObserver, rootElem);
 }
 
 const hydro = generateProxy();
 const $ = document.querySelector.bind(document) as <T extends string>(
-  query: T
+  query: T,
 ) => QueryResult<T>;
 const $$ = document.querySelectorAll.bind(document) as unknown as <
-  T extends string
+  T extends string,
 >(
-  query: T
+  query: T,
 ) => Array<NonNullable<QueryResult<T>>> | [];
 
 // Credit to https://twitter.com/MikeRyanDev/status/1308472279010025477
 type Split<
   S extends string,
-  D extends string
+  D extends string,
 > = S extends `${infer T}${D}${infer U}` ? [T, ...Split<U, D>] : [S];
 type TakeLast<V> = V extends []
   ? never
   : V extends [string]
-  ? V[0]
-  : V extends [string, ...infer R]
-  ? TakeLast<R>
-  : never;
+    ? V[0]
+    : V extends [string, ...infer R]
+      ? TakeLast<R>
+      : never;
 type TrimLeft<V extends string> = V extends ` ${infer R}` ? TrimLeft<R> : V;
 type TrimRight<V extends string> = V extends `${infer R} ` ? TrimRight<R> : V;
 type Trim<V extends string> = TrimLeft<TrimRight<V>>;
 type StripModifier<
   V extends string,
-  M extends string
+  M extends string,
 > = V extends `${infer L}${M}${infer A}` ? L : V;
 type StripModifiers<V extends string> = StripModifier<
   StripModifier<StripModifier<StripModifier<V, ".">, "#">, "[">,
@@ -1872,23 +1872,23 @@ type GetLastElementName<V extends string> = TakeLastAfterToken<
 type GetEachElementName<V, L extends string[] = []> = V extends []
   ? L
   : V extends [string]
-  ? [...L, GetLastElementName<V[0]>]
-  : V extends [string, ...infer R]
-  ? GetEachElementName<R, [...L, GetLastElementName<V[0]>]>
-  : [];
+    ? [...L, GetLastElementName<V[0]>]
+    : V extends [string, ...infer R]
+      ? GetEachElementName<R, [...L, GetLastElementName<V[0]>]>
+      : [];
 type GetElementNames<V extends string> = GetEachElementName<Split<V, ",">>;
 type ElementByName<V extends string> = V extends keyof HTMLElementTagNameMap
   ? HTMLElementTagNameMap[V]
   : V extends keyof SVGElementTagNameMap
-  ? SVGElementTagNameMap[V]
-  : Element;
+    ? SVGElementTagNameMap[V]
+    : Element;
 type MatchEachElement<V, L extends Element | null = null> = V extends []
   ? L
   : V extends [string]
-  ? L | ElementByName<V[0]>
-  : V extends [string, ...infer R]
-  ? MatchEachElement<R, L | ElementByName<V[0]>>
-  : L;
+    ? L | ElementByName<V[0]>
+    : V extends [string, ...infer R]
+      ? MatchEachElement<R, L | ElementByName<V[0]>>
+      : L;
 type QueryResult<T extends string> = MatchEachElement<GetElementNames<T>>;
 
 const internals = {
