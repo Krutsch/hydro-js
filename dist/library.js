@@ -188,11 +188,11 @@ function removeTrackedEventListener(node, eventName, handler) {
 }
 function html(htmlArray, ...variables) {
     const eventFunctions = new Map(); // Temporarily store a mapping for string -> function, because eventListener have to be registered after the Element's creation
-    let insertNodes = []; // Nodes, that will be added after the parsing
+    const insertNodes = []; // Nodes, that will be added after the parsing
+    const template = `<${"template" /* Placeholder.template */} id="lbInsertNodes"></${"template" /* Placeholder.template */}>`;
     const resolvedVariables = new Array(variables.length);
     for (let i = 0; i < variables.length; i++) {
         const variable = variables[i];
-        const template = `<${"template" /* Placeholder.template */} id="lbInsertNodes"></${"template" /* Placeholder.template */}>`;
         if (isNode(variable)) {
             insertNodes.push(variable);
             resolvedVariables[i] = template;
@@ -204,7 +204,8 @@ function html(htmlArray, ...variables) {
         else if (isFunction(variable) || isEventObject(variable)) {
             const funcName = randomText();
             eventFunctions.set(funcName, variable);
-            viewElements && viewElementsEventFunctions.set(funcName, variable);
+            if (viewElements)
+                viewElementsEventFunctions.set(funcName, variable);
             resolvedVariables[i] = funcName;
         }
         else if (Array.isArray(variable)) {
@@ -338,7 +339,7 @@ function setReactivity(DOM, eventFunctions) {
                         elemEventFunctions.get(elem).get(eventName)?.add(event.event);
                     }
                     else {
-                        elemEventFunctions.set(elem, new Map().set(eventName, new Set([event.event])));
+                        elemEventFunctions.set(elem, new Map([[eventName, new Set([event.event])]]));
                     }
                 }
                 else {
@@ -347,7 +348,7 @@ function setReactivity(DOM, eventFunctions) {
                         elemEventFunctions.get(elem).get(eventName)?.add(event);
                     }
                     else {
-                        elemEventFunctions.set(elem, new Map().set(eventName, new Set([event])));
+                        elemEventFunctions.set(elem, new Map([[eventName, new Set([event])]]));
                     }
                 }
             }
@@ -382,6 +383,11 @@ function setReactivitySingle(node, key, val) {
                 node.removeAttribute(attr_OR_text);
             }
         }
+    }
+    const hasCurlyBraces = attr_OR_text.includes("{{");
+    const hasReactiveKey = isServerSideCached && attr_OR_text.includes("hydro-reactive-" /* Placeholder.reactiveKey */);
+    if (!hasCurlyBraces && !hasReactiveKey) {
+        return;
     }
     while ((match = attr_OR_text.match(reactivityRegex))) {
         // attr_OR_text will be altered in every iteration
@@ -809,8 +815,7 @@ function replaceElement(elem, where) {
         }
     }
     else if (isServerSideCached) {
-        if (isServerSideCached &&
-            elem instanceof window.HTMLHtmlElement &&
+        if (elem instanceof window.HTMLHtmlElement &&
             where instanceof window.HTMLHtmlElement) {
             for (const key of elem.getAttributeNames()) {
                 setAttribute(where, key, elem.getAttribute(key));
@@ -1150,7 +1155,8 @@ function generateProxy(obj) {
             if (isObject(val) && isProxy(val)) {
                 if (reactivityMap.has(oldVal)) {
                     // Store old reactivityMap if it is a swap operation
-                    reuseElements && tmpSwap.set(oldVal, reactivityMap.get(oldVal));
+                    if (reuseElements)
+                        tmpSwap.set(oldVal, reactivityMap.get(oldVal));
                     if (tmpSwap.has(val)) {
                         reactivityMap.set(oldVal, tmpSwap.get(val));
                         tmpSwap.delete(val);
@@ -1306,6 +1312,9 @@ function updateDOM(nodeToChangeMap, val, oldVal) {
                 const tmpChange = nodeToChangeMap.get(entry);
                 nodeToChangeMap.delete(entry);
                 nodeToChangeMap.delete(tmpChange);
+                if (allNodeChanges.has(entry)) {
+                    allNodeChanges.delete(entry);
+                }
             }
             return; // Continue in forEach
         }

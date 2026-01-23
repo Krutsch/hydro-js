@@ -309,12 +309,12 @@ function html(
   ...variables: Array<any>
 ): Element | DocumentFragment | Text {
   const eventFunctions: eventFunctions = new Map(); // Temporarily store a mapping for string -> function, because eventListener have to be registered after the Element's creation
-  let insertNodes: Node[] = []; // Nodes, that will be added after the parsing
+  const insertNodes: Node[] = []; // Nodes, that will be added after the parsing
+  const template = `<${Placeholder.template} id="lbInsertNodes"></${Placeholder.template}>`;
 
   const resolvedVariables = new Array<string>(variables.length);
   for (let i = 0; i < variables.length; i++) {
     const variable = variables[i];
-    const template = `<${Placeholder.template} id="lbInsertNodes"></${Placeholder.template}>`;
 
     if (isNode(variable)) {
       insertNodes.push(variable);
@@ -327,7 +327,7 @@ function html(
     } else if (isFunction(variable) || isEventObject(variable)) {
       const funcName = randomText();
       eventFunctions.set(funcName, variable);
-      viewElements && viewElementsEventFunctions.set(funcName, variable);
+      if (viewElements) viewElementsEventFunctions.set(funcName, variable);
       resolvedVariables[i] = funcName;
     } else if (Array.isArray(variable)) {
       for (let index = 0; index < variable.length; index++) {
@@ -496,7 +496,7 @@ function setReactivity(
           } else {
             elemEventFunctions.set(
               elem,
-              new Map().set(eventName, new Set([event.event])),
+              new Map([[eventName, new Set([event.event])]]),
             );
           }
         } else {
@@ -506,7 +506,7 @@ function setReactivity(
           } else {
             elemEventFunctions.set(
               elem,
-              new Map().set(eventName, new Set([event])),
+              new Map([[eventName, new Set([event])]]),
             );
           }
         }
@@ -553,6 +553,13 @@ function setReactivitySingle(
         (node as Element).removeAttribute(attr_OR_text);
       }
     }
+  }
+
+  const hasCurlyBraces = attr_OR_text.includes("{{");
+  const hasReactiveKey =
+    isServerSideCached && attr_OR_text.includes(Placeholder.reactiveKey);
+  if (!hasCurlyBraces && !hasReactiveKey) {
+    return;
   }
 
   while ((match = attr_OR_text.match(reactivityRegex))) {
@@ -1074,7 +1081,6 @@ function replaceElement(
     }
   } else if (isServerSideCached) {
     if (
-      isServerSideCached &&
       elem instanceof window.HTMLHtmlElement &&
       where instanceof window.HTMLHtmlElement
     ) {
@@ -1480,7 +1486,7 @@ function generateProxy(obj?: Record<PropertyKey, unknown>): hydroObject {
       if (isObject(val) && isProxy(val)) {
         if (reactivityMap.has(oldVal)) {
           // Store old reactivityMap if it is a swap operation
-          reuseElements && tmpSwap.set(oldVal, reactivityMap.get(oldVal)!);
+          if (reuseElements) tmpSwap.set(oldVal, reactivityMap.get(oldVal)!);
 
           if (tmpSwap.has(val)) {
             reactivityMap.set(oldVal, tmpSwap.get(val)!);
@@ -1652,6 +1658,9 @@ function updateDOM(nodeToChangeMap: nodeToChangeMap, val: any, oldVal: any) {
         const tmpChange = nodeToChangeMap.get(entry)!;
         nodeToChangeMap.delete(entry);
         nodeToChangeMap.delete(tmpChange);
+        if (allNodeChanges.has(entry as Element | Text)) {
+          allNodeChanges.delete(entry as Element | Text);
+        }
       }
       return; // Continue in forEach
     }
