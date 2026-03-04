@@ -12,6 +12,8 @@ jobs:
           node-version: "24"
       - name: Install
         run: npm install
+      - name: Install Playwright Browsers
+        run: npx playwright install --with-deps chromium firefox webkit
       - name: Compiles
         run: npm run build
       - name: Test w/ Coverage
