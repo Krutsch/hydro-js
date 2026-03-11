@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.8.14 2026-03-11
+- add undefined checks
+
 ## 1.8.14 2025-10-22
 - little refactoring
 

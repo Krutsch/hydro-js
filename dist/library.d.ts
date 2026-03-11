@@ -62,7 +62,7 @@ declare function render(elem: ReturnType<typeof html> | reactiveObject<any>, whe
 declare function reactive<T>(initial: T): reactiveObject<T>;
 declare function unset(reactiveHydro: reactiveObject<any>): void;
 declare function setAsyncUpdate(reactiveHydro: reactiveObject<any>, asyncUpdate: boolean): void;
-declare function observe(reactiveHydro: reactiveObject<any>, fn: Function): (() => void) | undefined;
+declare function observe(reactiveHydro: reactiveObject<any>, fn: Function): any;
 declare function unobserve(reactiveHydro: reactiveObject<any>): void;
 declare function ternary(condition: Function | reactiveObject<any>, trueVal: any, falseVal: any, reactiveHydro?: reactiveObject<any>): any;
 declare function emit(eventName: string, data: any, who: EventTarget, options?: object): void;

@@ -930,6 +930,8 @@ function setAsyncUpdate(reactiveHydro, asyncUpdate) {
     }
 }
 function observe(reactiveHydro, fn) {
+    if (reactiveHydro === undefined)
+        return reactiveHydro;
     const [lastProp, oneKey] = getReactiveKeys(reactiveHydro);
     if (oneKey) {
         return hydro.observe(lastProp, fn);
@@ -1013,6 +1015,8 @@ function watchEffect(fn) {
     };
 }
 function getValue(reactiveHydro) {
+    if (reactiveHydro === undefined)
+        return reactiveHydro;
     const [resolvedValue] = resolveObject(Reflect.get(reactiveHydro, keysSymbol.description));
     return resolvedValue;
 }

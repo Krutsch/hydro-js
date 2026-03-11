@@ -1212,6 +1212,7 @@ function setAsyncUpdate(
   }
 }
 function observe(reactiveHydro: reactiveObject<any>, fn: Function) {
+  if (reactiveHydro === undefined) return reactiveHydro;
   const [lastProp, oneKey] = getReactiveKeys(reactiveHydro);
 
   if (oneKey) {
@@ -1323,6 +1324,7 @@ function watchEffect(fn: Function) {
 }
 
 function getValue<T extends object>(reactiveHydro: T): T {
+  if (reactiveHydro === undefined) return reactiveHydro;
   const [resolvedValue] = resolveObject(
     Reflect.get(reactiveHydro, keysSymbol.description!) as PropertyKey[],
   );
