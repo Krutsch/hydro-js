@@ -614,7 +614,7 @@ describe("library", () => {
         ]);
         const elem = html`
           <div>
-            ${getValue(list).map((_, index) => {
+            ${getValue(list).map((_: any, index: string | number) => {
               return html`<p>${list[index].text}</p>`;
             })}
           </div>
