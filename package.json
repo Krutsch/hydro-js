@@ -38,7 +38,7 @@
     "happy-dom": "^20.3.7",
     "jsdom": "^29.0.0",
     "serve": "^14.2.5",
-    "typescript": "^5.9.3"
+    "typescript": "^6.0.2"
   },
   "repository": {
     "type": "git",
