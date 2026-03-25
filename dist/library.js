@@ -852,6 +852,7 @@ async function schedule(fn, ...args) {
         window.scheduler.postTask(() => fn(...args), { priority: "user-blocking" });
     }
     else {
+        // @ts-ignore
         window.requestIdleCallback(() => fn(...args));
     }
 }

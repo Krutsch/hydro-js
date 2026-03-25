@@ -1118,6 +1118,7 @@ async function schedule(fn: Function, ...args: any): Promise<void> {
     // @ts-ignore
     window.scheduler.postTask(() => fn(...args), { priority: "user-blocking" });
   } else {
+    // @ts-ignore
     window.requestIdleCallback(() => fn(...args));
   }
 }
