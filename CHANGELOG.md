@@ -1,73 +1,100 @@
 # Changelog
 
+## 1.8.16 2026-06-23
+
+- try: add jsx runtime for better integration
+
 ## 1.8.15 2026-03-11
+
 - add undefined checks
 
 ## 1.8.14 2025-10-22
+
 - little refactoring
 
 ## 1.8.13 2025-08-05
+
 - cache the serverside function
 
 ## 1.8.12 2025-08-05
+
 - refactor some code back with the help of the isServerCode function
 
 ## 1.8.11 2025-08-04
+
 - minor refactor to Map
 
 ## 1.8.10 2025-08-03
+
 - fix bug in view function where event functions were not added in combination with html function
 
 ## 1.8.9 2025-07-31
+
 - minor code refactoring
 - increase priority for scheduler
 
 ## 1.8.8 2025-05-29
+
 - fix missing function
 
 ## 1.8.7 2025-05-29
+
 - fix bug when rendering the html element in a html element
 
 ## 1.8.6 2025-05-22
+
 - update bool attr list and testing elements
 
 ## 1.8.5 2025-05-21
+
 - undo change as the error may be in the integration
 
 ## 1.8.4 2025-05-21
+
 - fix document instance for jsdom
 
 ## 1.8.3 2025-05-16
+
 - move integrations to own package
 
 ## 1.8.2 2025-05-12
+
 -fix: move happy-dom and jsdom to deps
- 
+
 ## 1.8.1 2025-05-12
+
 - fix: build the files and fix types
 
 ## 1.8.0 2025-05-12
+
 - ship hydro-js/server for better Vite SSR integration
 
 ## 1.7.1 2025-04-08
+
 - fix reactive bug when using SSR with happy-dom
 
 ## 1.7.0 2025-04-07
+
 - feat: make library happy-dom compatible
 
 ## 1.6.0 2025-04-04
+
 - improve prev change
 - remove code from previous change
 - feat: make library jsdom compatible
 
 ## 1.5.24 2025-04-02
+
 ## 1.5.23 2025-04-02
+
 - make use of window object in order to work on the server for upcoming SSR
 
 ## 1.5.22 2024-09-29
+
 - export bool attrs
 
 ## 1.5.21 2024-09-25
+
 - fix a TypeScript type
 
 ## 1.5.20 2024-09-19

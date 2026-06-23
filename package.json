@@ -1,14 +1,24 @@
 {
   "name": "hydro-js",
-  "version": "1.8.15",
+  "version": "1.8.16",
   "description": "A lightweight reactive library",
   "type": "module",
   "main": "./dist/library.js",
   "module": "./dist/library.js",
   "types": "./dist/library.d.ts",
   "exports": {
-    "import": "./dist/library.js",
-    "default": "./dist/library.js"
+    ".": {
+      "types": "./dist/library.d.ts",
+      "default": "./dist/library.js"
+    },
+    "./jsx-runtime": {
+      "types": "./dist/jsx-runtime.d.ts",
+      "default": "./dist/jsx-runtime.js"
+    },
+    "./jsx-dev-runtime": {
+      "types": "./dist/jsx-dev-runtime.d.ts",
+      "default": "./dist/jsx-dev-runtime.js"
+    }
   },
   "scripts": {
     "build": "tsc",
