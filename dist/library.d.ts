@@ -37,7 +37,13 @@ export interface hydroObject extends Record<PropertyKey, any> {
     getObservers: () => Map<string, Set<Function>>;
     unobserve: (key?: PropertyKey, handler?: Function) => undefined;
 }
-type nodeChanges = Array<[number, number, string | undefined, hydroObject]>;
+type nodeChanges = Array<[
+    number,
+    number,
+    string | undefined,
+    hydroObject,
+    string
+]>;
 interface EventObject {
     event: EventListener;
     options: AddEventListenerOptions;

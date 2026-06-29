@@ -25,6 +25,9 @@
     "dev": "concurrently \"serve dist\" \"tsc -w\"",
     "test": "tsc && wtr src/test.html --node-resolve --coverage --playwright --browsers chromium firefox webkit",
     "test:dom": "node dist/testHAPPYDOM.js && node dist/testJSDOM.js",
+    "bench": "npm run bench:happy && npm run bench:browser",
+    "bench:happy": "tsc && node --expose-gc dist/benchmark.node.js",
+    "bench:browser": "tsc && wtr --config web-test-runner.bench.config.mjs",
     "update": "npx npm-check-updates -u && npx typesync && npm i && npm outdated"
   },
   "keywords": [

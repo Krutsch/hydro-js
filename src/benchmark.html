@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>hydro-js memory benchmark</title>
+    <script type="module">
+      import { runTests } from "@web/test-runner-mocha";
+      import { expect } from "@esm-bundle/chai";
+      import { runScenarios, formatReport } from "../dist/benchmark.js";
+
+      runTests(async () => {
+        describe("memory", () => {
+          it("reactive nodes are released after unmount / diff / unbind", async function () {
+            this.timeout(120000);
+
+            if (typeof window.gc !== "function") {
+              throw new Error(
+                "window.gc is unavailable. Launch chromium with --js-flags=--expose-gc " +
+                  "(see web-test-runner.bench.config.mjs).",
+              );
+            }
+
+            // Smaller N than node: browser GC is slower but still decisive.
+            const report = await runScenarios({
+              gc: () => window.gc(),
+              N: 1500,
+            });
+            console.log(formatReport(report));
+            expect(report.pass, "\n" + formatReport(report)).to.be.true;
+          });
+        });
+      });
+    </script>
+  </head>
+  <body></body>
+</html>

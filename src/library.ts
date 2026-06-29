@@ -38,7 +38,12 @@ export interface hydroObject extends Record<PropertyKey, any> {
   getObservers: () => Map<string, Set<Function>>;
   unobserve: (key?: PropertyKey, handler?: Function) => undefined;
 }
-type nodeChanges = Array<[number, number, string | undefined, hydroObject]>;
+// The trailing `hydroKey` is the Proxy property name this change is keyed under
+// in reactivityMap. Storing it lets us purge a Node from reactivityMap in O(1)
+// when it is removed, without scanning every key.
+type nodeChanges = Array<
+  [number, number, string | undefined, hydroObject, string]
+>;
 
 // Circular reference
 type nodeToChangeMap = Map<
@@ -99,6 +104,7 @@ const elemEventFunctions = new WeakMap<
 >(); // Stores event functions in order to compare Elements against each other.
 const reactivityMap = new WeakMap<hydroObject, keyToNodeMap>(); // Maps Proxy Objects to another Map(proxy-key, node).
 const bindMap = new WeakMap<hydroObject, Array<Element>>(); // Bind an Element to data. If the data is being unset, the DOM Element disappears too.
+const boundElemProxies = new WeakMap<Element, Set<hydroObject>>(); // Reverse of bindMap: which Proxies an Element is bound to, so it can be removed from bindMap when the Element is purged.
 const tmpSwap = new WeakMap<hydroObject, keyToNodeMap>(); // Take over keyToNodeMap if the new value is a hydro Proxy. Save old reactivityMap entry here, in case for a swap operation.
 const onRenderMap = new WeakMap<ReturnType<typeof html>, Function>(); // Lifecycle Hook that is being called after rendering
 const onCleanupMap = new WeakMap<ReturnType<typeof html>, Function>(); // Lifecycle Hook that is being called when unmount function is being called
@@ -289,6 +295,7 @@ function removeTrackedEventListener(
   handler: EventListener,
 ) {
   node.removeEventListener(eventName, handler);
+  node.removeEventListener(eventName, handler, true);
   const map = elemEventFunctions.get(node);
   if (!map) return;
 
@@ -302,6 +309,19 @@ function removeTrackedEventListener(
   if (map.size === 0) {
     elemEventFunctions.delete(node);
   }
+}
+
+function purgeTrackedEventListeners(node: Element) {
+  const map = elemEventFunctions.get(node);
+  if (!map) return;
+
+  map.forEach((handlers, eventName) => {
+    handlers.forEach((handler) => {
+      node.removeEventListener(eventName, handler);
+      node.removeEventListener(eventName, handler, true);
+    });
+  });
+  elemEventFunctions.delete(node);
 }
 
 function html(
@@ -614,6 +634,11 @@ function setReactivitySingle(
         } else {
           bindMap.set(proxy, [node]);
         }
+        if (boundElemProxies.has(node as Element)) {
+          boundElemProxies.get(node as Element)!.add(proxy);
+        } else {
+          boundElemProxies.set(node as Element, new Set([proxy]));
+        }
         continue;
       } else if (key === Placeholder.twoWay) {
         if (node instanceof window.HTMLSelectElement) {
@@ -722,7 +747,7 @@ function setTraces(
   key?: string,
 ): void {
   // Set WeakMaps, that will be used to track a change for a Node but also to check if a Node has any other changes.
-  const change: nodeChanges[number] = [start, end, key, resolvedObj];
+  const change: nodeChanges[number] = [start, end, key, resolvedObj, hydroKey];
   const changeArr = [change];
 
   if (allNodeChanges.has(node)) {
@@ -885,10 +910,14 @@ function render(
     }
 
     if (!reuseElements) {
-      replaceElement(elem, where as Element);
+      const previous = where as Element | DocumentFragment | Text;
+      replaceElement(elem, previous);
+      purgeDetached(previous); // old tree is fully discarded when not reusing
     } else {
       if (isTextNode(elem)) {
-        replaceElement(elem, where as Element);
+        const previous = where as Element | DocumentFragment | Text;
+        replaceElement(elem, previous);
+        purgeDetached(previous);
       } else if (!compare(elem, where as Element | DocumentFragment | Text)) {
         treeDiff(
           elem as Element | DocumentFragment,
@@ -1050,6 +1079,19 @@ function treeDiff(
   } else {
     replaceElement(elem, where);
   }
+
+  // Release reactivity bookkeeping for any candidate Node that ended up detached
+  // (discarded new Elements + non-reused old Elements). Reused Elements remain
+  // connected and are skipped. Disabled when isConnected is untrustworthy.
+  if (!ignoreIsConnected) {
+    for (const subElem of elemElements) {
+      if (!subElem.isConnected) purgeSubtree(subElem);
+    }
+    for (const subElem of whereElements) {
+      if (!subElem.isConnected) purgeSubtree(subElem);
+    }
+  }
+
   tag2Elements.clear();
 }
 
@@ -1109,6 +1151,100 @@ function removeElement(elem: Text | Element) {
   if (!ignoreIsConnected && elem.isConnected) {
     elem.remove();
     runLifecyle(elem, onCleanupMap);
+    purgeSubtree(elem);
+  }
+}
+
+// Remove every trace of a single Node from the reactivity bookkeeping so that,
+// once it leaves the DOM, nothing in the library keeps it alive. reactivityMap
+// is keyed by long-lived Proxies (hydro never dies), so without this a removed
+// Node would be retained forever via its nodeToChangeMap entry.
+function purgeReactivity(node: Text | Element) {
+  if (!isTextNode(node)) purgeTrackedEventListeners(node);
+
+  // Drop bind references (bindMap holds Elements strongly).
+  const proxies = boundElemProxies.get(node as Element);
+  if (proxies) {
+    for (const proxy of proxies) {
+      const arr = bindMap.get(proxy);
+      if (arr) {
+        const idx = arr.indexOf(node as Element);
+        if (idx !== -1) arr.splice(idx, 1);
+        if (arr.length === 0) bindMap.delete(proxy);
+      }
+    }
+    boundElemProxies.delete(node as Element);
+  }
+
+  const changes = allNodeChanges.get(node);
+  if (!changes) return;
+
+  for (const change of changes) {
+    const proxy = change[3];
+    const hydroKey = change[4];
+    const keyToNodeMap = reactivityMap.get(proxy);
+    if (!keyToNodeMap) continue;
+
+    const nodeToChangeMap = keyToNodeMap.get(hydroKey);
+    if (nodeToChangeMap && nodeToChangeMap.has(node)) {
+      const arr = nodeToChangeMap.get(node)!;
+      nodeToChangeMap.delete(node);
+      nodeToChangeMap.delete(arr);
+      if (nodeToChangeMap.size === 0) keyToNodeMap.delete(hydroKey);
+    }
+    if (keyToNodeMap.size === 0) reactivityMap.delete(proxy);
+  }
+  allNodeChanges.delete(node);
+}
+
+// Purge a Node and its whole subtree (elements + their Text children), mirroring
+// the traversal used by runLifecyle / setReactivity.
+function purgeSubtree(root: Node) {
+  if (isTextNode(root)) {
+    purgeReactivity(root);
+    return;
+  }
+
+  purgeReactivity(root as Element); // no-op for DocumentFragment
+
+  const elements = document.createNodeIterator(
+    root,
+    window.NodeFilter.SHOW_ELEMENT,
+  );
+  let elem;
+  while ((elem = elements.nextNode())) {
+    purgeReactivity(elem as Element);
+    let child = (elem as Element).firstChild;
+    while (child) {
+      if (isTextNode(child)) purgeReactivity(child);
+      child = child.nextSibling;
+    }
+  }
+
+  // Text nodes that are direct children of a DocumentFragment have no element
+  // parent visited above, so handle them explicitly.
+  if (isDocumentFragment(root)) {
+    let child = root.firstChild;
+    while (child) {
+      if (isTextNode(child)) purgeReactivity(child);
+      child = child.nextSibling;
+    }
+  }
+}
+
+// Purge a node / fragment only if it ended up detached from the document after a
+// diff or replace. Reused nodes stay connected and keep their reactivity.
+function purgeDetached(node: Node) {
+  if (ignoreIsConnected) return;
+  if (isDocumentFragment(node)) {
+    const kids = fragmentToElements.get(node);
+    if (kids) {
+      for (const kid of kids) {
+        if (!(kid as ChildNode).isConnected) purgeSubtree(kid);
+      }
+    }
+  } else if (!(node as ChildNode).isConnected) {
+    purgeSubtree(node);
   }
 }
 
@@ -1318,7 +1454,9 @@ function watchEffect(fn: Function) {
   trackProxies.clear();
 
   return () => {
-    const entries = unobserveMap.get(reRun)!;
+    const entries = unobserveMap.get(reRun);
+    if (!entries) return;
+
     entries.forEach((entry) => entry.proxy.unobserve(entry.key, reRun));
     unobserveMap.delete(reRun);
   };
@@ -1399,13 +1537,17 @@ function generateProxy(obj?: Record<PropertyKey, unknown>): hydroObject {
           oldVal.unobserve();
           reactivityMap.delete(oldVal);
           if (bindMap.has(oldVal)) {
-            bindMap.get(oldVal)!.forEach(removeElement);
+            // Snapshot + delete before removing, because removeElement now
+            // purges the Element out of bindMap too (mutation during forEach).
+            const elems = bindMap.get(oldVal)!;
             bindMap.delete(oldVal);
+            elems.forEach(removeElement);
           }
         } else {
           if (bindMap.has(receiver)) {
-            bindMap.get(receiver)!.forEach(removeElement);
+            const elems = bindMap.get(receiver)!;
             bindMap.delete(receiver);
+            elems.forEach(removeElement);
           }
         }
 
@@ -1613,10 +1755,11 @@ function cleanProxy(proxy: any) {
   if (isObject(proxy) && isProxy(proxy)) {
     proxy.unobserve();
     reactivityMap.delete(proxy);
-    /* c8 ignore next 4 */
+    /* c8 ignore next 5 */
     if (bindMap.has(proxy)) {
-      bindMap.get(proxy)!.forEach(removeElement);
+      const elems = bindMap.get(proxy)!;
       bindMap.delete(proxy);
+      elems.forEach(removeElement);
     }
   }
 }
