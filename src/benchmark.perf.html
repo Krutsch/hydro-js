@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>hydro-js performance benchmark</title>
+    <script type="module">
+      import { runTests } from "@web/test-runner-mocha";
+      import { expect } from "@esm-bundle/chai";
+
+      runTests(async () => {
+        describe("performance", () => {
+          it("runs js-framework-benchmark-shaped operations", async function () {
+            this.timeout(120000);
+
+            const { runPerfScenarios, formatPerfReport } =
+              await import("../dist/benchmark.perf.js");
+
+            const report = await runPerfScenarios({
+              rows: 200,
+              manyRows: 1000,
+              now: () => performance.now(),
+            });
+            console.log(formatPerfReport(report));
+            expect(report.pass, "\n" + formatPerfReport(report)).to.be.true;
+          });
+        });
+      });
+    </script>
+  </head>
+  <body></body>
+</html>

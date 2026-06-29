@@ -95,7 +95,7 @@ const range = document.createRange();
 range.selectNodeContents(
   range.createContextualFragment(`<${Placeholder.template}>`).lastChild!,
 );
-const parser = range.createContextualFragment.bind(range);
+const defaultParser = range.createContextualFragment.bind(range);
 
 const allNodeChanges = new WeakMap<Text | Element, nodeChanges>(); // Maps a Node against an array of changes. An array is necessary because a node can have multiple variables for one text / attribute.
 const elemEventFunctions = new WeakMap<
@@ -113,6 +113,7 @@ const hydroToReactive = new WeakMap<hydroObject, reactiveObject<any>>(); // Used
 const _boundFunctions = Symbol("boundFunctions"); // Cache for bound functions in Proxy, so that we create the bound version of each function only once
 const reactiveSymbol = Symbol("reactive");
 const keysSymbol = Symbol("keys");
+const htmlCache = new WeakMap<TemplateStringsArray, DocumentFragment>();
 const viewElementsEventFunctions = new Map() as eventFunctions;
 const isServerSideCached = isServerSide();
 
@@ -129,6 +130,10 @@ const reactivityRegex = new RegExp(
     : `\\{\\{([^]*?)\\}\\}`,
 );
 const HTML_FIND_INVALID = /<(\/?)(html|head|body)(>|\s.*?>)/g;
+const HTML_FIND_TABLE_ROW = /^<tr(>|\s)/i;
+const HTML_FIND_TABLE_CELL = /^<t[dh](>|\s)/i;
+const HTML_FIND_TABLE_COL = /^<col(>|\s|\/)/i;
+const HTML_FIND_TABLE_SECTION = /^<(tbody|thead|tfoot|caption|colgroup)(>|\s)/i;
 const newLineRegex = /\n/g;
 const propChainRegex = /[\.\[\]]/;
 const onEventRegex = /^on/;
@@ -281,12 +286,19 @@ function addEventListener(
   obj: EventObject | EventListener,
 ) {
   const isFn = isFunction(obj);
+  const handler = isFn ? obj : obj.event;
 
-  node.addEventListener(
-    eventName,
-    isFn ? obj : obj.event,
-    isFn ? {} : obj.options,
-  );
+  node.addEventListener(eventName, handler, isFn ? {} : obj.options);
+  if (elemEventFunctions.has(node)) {
+    const map = elemEventFunctions.get(node)!;
+    if (map.has(eventName)) {
+      map.get(eventName)!.add(handler);
+    } else {
+      map.set(eventName, new Set([handler]));
+    }
+  } else {
+    elemEventFunctions.set(node, new Map([[eventName, new Set([handler])]]));
+  }
 }
 
 function removeTrackedEventListener(
@@ -328,6 +340,9 @@ function html(
   htmlArray: TemplateStringsArray,
   ...variables: Array<any>
 ): Element | DocumentFragment | Text {
+  const cachedDOM = createCachedHTML(htmlArray, variables);
+  if (cachedDOM) return cachedDOM;
+
   const eventFunctions: eventFunctions = new Map(); // Temporarily store a mapping for string -> function, because eventListener have to be registered after the Element's creation
   const insertNodes: Node[] = []; // Nodes, that will be added after the parsing
   const template = `<${Placeholder.template} id="lbInsertNodes"></${Placeholder.template}>`;
@@ -395,6 +410,160 @@ function html(
 
   // Return Element | Text
   return DOM.firstChild as Element | Text;
+}
+function parser(DOMString: string) {
+  const trimmed = DOMString.trimStart();
+  if (HTML_FIND_TABLE_ROW.test(trimmed)) {
+    return parseTableFragment("tbody", DOMString);
+  }
+  if (HTML_FIND_TABLE_CELL.test(trimmed)) {
+    return parseTableFragment("tr", DOMString);
+  }
+  if (HTML_FIND_TABLE_COL.test(trimmed)) {
+    return parseTableFragment("colgroup", DOMString);
+  }
+  if (HTML_FIND_TABLE_SECTION.test(trimmed)) {
+    return parseTableFragment("table", DOMString);
+  }
+  return defaultParser(DOMString);
+}
+function parseTableFragment(
+  parentName: "table" | "tbody" | "tr" | "colgroup",
+  DOMString: string,
+) {
+  const parent = document.createElement(parentName);
+  parent.innerHTML = DOMString;
+  const fragment = document.createDocumentFragment();
+  fragment.append(...parent.childNodes);
+  return fragment;
+}
+function createCachedHTML(
+  htmlArray: TemplateStringsArray,
+  variables: Array<any>,
+): Element | DocumentFragment | Text | undefined {
+  if (!shouldSetReactivity || !canCacheHTMLVariables(htmlArray, variables)) {
+    return;
+  }
+
+  let cached = htmlCache.get(htmlArray);
+  if (!cached) {
+    const markers = variables.map((_, i) => `__hydro${i}__`);
+    let DOMString = String.raw(htmlArray, ...markers).trim();
+    if (HTML_FIND_INVALID.test(DOMString)) {
+      HTML_FIND_INVALID.lastIndex = 0;
+      return;
+    }
+    HTML_FIND_INVALID.lastIndex = 0;
+    cached = parser(DOMString);
+    htmlCache.set(htmlArray, cached);
+  }
+
+  const DOM = cached.cloneNode(true) as DocumentFragment;
+  const values = variables.map(String);
+  let hasReactiveValue = false;
+  const events: eventFunctions = new Map();
+
+  for (let i = 0; i < variables.length; i++) {
+    const variable = variables[i];
+    const marker = `__hydro${i}__`;
+    if (isFunction(variable) || isEventObject(variable)) {
+      events.set(marker, variable);
+    } else if (containsReactiveValue(variable)) {
+      hasReactiveValue = true;
+    }
+  }
+
+  applyCachedHTMLValues(DOM, values, events);
+  if (hasReactiveValue && !viewElements) setReactivity(DOM);
+
+  if (DOM.childNodes.length > 1) return DOM;
+  if (!DOM.firstChild) return document.createTextNode("");
+  return DOM.firstChild as Element | Text;
+}
+function canCacheHTMLVariables(
+  htmlArray: TemplateStringsArray,
+  variables: Array<any>,
+) {
+  if (Array.from(htmlArray).some(containsReactiveMarker)) return false;
+
+  for (let i = 0; i < variables.length; i++) {
+    const variable = variables[i];
+    if (!canCacheHTMLPosition(htmlArray, i)) return false;
+    if (isNode(variable) || Array.isArray(variable)) return false;
+    if (containsReactiveValue(variable)) return false;
+    if (
+      typeof variable === Placeholder.string &&
+      containsParsedHTML(variable)
+    ) {
+      return false;
+    }
+    if (
+      primitiveTypes.has(typeof variable) ||
+      isFunction(variable) ||
+      isEventObject(variable)
+    ) {
+      continue;
+    }
+    return false;
+  }
+  return true;
+}
+function canCacheHTMLPosition(htmlArray: TemplateStringsArray, index: number) {
+  const before = htmlArray[index];
+  const after = htmlArray[index + 1];
+  if (/<\/?$/.test(before)) return false;
+  if (/<[^>]*\s$/.test(before) && /^\s*>/.test(after)) return false;
+  return true;
+}
+function containsReactiveMarker(value: string) {
+  return (
+    value.includes("{{") ||
+    (isServerSideCached && value.includes(Placeholder.reactiveKey))
+  );
+}
+function containsParsedHTML(value: string) {
+  return value.includes("<") || containsReactiveMarker(value);
+}
+function applyCachedHTMLValues(
+  root: DocumentFragment,
+  values: string[],
+  events: eventFunctions,
+) {
+  const textNodes = document.createNodeIterator(
+    root,
+    window.NodeFilter.SHOW_TEXT,
+  );
+  let textNode;
+  while ((textNode = textNodes.nextNode() as Text | null)) {
+    const value = replaceHTMLMarkers(textNode.nodeValue!, values);
+    if (value !== textNode.nodeValue) textNode.nodeValue = value;
+  }
+
+  const elements = document.createNodeIterator(
+    root,
+    window.NodeFilter.SHOW_ELEMENT,
+  );
+  let elem;
+  while ((elem = elements.nextNode() as Element | null)) {
+    for (const key of elem.getAttributeNames()) {
+      const value = elem.getAttribute(key)!;
+      const event = events.get(value);
+      if (event && key.startsWith("on")) {
+        elem.removeAttribute(key);
+        addEventListener(elem, key.replace(onEventRegex, ""), event);
+      } else {
+        const replaced = replaceHTMLMarkers(value, values);
+        if (replaced !== value) setAttribute(elem, key, replaced);
+      }
+    }
+  }
+}
+function replaceHTMLMarkers(value: string, values: string[]) {
+  for (let i = 0; i < values.length; i++) {
+    const marker = `__hydro${i}__`;
+    if (value.includes(marker)) value = value.split(marker).join(values[i]);
+  }
+  return value;
 }
 function fillDOM(
   elem: ReturnType<typeof html>,
@@ -469,7 +638,7 @@ function h(
       ? children.map(getChildren).flat()
       : children),
   );
-  if (!viewElements) {
+  if (!viewElements && needsHReactivity(props, children)) {
     setReactivity(elem);
   }
   return elem;
@@ -478,6 +647,43 @@ function getChildren(child: unknown) {
   return isObject(child) && !isNode(child as Node)
     ? Object.values(child)
     : child;
+}
+function needsHReactivity(
+  props: Record<keyof any, any> | null,
+  children: Array<any>,
+) {
+  if (props) {
+    for (const [key, value] of Object.entries(props)) {
+      if (
+        key === "bind" ||
+        key === Placeholder.twoWay ||
+        containsReactiveValue(value)
+      ) {
+        return true;
+      }
+    }
+  }
+
+  return children.some(containsReactiveValue);
+}
+function containsReactiveValue(value: any): boolean {
+  if (
+    (isObject(value) || isFunction(value)) &&
+    Reflect.has(value, reactiveSymbol)
+  ) {
+    return true;
+  }
+  if (typeof value === Placeholder.string) {
+    return (
+      value.includes("{{") ||
+      (isServerSideCached && value.includes(Placeholder.reactiveKey))
+    );
+  }
+  if (Array.isArray(value)) return value.some(containsReactiveValue);
+  if (isObject(value) && !isNode(value as Node)) {
+    return Object.values(value).some(containsReactiveValue);
+  }
+  return false;
 }
 /* c8 ignore end */
 function setReactivity(
@@ -1379,18 +1585,21 @@ function ternary(
   falseVal: any,
   reactiveHydro: reactiveObject<any> = condition,
 ) {
+  const isReactiveCondition = Reflect.has(condition, reactiveSymbol);
+  const isTrueFn = isFunction(trueVal);
+  const isFalseFn = isFunction(falseVal);
   const checkCondition = (cond: any) =>
     (
-      !Reflect.has(condition, reactiveSymbol) && isFunction(condition)
+      !isReactiveCondition && isFunction(condition)
         ? condition(cond)
         : isPromise(cond)
           ? false
           : cond
     )
-      ? isFunction(trueVal)
+      ? isTrueFn
         ? trueVal()
         : trueVal
-      : isFunction(falseVal)
+      : isFalseFn
         ? falseVal()
         : falseVal;
 
@@ -1910,6 +2119,32 @@ function updateDOM(nodeToChangeMap: nodeToChangeMap, val: any, oldVal: any) {
     }
   });
 }
+function finishViewElements(
+  rootElem: Element,
+  elements: Node[],
+  onlyNewElements = false,
+) {
+  for (const elem of elements) runLifecyle(elem as Element, onRenderMap);
+
+  if (!rootElem.hasChildNodes()) return;
+
+  if (!onlyNewElements || elements.some(isDocumentFragment)) {
+    setReactivity(rootElem, viewElementsEventFunctions);
+  } else {
+    for (const elem of elements) {
+      setReactivity(
+        elem as ReturnType<typeof html>,
+        viewElementsEventFunctions,
+      );
+    }
+  }
+  viewElementsEventFunctions.clear();
+}
+function appendViewElements(rootElem: Element, elements: Node[]) {
+  const fragment = document.createDocumentFragment();
+  for (const elem of elements) fragment.appendChild(elem);
+  rootElem.appendChild(fragment);
+}
 function view(
   root: string,
   data: reactiveObject<Array<any>>,
@@ -1918,12 +2153,8 @@ function view(
   viewElements = true;
   const rootElem = $(root)!;
   const elements = getValue(data).map(renderFunction);
-  rootElem.append(...elements);
-  for (const elem of elements) runLifecyle(elem as Element, onRenderMap);
-  if (rootElem.hasChildNodes()) {
-    setReactivity(rootElem, viewElementsEventFunctions);
-    viewElementsEventFunctions.clear();
-  }
+  appendViewElements(rootElem, elements);
+  finishViewElements(rootElem, elements);
   onCleanup(unset, rootElem, data);
 
   viewElements = false;
@@ -1958,9 +2189,8 @@ function view(
         const newElements = slicedData.map((item, i) =>
           renderFunction(item, i + length),
         );
-        rootElem.append(...newElements);
-        for (const elem of newElements)
-          runLifecyle(elem as Element, onRenderMap);
+        appendViewElements(rootElem, newElements);
+        finishViewElements(rootElem, newElements, true);
       }
 
       // Add new
@@ -1970,12 +2200,8 @@ function view(
         }
 
         const elements = newData.map(renderFunction);
-        rootElem.append(...elements);
-        for (const elem of elements) runLifecyle(elem as Element, onRenderMap);
-      }
-      if (rootElem.hasChildNodes()) {
-        setReactivity(rootElem, viewElementsEventFunctions);
-        viewElementsEventFunctions.clear();
+        appendViewElements(rootElem, elements);
+        finishViewElements(rootElem, elements);
       }
       viewElements = false;
       /* c8 ignore end */
