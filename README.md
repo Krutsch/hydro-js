@@ -2,7 +2,7 @@
 
 # hydro-js
 
-> A lightweight (below 5K <em>compressed</em>) reactive UI library via template literal tags.<br> Support in all modern Browsers and with Server-Side Rendering!
+> A lightweight reactive UI library via template literal tags.<br> Support in all modern Browsers and with Server-Side Rendering!
 
 ## Installation
 
