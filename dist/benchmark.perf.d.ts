@@ -17,6 +17,7 @@ export interface PerfResult {
     samples: number[];
     medianMs: number;
     minMs: number;
+    spreadPct: number;
     ok: boolean;
 }
 export interface PerfReport {
@@ -25,6 +26,24 @@ export interface PerfReport {
     keyed: KeyedResult[];
     pass: boolean;
 }
+export interface PerfBaselineEntry {
+    impl: ImplName;
+    operation: OperationName;
+    minMs: number;
+    medianMs: number;
+}
+export interface PerfBaseline {
+    generatedAt: string;
+    entries: PerfBaselineEntry[];
+}
+export interface PerfDelta {
+    impl: ImplName;
+    operation: OperationName;
+    beforeMinMs: number;
+    afterMinMs: number;
+    deltaPct: number;
+    regressed: boolean;
+}
 export interface KeyedResult {
     impl: ImplName;
     swapKeepsIdentity: boolean;
@@ -32,5 +51,10 @@ export interface KeyedResult {
     ok: boolean;
 }
 export declare function runPerfScenarios(deps?: PerfDeps): Promise<PerfReport>;
-export declare function formatPerfReport(report: PerfReport): string;
+export declare function formatPerfReport(report: PerfReport, baseline?: PerfBaseline, failures?: string[]): string;
+export declare function toPerfBaseline(report: PerfReport): PerfBaseline;
+export declare function diffPerf(report: PerfReport, baseline: PerfBaseline, tolerancePct?: number): {
+    deltas: PerfDelta[];
+    failures: string[];
+};
 export {};

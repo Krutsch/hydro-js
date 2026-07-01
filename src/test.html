@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -43,7 +43,7 @@
               it("handles functions correctly", () => {
                 expect(
                   h(() => h("p", null, ["Hello World"]), null, [])
-                    .textContent === "Hello World"
+                    .textContent === "Hello World",
                 ).to.be.true;
               });
 
@@ -58,14 +58,14 @@
               it("returns a valid element when it has children", () => {
                 expect(
                   h("div", null, [h("p", null, ["test"])]).childNodes.length ===
-                    1
+                    1,
                 ).to.be.true;
               });
 
               it("handles documentFragment", () => {
                 expect(
                   h(h, null, h("p", null, "hi"), h("p", null, "ho"))
-                    .nodeType === 11
+                    .nodeType === 11,
                 ).to.be.true;
               });
             });
@@ -120,7 +120,7 @@
                 const unmount = render(
                   html`<div>here</div>
                     <div>and here</div>`,
-                  text
+                  text,
                 );
                 let condition = document.body.childElementCount === 2;
                 unmount();
@@ -182,7 +182,7 @@
                 const unmount = render(
                   html`<div>here</div>
                     <div>and here</div>`,
-                  text
+                  text,
                 );
                 let condition = document.body.childElementCount === 2;
                 unmount();
@@ -358,7 +358,7 @@
               it("returns empty text node", () => {
                 expect(
                   html`<input type="checkbox" required=${false} />`
-                    .textContent === ""
+                    .textContent === "",
                 ).to.be.true;
               });
 
@@ -372,7 +372,7 @@
                 expect(
                   elem.localName === "html" &&
                     !!elem.querySelector("head") &&
-                    !!elem.querySelector("body")
+                    !!elem.querySelector("body"),
                 ).to.be.true;
               });
 
@@ -383,7 +383,7 @@
 
               it("returns text node", () => {
                 expect(
-                  document.createTextNode("hello").isEqualNode(html`hello`)
+                  document.createTextNode("hello").isEqualNode(html`hello`),
                 ).to.be.true;
               });
 
@@ -393,14 +393,14 @@
                 expect(
                   node.nodeName !== "svg" &&
                     "getElementById" in node &&
-                    node.childElementCount === 2
+                    node.childElementCount === 2,
                 ).to.be.true;
               });
 
               it("returns element", () => {
                 const elem = html`<p>hello</p>`;
                 expect(
-                  elem.localName === "p" && elem.textContent.includes("hello")
+                  elem.localName === "p" && elem.textContent.includes("hello"),
                 ).to.be.true;
               });
 
@@ -453,7 +453,7 @@
                 const elem = html`<div>${arr}</div>`;
                 expect(
                   elem.textContent.includes("42") &&
-                    elem.textContent.includes("test")
+                    elem.textContent.includes("test"),
                 ).to.be.true;
               });
 
@@ -491,7 +491,7 @@
                 expect(
                   elem.textContent.includes("42") &&
                     elem.textContent.includes("test") &&
-                    elem.contains(p)
+                    elem.contains(p),
                 ).to.be.true;
               });
 
@@ -509,7 +509,7 @@
                 expect(
                   elem.id === "test" &&
                     elem.target === "_blank" &&
-                    elem.textContent === "1"
+                    elem.textContent === "1",
                 ).to.be.true;
               });
 
@@ -534,7 +534,7 @@
                 expect(
                   elem.id === "test" &&
                     elem.target === "_blank" &&
-                    elem.textContent === "1"
+                    elem.textContent === "1",
                 ).to.be.true;
               });
 
@@ -571,7 +571,7 @@
                 expect(
                   document.body.textContent.includes("Fabian") &&
                     document.body.textContent.includes("123") &&
-                    document.body.textContent.includes("0")
+                    document.body.textContent.includes("0"),
                 ).to.be.true;
               });
 
@@ -594,7 +594,7 @@
                 const native = document.createElement("div");
                 native.insertAdjacentHTML(
                   "beforeend",
-                  `<p>Changed</p><p>ipsum</p>`
+                  `<p>Changed</p><p>ipsum</p>`,
                 );
 
                 setTimeout(() => {
@@ -626,65 +626,63 @@
                 const select = reactive("cat");
                 const datetime = reactive("2018-06-08T00:00");
 
-                const unmount = render(
-                  html`
-                    <div>
-                      <input id="text" type="text" two-way=${text} />
-                      <textarea two-way=${text}></textarea>
+                const unmount = render(html`
+                  <div>
+                    <input id="text" type="text" two-way=${text} />
+                    <textarea two-way=${text}></textarea>
 
-                      <label>
-                        <input
-                          id="checkbox1"
-                          type="checkbox"
-                          two-way=${checked}
-                        />
-                        John
-                      </label>
+                    <label>
+                      <input
+                        id="checkbox1"
+                        type="checkbox"
+                        two-way=${checked}
+                      />
+                      John
+                    </label>
 
-                      <label>
-                        <input
-                          id="datetime"
-                          type="datetime-local"
-                          two-way=${datetime}
-                          min="2018-06-07T00:00"
-                          max="2020-06-14T00:00"
-                        />
-                      </label>
+                    <label>
+                      <input
+                        id="datetime"
+                        type="datetime-local"
+                        two-way=${datetime}
+                        min="2018-06-07T00:00"
+                        max="2020-06-14T00:00"
+                      />
+                    </label>
 
-                      <label>
-                        <input
-                          id="radio1"
-                          type="radio"
-                          name="group"
-                          value="A"
-                          two-way=${checkedRadio}
-                        />
-                        A
-                      </label>
-                      <label>
-                        <input
-                          id="radio2"
-                          type="radio"
-                          name="group"
-                          value="B"
-                          two-way=${checkedRadio}
-                        />
-                        B
-                      </label>
+                    <label>
+                      <input
+                        id="radio1"
+                        type="radio"
+                        name="group"
+                        value="A"
+                        two-way=${checkedRadio}
+                      />
+                      A
+                    </label>
+                    <label>
+                      <input
+                        id="radio2"
+                        type="radio"
+                        name="group"
+                        value="B"
+                        two-way=${checkedRadio}
+                      />
+                      B
+                    </label>
 
-                      <label for="pet-select">Choose a pet:</label>
-                      <select name="pets" id="pet-select" two-way=${select}>
-                        <option value="">--Please choose an option--</option>
-                        <option value="dog">Dog</option>
-                        <option value="cat">Cat</option>
-                        <option value="hamster">Hamster</option>
-                        <option value="parrot">Parrot</option>
-                        <option value="spider">Spider</option>
-                        <option value="goldfish">Goldfish</option>
-                      </select>
-                    </div>
-                  `
-                );
+                    <label for="pet-select">Choose a pet:</label>
+                    <select name="pets" id="pet-select" two-way=${select}>
+                      <option value="">--Please choose an option--</option>
+                      <option value="dog">Dog</option>
+                      <option value="cat">Cat</option>
+                      <option value="hamster">Hamster</option>
+                      <option value="parrot">Parrot</option>
+                      <option value="spider">Spider</option>
+                      <option value="goldfish">Goldfish</option>
+                    </select>
+                  </div>
+                `);
                 let cond =
                   $("#text").value === "text" &&
                   $("textarea").value === "text" &&
@@ -721,7 +719,7 @@
                     !$("#radio1").checked &&
                     $("#radio2").checked &&
                     $("select").value === "dog" &&
-                    $("#datetime").value === "2018-06-09T00:00"
+                    $("#datetime").value === "2018-06-09T00:00",
                 ).to.be.true;
               });
 
@@ -919,7 +917,7 @@
                 expect(
                   !document.body.textContent.includes("hi") &&
                     document.body.textContent.includes("hello") &&
-                    document.body.textContent.includes("world")
+                    document.body.textContent.includes("world"),
                 ).to.be.true;
               });
 
@@ -940,7 +938,7 @@
                 const elem = reactive(html`<p>${number}</p>`);
                 const unmount = render(elem);
                 const cond = getValue(elem).textContent.includes(
-                  String(getValue(number))
+                  String(getValue(number)),
                 );
 
                 setTimeout(() => number(6), 50);
@@ -955,8 +953,8 @@
                 expect(
                   cond &&
                     getValue(elem).textContent.includes(
-                      String(getValue(number))
-                    )
+                      String(getValue(number)),
+                    ),
                 ).to.be.true;
               });
 
@@ -977,7 +975,7 @@
                 setTimeout(unmount);
                 expect(
                   $("#first").textContent.includes("1") &&
-                    $("#second").textContent.includes("2")
+                    $("#second").textContent.includes("2"),
                 ).to.be.true;
               });
 
@@ -996,7 +994,7 @@
 
                 setTimeout(unmount);
                 expect(
-                  elem.isConnected && !!document.body.querySelector("circle")
+                  elem.isConnected && !!document.body.querySelector("circle"),
                 ).to.be.true;
               });
 
@@ -1006,7 +1004,8 @@
 
                 setTimeout(unmount);
                 expect(
-                  elem.isConnected && document.body.textContent.includes("what")
+                  elem.isConnected &&
+                    document.body.textContent.includes("what"),
                 ).to.be.true;
               });
 
@@ -1017,14 +1016,14 @@
                 setTimeout(unmount);
                 expect(
                   elem.isConnected &&
-                    $("#whatWhere").textContent.includes("what")
+                    $("#whatWhere").textContent.includes("what"),
                 ).to.be.true;
               });
 
               it("elem is DocumentFragment, with where", () => {
                 document.body.insertAdjacentHTML(
                   "beforeend",
-                  '<p id="hello">here</p>'
+                  '<p id="hello">here</p>',
                 );
                 const elem = html`<div id="firstOne">1</div>
                   <div id="secondOne">2</div>`;
@@ -1034,14 +1033,14 @@
                 expect(
                   $("#firstOne").textContent.includes("1") &&
                     $("#secondOne").textContent.includes("2") &&
-                    !document.body.querySelector("#hello")
+                    !document.body.querySelector("#hello"),
                 ).to.be.true;
               });
 
               it("elem is svg, with where", () => {
                 document.body.insertAdjacentHTML(
                   "beforeend",
-                  '<p id="hello2">here</p>'
+                  '<p id="hello2">here</p>',
                 );
                 const elem = html`<svg height="100" width="100">
                   <circle
@@ -1057,14 +1056,14 @@
 
                 setTimeout(unmount);
                 expect(
-                  elem.isConnected && !!document.body.querySelector("circle")
+                  elem.isConnected && !!document.body.querySelector("circle"),
                 ).to.be.true;
               });
 
               it("elem is textNode, with where", () => {
                 document.body.insertAdjacentHTML(
                   "beforeend",
-                  '<p id="hello3">here</p>'
+                  '<p id="hello3">here</p>',
                 );
                 const elem = html`what`;
                 const unmount = render(elem, "#hello3");
@@ -1073,14 +1072,14 @@
                 expect(
                   elem.isConnected &&
                     document.body.textContent.includes("what") &&
-                    !document.body.querySelector("#hello3")
+                    !document.body.querySelector("#hello3"),
                 ).to.be.true;
               });
 
               it("elem is Element, with where", () => {
                 document.body.insertAdjacentHTML(
                   "beforeend",
-                  '<p id="hello4">here</p>'
+                  '<p id="hello4">here</p>',
                 );
                 const elem = html`<p id="testThisWhat">what</p>`;
                 const unmount = render(elem, "#hello4");
@@ -1089,7 +1088,7 @@
                 expect(
                   elem.isConnected &&
                     $("#testThisWhat").textContent.includes("what") &&
-                    !document.body.querySelector("#hello4")
+                    !document.body.querySelector("#hello4"),
                 ).to.be.true;
               });
 
@@ -1179,7 +1178,7 @@
                 unmount();
 
                 expect(
-                  subOnRender && subOnCleanup && elemOnRender && elemOnCleanup
+                  subOnRender && subOnCleanup && elemOnRender && elemOnCleanup,
                 ).to.be.true;
               });
 
@@ -1201,7 +1200,7 @@
 
                 setTimeout(unmount);
                 expect(
-                  subOnRender && subOnCleanup && elemOnRender && !elemOnCleanup
+                  subOnRender && subOnCleanup && elemOnRender && !elemOnCleanup,
                 ).to.be.true;
               });
             });
@@ -1209,16 +1208,14 @@
             describe("reactive", () => {
               it("primitive value", () => {
                 const counter = reactive(0);
-                const unmount = render(
-                  html`
-                    <div
-                      id="reactClick"
-                      onclick=${() => counter((prev) => prev + 1)}
-                    >
-                      ${counter}
-                    </div>
-                  `
-                );
+                const unmount = render(html`
+                  <div
+                    id="reactClick"
+                    onclick=${() => counter((prev) => prev + 1)}
+                  >
+                    ${counter}
+                  </div>
+                `);
 
                 $("#reactClick").click();
 
@@ -1234,32 +1231,30 @@
                 let obj1 = reactive({ a: { b: 5 } });
                 let obj2 = reactive({ a: { b: 5 } });
 
-                const unmount = render(
-                  html`
-                    <div>
-                      <div
-                        id="reactiveObj1"
-                        onclick=${() =>
+                const unmount = render(html`
+                  <div>
+                    <div
+                      id="reactiveObj1"
+                      onclick=${() =>
                           obj1((current) => {
                             current.a.b = 777;
 
                             return current;
                           })}
-                      >
-                        ${obj1.a.b}
-                      </div>
-                      <div
-                        id="reactiveObj2"
-                        onclick=${() =>
+                    >
+                      ${obj1.a.b}
+                    </div>
+                    <div
+                      id="reactiveObj2"
+                      onclick=${() =>
                           obj2((current) => {
                             current.a.b = 777;
                           })}
-                      >
-                        ${obj2.a.b}
-                      </div>
+                    >
+                      ${obj2.a.b}
                     </div>
-                  `
-                );
+                  </div>
+                `);
 
                 $("#reactiveObj1").click();
 
@@ -1271,7 +1266,7 @@
                 });
                 expect(
                   $("#reactiveObj1").textContent.includes("777") &&
-                    $("#reactiveObj2").textContent.includes("777")
+                    $("#reactiveObj2").textContent.includes("777"),
                 ).to.be.true;
               });
 
@@ -1279,50 +1274,48 @@
                 const arr1 = reactive([1, [2]]);
                 const arr2 = reactive([3, [4]]);
 
-                const unmount = render(
-                  html`
-                    <div
-                      id="reactiveArr1"
-                      onclick=${() =>
+                const unmount = render(html`
+                  <div
+                    id="reactiveArr1"
+                    onclick=${() =>
                         arr1((current) => {
                           current[0] += 1;
 
                           return current;
                         })}
-                    >
-                      ${arr1[0]}
-                    </div>
-                    <div
-                      id="reactiveArr2"
-                      onclick=${() =>
+                  >
+                    ${arr1[0]}
+                  </div>
+                  <div
+                    id="reactiveArr2"
+                    onclick=${() =>
                         arr1((current) => {
                           current[1][0] += 1;
 
                           return current;
                         })}
-                    >
-                      ${arr1[1][0]}
-                    </div>
-                    <div
-                      id="reactiveArr3"
-                      onclick=${() =>
+                  >
+                    ${arr1[1][0]}
+                  </div>
+                  <div
+                    id="reactiveArr3"
+                    onclick=${() =>
                         arr2((current) => {
                           current[0] += 1;
                         })}
-                    >
-                      ${arr2[0]}
-                    </div>
-                    <div
-                      id="reactiveArr4"
-                      onclick=${() =>
+                  >
+                    ${arr2[0]}
+                  </div>
+                  <div
+                    id="reactiveArr4"
+                    onclick=${() =>
                         arr2((current) => {
                           current[1][0] += 1;
                         })}
-                    >
-                      ${arr2[1][0]}
-                    </div>
-                  `
-                );
+                  >
+                    ${arr2[1][0]}
+                  </div>
+                `);
 
                 $("#reactiveArr1").click();
 
@@ -1342,7 +1335,7 @@
                   $("#reactiveArr1").textContent.includes("2") &&
                     $("#reactiveArr2").textContent.includes("3") &&
                     $("#reactiveArr3").textContent.includes("4") &&
-                    $("#reactiveArr4").textContent.includes("5")
+                    $("#reactiveArr4").textContent.includes("5"),
                 ).to.be.true;
               });
 
@@ -1369,7 +1362,7 @@
                     getValue(b) === undefined &&
                     hydro.c === undefined &&
                     hydro.d === undefined,
-                  getValue(e) === 44
+                  getValue(e) === 44,
                 ).to.be.true;
               });
             });
@@ -1653,7 +1646,7 @@
                   () => getValue(isTrue),
                   () => (wasSetTrue = false),
                   () => (wasSetTrue = true),
-                  isTrue
+                  isTrue,
                 );
 
                 isTrue(false);
@@ -1669,13 +1662,11 @@
 
                 const handleClick = () => isToggleOn((prev) => !prev);
 
-                unmount = render(
-                  html`
-                    <button id="reRender" onclick=${handleClick}>
-                      ${ternary(isToggleOn, "ON", "OFF")}
-                    </button>
-                  `
-                );
+                unmount = render(html`
+                  <button id="reRender" onclick=${handleClick}>
+                    ${ternary(isToggleOn, "ON", "OFF")}
+                  </button>
+                `);
 
                 $("#reRender").click();
 
@@ -1693,17 +1684,15 @@
 
                 const handleClick = () => isToggleOn((prev) => !prev);
 
-                unmount = render(
-                  html`
-                    <button id="reRenderF" onclick=${handleClick}>
-                      ${ternary(
+                unmount = render(html`
+                  <button id="reRenderF" onclick=${handleClick}>
+                    ${ternary(
                         isToggleOn,
                         () => "ON",
-                        () => "OFF"
+                        () => "OFF",
                       )}
-                    </button>
-                  `
-                );
+                  </button>
+                `);
 
                 $("#reRenderF").click();
 
@@ -1794,9 +1783,9 @@
                   html`<div>
                     ${hydro.data.map(
                       (_, i) =>
-                        html`<p id="data-${i}">Name: {{data[${i}].name}}</p>`
+                        html`<p id="data-${i}">Name: {{data[${i}].name}}</p>`,
                     )}
-                  </div>`
+                  </div>`,
                 );
 
                 [hydro.data[0], hydro.data[1]] = [hydro.data[1], hydro.data[0]];
@@ -1808,13 +1797,13 @@
 
                 expect(
                   $("#data-0").textContent.includes("Peter") &&
-                    $("#data-1").textContent.includes("Sebastian")
+                    $("#data-1").textContent.includes("Sebastian"),
                 ).to.be.true;
               });
 
               it("handles rejecting promise as expected", async () => {
                 hydro.prom = Promise.reject(
-                  "This is a Test for a rejected Promise"
+                  "This is a Test for a rejected Promise",
                 );
                 await sleep(1);
                 expect(hydro.prom).to.be.undefined;
@@ -1900,9 +1889,9 @@
                 const dynamicOne = reactive("classA");
                 const dynamicTwo = reactive("classB");
                 const classes = reactive(`${dynamicOne} ${dynamicTwo}`);
-                const unmount = render(
-                  html` <div id="classes" class=${classes}>test</div> `
-                );
+                const unmount = render(html`
+                  <div id="classes" class=${classes}>test</div>
+                `);
 
                 let cond =
                   $("#classes").classList.contains(getValue(dynamicOne)) &&
@@ -1965,16 +1954,18 @@
 
               it("promise handling", async () => {
                 const promise = reactive(
-                  new Promise((resolve) => setTimeout(() => resolve(777), 200))
+                  new Promise((resolve) => setTimeout(() => resolve(777), 200)),
                 );
 
-                const unmount = render(html`<p id="async">
-                  ${ternary(
+                const unmount = render(
+                  html`<p id="async">
+                    ${ternary(
                     promise,
                     () => html`<h2>${promise}</h2>`,
-                    () => html`<h2>Loading...</h2>`
+                    () => html`<h2>Loading...</h2>`,
                   )}
-                </p>`);
+                  </p>`,
+                );
 
                 await sleep(201);
 
@@ -2008,7 +1999,7 @@
                       }}"
                     >
                       Reactive: ${data[i].id}, Non-reactive: ${item.label}
-                    </li>`
+                    </li>`,
                 );
 
                 await sleep(400);
@@ -2064,7 +2055,7 @@
                       }}"
                     >
                       Reactive: ${data[i].id}, Non-reactive: ${item.label}
-                    </li>`
+                    </li>`,
                 );
 
                 await sleep(300);
@@ -2122,7 +2113,7 @@
 
               const { id: id2, href: href2 } = getValue(props);
               expect(
-                $(`#${id2}`) && $(`#${id2}`).getAttribute("href") === href2
+                $(`#${id2}`) && $(`#${id2}`).getAttribute("href") === href2,
               ).to.be.true;
             });
 
@@ -2178,9 +2169,9 @@
                 options: { once: true },
               });
 
-              const unmount = render(
-                html` <p id="testEvent" onclick=${testEvent}>0</p> `
-              );
+              const unmount = render(html`
+                <p id="testEvent" onclick=${testEvent}>0</p>
+              `);
 
               $("#testEvent").click();
 
@@ -2216,9 +2207,9 @@
                 options: { once: true },
               });
 
-              const unmount = render(
-                html` <p id="testEvent2" onclick=${testEvent2}>0</p> `
-              );
+              const unmount = render(html`
+                <p id="testEvent2" onclick=${testEvent2}>0</p>
+              `);
 
               //@ts-ignore
               $("#testEvent2").click();
@@ -2230,7 +2221,7 @@
               testEvent2(
                 (x) => (e) =>
                   (e.currentTarget.textContent =
-                    Number(e.currentTarget.textContent) + 10)
+                    Number(e.currentTarget.textContent) + 10),
               );
 
               //@ts-ignore
@@ -2313,7 +2304,7 @@
                 render(
                   document.createElement("html"),
                   document.documentElement,
-                  false
+                  false,
                 );
                 expect(document.documentElement.childElementCount === 0).to.be
                   .true;
@@ -2322,7 +2313,7 @@
                 setInsertDiffing(false);
                 render(html`${oldValue}`, document.documentElement, false);
                 expect(
-                  oldChildCount === document.documentElement.childElementCount
+                  oldChildCount === document.documentElement.childElementCount,
                 ).to.be.true;
               }, 1000);
             });
@@ -2373,7 +2364,7 @@
                 render(
                   document.createElement("html"),
                   document.documentElement,
-                  false
+                  false,
                 );
                 expect(document.documentElement.childElementCount === 0).to.be
                   .true;
@@ -2382,7 +2373,7 @@
                 setInsertDiffing(true);
                 render(html`${oldValue}`, document.documentElement, false);
                 expect(
-                  oldChildCount === document.documentElement.childElementCount
+                  oldChildCount === document.documentElement.childElementCount,
                 ).to.be.true;
               }, 1300);
             });

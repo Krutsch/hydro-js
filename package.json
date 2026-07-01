@@ -1,6 +1,6 @@
 {
   "name": "hydro-js",
-  "version": "1.8.16",
+  "version": "1.9.0",
   "description": "A lightweight reactive library",
   "type": "module",
   "main": "./dist/library.js",
@@ -26,7 +26,7 @@
     "test": "npm run test:dom && npm run test:browser",
     "test:dom": "node dist/testHAPPYDOM.js && node dist/testJSDOM.js",
     "test:browser": "tsc && wtr src/test.html --node-resolve --coverage --playwright --browsers chromium firefox webkit",
-    "bench": "npm run bench:mem && npm run bench:perf",
+    "bench": "npm run bench:mem && npm run bench:perf && npm run bench:size",
     "bench:happy": "npm run bench:mem:happy",
     "bench:browser": "npm run bench:mem:browser",
     "bench:mem": "npm run bench:mem:happy && npm run bench:mem:browser",
@@ -34,7 +34,10 @@
     "bench:mem:browser": "tsc && wtr --config web-test-runner.bench.config.mjs",
     "bench:perf": "npm run bench:perf:happy && npm run bench:perf:browser",
     "bench:perf:happy": "tsc && node --expose-gc dist/benchmark.perf.node.js",
+    "bench:perf:baseline": "tsc && node --expose-gc dist/benchmark.perf.node.js --write-baseline perf-baseline.json",
+    "bench:perf:check": "tsc && node --expose-gc dist/benchmark.perf.node.js --baseline perf-baseline.json --max-regression-percent 15",
     "bench:perf:browser": "tsc && wtr --config web-test-runner.perf.config.mjs",
+    "bench:size": "tsc && node dist/benchmark.size.node.js",
     "update": "npx npm-check-updates -u && npx typesync && npm i && npm outdated"
   },
   "keywords": [
@@ -55,6 +58,7 @@
     "@web/test-runner": "^0.20.2",
     "@web/test-runner-playwright": "^0.11.1",
     "concurrently": "^10.0.0",
+    "esbuild": "^0.28.1",
     "happy-dom": "^20.8.8",
     "jsdom": "^29.0.1",
     "serve": "^14.2.6",

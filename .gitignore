@@ -1,4 +1,5 @@
 node_modules
+dist/.size-benchmark/
 dist/test.d.ts
 dist/test.js
 coverage

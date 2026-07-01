@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.9.0 2026-07-01
+
+- refactor: better performance and memory
+
 ## 1.8.16 2026-06-23
 
 - try: add jsx runtime for better integration

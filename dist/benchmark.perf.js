@@ -57,6 +57,9 @@ const NOUNS = [
 const configDefaults = {
     rows: 1000,
     manyRows: 10000,
+    // `minMs` is the reported/compared statistic and is stable at a modest sample
+    // count, so keep the run count low: happy-dom retains memory across iterations
+    // and a large repeat count OOMs the "create many rows" op.
     repeats: 10,
     warmups: 3,
 };
@@ -126,6 +129,9 @@ export async function runPerfScenarios(deps = {}) {
             for (let i = 0; i < totalRuns; i++) {
                 const data = createSampleData(config, i + 1);
                 const app = createApp();
+                // Settle GC *before* the timed region so a collection triggered by the
+                // previous iteration does not land inside this measurement.
+                cleanup();
                 const start = now();
                 operation.run(app, data);
                 const elapsed = now() - start;
@@ -142,6 +148,7 @@ export async function runPerfScenarios(deps = {}) {
                 samples,
                 medianMs: median(samples),
                 minMs: Math.min(...samples),
+                spreadPct: spread(samples),
                 ok,
             });
         }
@@ -209,20 +216,25 @@ function runKeyedChecks(impls, config) {
     }
     return keyed;
 }
-export function formatPerfReport(report) {
+export function formatPerfReport(report, baseline, failures = []) {
+    const deltas = baseline ? diffPerf(report, baseline).deltas : undefined;
+    const deltaByKey = new Map((deltas ?? []).map((d) => [`${d.impl}|${d.operation}`, d]));
     const lines = [];
     lines.push("");
     lines.push("hydro-js performance benchmark");
-    lines.push("=".repeat(88));
-    lines.push(`${"impl".padEnd(9)} ${"operation".padEnd(28)} ${"rows".padStart(7)} ${"median".padStart(10)} ${"min".padStart(10)}  status`);
-    lines.push("-".repeat(88));
+    lines.push("=".repeat(100));
+    lines.push(`${"impl".padEnd(9)} ${"operation".padEnd(28)} ${"rows".padStart(7)} ${"median".padStart(9)} ${"min".padStart(9)} ${"spread".padStart(7)} ${"Δmin".padStart(9)}  status`);
+    lines.push("-".repeat(100));
     for (const result of report.results) {
-        lines.push(`${result.impl.padEnd(9)} ${result.operation.padEnd(28)} ${String(result.rows).padStart(7)} ${formatMs(result.medianMs).padStart(10)} ${formatMs(result.minMs).padStart(10)}  ${result.ok ? "ok" : "FAIL"}`);
+        const delta = deltaByKey.get(`${result.impl}|${result.operation}`);
+        const deltaStr = delta ? formatPct(delta.deltaPct) : "-";
+        const status = delta?.regressed ? "REGRESSED" : result.ok ? "ok" : "FAIL";
+        lines.push(`${result.impl.padEnd(9)} ${result.operation.padEnd(28)} ${String(result.rows).padStart(7)} ${formatMs(result.medianMs).padStart(9)} ${formatMs(result.minMs).padStart(9)} ${`${result.spreadPct.toFixed(0)}%`.padStart(7)} ${deltaStr.padStart(9)}  ${status}`);
     }
     if (report.keyed.length) {
-        lines.push("=".repeat(88));
+        lines.push("=".repeat(100));
         lines.push("keyed-ness (DOM node identity through the framework)");
-        lines.push("-".repeat(88));
+        lines.push("-".repeat(100));
         lines.push(`${"impl".padEnd(9)} ${"swap keeps node".padEnd(20)} ${"remove keeps node".padEnd(20)}  status`);
         for (const result of report.keyed) {
             lines.push(`${result.impl.padEnd(9)} ${(result.swapKeepsIdentity
@@ -230,10 +242,52 @@ export function formatPerfReport(report) {
                 : "NO").padEnd(20)} ${(result.removeKeepsIdentity ? "yes" : "NO").padEnd(20)}  ${result.ok ? "keyed" : "FAIL"}`);
         }
     }
-    lines.push("=".repeat(88));
-    lines.push(report.pass ? "RESULT: PASS" : "RESULT: FAIL");
+    lines.push("=".repeat(100));
+    if (failures.length) {
+        for (const failure of failures)
+            lines.push(`FAIL: ${failure}`);
+    }
+    lines.push(report.pass && !failures.length ? "RESULT: PASS" : "RESULT: FAIL");
     lines.push("");
     return lines.join("\n");
+}
+// Snapshot a report for later comparison (only the stable fields).
+export function toPerfBaseline(report) {
+    return {
+        generatedAt: new Date().toISOString(),
+        entries: report.results.map((r) => ({
+            impl: r.impl,
+            operation: r.operation,
+            minMs: r.minMs,
+            medianMs: r.medianMs,
+        })),
+    };
+}
+// Compare on minMs. A regression only counts when the new best sample is slower
+// than the baseline best by more than `tolerancePct` – below that it is noise.
+export function diffPerf(report, baseline, tolerancePct = 15) {
+    const before = new Map(baseline.entries.map((e) => [`${e.impl}|${e.operation}`, e]));
+    const deltas = [];
+    const failures = [];
+    for (const r of report.results) {
+        const base = before.get(`${r.impl}|${r.operation}`);
+        if (!base)
+            continue;
+        const deltaPct = ((r.minMs - base.minMs) / base.minMs) * 100;
+        const regressed = deltaPct > tolerancePct;
+        deltas.push({
+            impl: r.impl,
+            operation: r.operation,
+            beforeMinMs: base.minMs,
+            afterMinMs: r.minMs,
+            deltaPct,
+            regressed,
+        });
+        if (regressed) {
+            failures.push(`${r.impl} | ${r.operation} min +${deltaPct.toFixed(1)}% (> ${tolerancePct}%)`);
+        }
+    }
+    return { deltas, failures };
 }
 function createSampleData(config, seed) {
     const build = createDataBuilder(seed);
@@ -342,7 +396,7 @@ const hRowBuilder = ({ row, index, className, data, selected }) => h("tr", { cla
     class: "glyphicon glyphicon-remove",
     "aria-hidden": "true",
 }))), h("td", { class: "col-md-6" }));
-const htmlRowBuilder = ({ row, index, className, data, selected }) => html `<tr class="${className}" bind="${data[index]}">
+const htmlRowBuilder = ({ row, index, className, data, selected, }) => html `<tr class="${className}" bind="${data[index]}">
     <td class="col-md-1">${data[index].id}</td>
     <td class="col-md-4">
       <a onclick=${() => selected(row.id)}>${data[index].label}</a>
@@ -423,6 +477,19 @@ function median(values) {
     return sorted.length % 2
         ? sorted[middle]
         : (sorted[middle - 1] + sorted[middle]) / 2;
+}
+// Interquartile range as a percentage of the median: a compact noise gauge.
+function spread(values) {
+    if (values.length < 2)
+        return 0;
+    const sorted = [...values].sort((a, b) => a - b);
+    const at = (p) => sorted[Math.min(sorted.length - 1, Math.round(p * (sorted.length - 1)))];
+    const med = median(values);
+    return med ? ((at(0.75) - at(0.25)) / med) * 100 : 0;
+}
+function formatPct(pct) {
+    const sign = pct > 0 ? "+" : "";
+    return `${sign}${pct.toFixed(1)}%`;
 }
 function formatMs(value) {
     return `${value.toFixed(2)}ms`;

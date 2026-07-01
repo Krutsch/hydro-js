@@ -534,58 +534,58 @@ describe("library", () => {
                 const select = reactive("cat");
                 const datetime = reactive("2018-06-08T00:00");
                 const unmount = render(html `
-            <div>
-              <input id="text" type="text" two-way=${text} />
-              <textarea two-way=${text}></textarea>
+          <div>
+            <input id="text" type="text" two-way=${text} />
+            <textarea two-way=${text}></textarea>
 
-              <label>
-                <input id="checkbox1" type="checkbox" two-way=${checked} />
-                John
-              </label>
+            <label>
+              <input id="checkbox1" type="checkbox" two-way=${checked} />
+              John
+            </label>
 
-              <label>
-                <input
-                  id="datetime"
-                  type="datetime-local"
-                  two-way=${datetime}
-                  min="2018-06-07T00:00"
-                  max="2020-06-14T00:00"
-                />
-              </label>
+            <label>
+              <input
+                id="datetime"
+                type="datetime-local"
+                two-way=${datetime}
+                min="2018-06-07T00:00"
+                max="2020-06-14T00:00"
+              />
+            </label>
 
-              <label>
-                <input
-                  id="radio1"
-                  type="radio"
-                  name="group"
-                  value="A"
-                  two-way=${checkedRadio}
-                />
-                A
-              </label>
-              <label>
-                <input
-                  id="radio2"
-                  type="radio"
-                  name="group"
-                  value="B"
-                  two-way=${checkedRadio}
-                />
-                B
-              </label>
+            <label>
+              <input
+                id="radio1"
+                type="radio"
+                name="group"
+                value="A"
+                two-way=${checkedRadio}
+              />
+              A
+            </label>
+            <label>
+              <input
+                id="radio2"
+                type="radio"
+                name="group"
+                value="B"
+                two-way=${checkedRadio}
+              />
+              B
+            </label>
 
-              <label for="pet-select">Choose a pet:</label>
-              <select name="pets" id="pet-select" two-way=${select}>
-                <option value="">--Please choose an option--</option>
-                <option value="dog">Dog</option>
-                <option value="cat">Cat</option>
-                <option value="hamster">Hamster</option>
-                <option value="parrot">Parrot</option>
-                <option value="spider">Spider</option>
-                <option value="goldfish">Goldfish</option>
-              </select>
-            </div>
-          `);
+            <label for="pet-select">Choose a pet:</label>
+            <select name="pets" id="pet-select" two-way=${select}>
+              <option value="">--Please choose an option--</option>
+              <option value="dog">Dog</option>
+              <option value="cat">Cat</option>
+              <option value="hamster">Hamster</option>
+              <option value="parrot">Parrot</option>
+              <option value="spider">Spider</option>
+              <option value="goldfish">Goldfish</option>
+            </select>
+          </div>
+        `);
                 let cond = 
                 //@ts-ignore
                 $("#text").value === "text" &&
@@ -1108,13 +1108,13 @@ describe("library", () => {
             it("primitive value", () => {
                 const counter = reactive(0);
                 const unmount = render(html `
-            <div
-              id="reactClick"
-              onclick=${() => counter((prev) => prev + 1)}
-            >
-              ${counter}
-            </div>
-          `);
+          <div
+            id="reactClick"
+            onclick=${() => counter((prev) => prev + 1)}
+          >
+            ${counter}
+          </div>
+        `);
                 //@ts-ignore
                 $("#reactClick").click();
                 setTimeout(() => {
@@ -1127,26 +1127,26 @@ describe("library", () => {
                 let obj1 = reactive({ a: { b: 5 } });
                 let obj2 = reactive({ a: { b: 5 } });
                 const unmount = render(html `
-            <div>
-              <div
-                id="reactiveObj1"
-                onclick=${() => obj1((current) => {
+          <div>
+            <div
+              id="reactiveObj1"
+              onclick=${() => obj1((current) => {
                     current.a.b = 777;
                     return current;
                 })}
-              >
-                ${obj1.a.b}
-              </div>
-              <div
-                id="reactiveObj2"
-                onclick=${() => obj2((current) => {
+            >
+              ${obj1.a.b}
+            </div>
+            <div
+              id="reactiveObj2"
+              onclick=${() => obj2((current) => {
                     current.a.b = 777;
                 })}
-              >
-                ${obj2.a.b}
-              </div>
+            >
+              ${obj2.a.b}
             </div>
-          `);
+          </div>
+        `);
                 //@ts-ignore
                 $("#reactiveObj1").click();
                 //@ts-ignore
@@ -1163,41 +1163,41 @@ describe("library", () => {
                 const arr1 = reactive([1, [2]]);
                 const arr2 = reactive([3, [4]]);
                 const unmount = render(html `
-            <div
-              id="reactiveArr1"
-              onclick=${() => arr1((current) => {
+          <div
+            id="reactiveArr1"
+            onclick=${() => arr1((current) => {
                     current[0] += 1;
                     return current;
                 })}
-            >
-              ${arr1[0]}
-            </div>
-            <div
-              id="reactiveArr2"
-              onclick=${() => arr1((current) => {
+          >
+            ${arr1[0]}
+          </div>
+          <div
+            id="reactiveArr2"
+            onclick=${() => arr1((current) => {
                     current[1][0] += 1;
                     return current;
                 })}
-            >
-              ${arr1[1][0]}
-            </div>
-            <div
-              id="reactiveArr3"
-              onclick=${() => arr2((current) => {
+          >
+            ${arr1[1][0]}
+          </div>
+          <div
+            id="reactiveArr3"
+            onclick=${() => arr2((current) => {
                     current[0] += 1;
                 })}
-            >
-              ${arr2[0]}
-            </div>
-            <div
-              id="reactiveArr4"
-              onclick=${() => arr2((current) => {
+          >
+            ${arr2[0]}
+          </div>
+          <div
+            id="reactiveArr4"
+            onclick=${() => arr2((current) => {
                     current[1][0] += 1;
                 })}
-            >
-              ${arr2[1][0]}
-            </div>
-          `);
+          >
+            ${arr2[1][0]}
+          </div>
+        `);
                 //@ts-ignore
                 $("#reactiveArr1").click();
                 //@ts-ignore
@@ -1460,10 +1460,10 @@ describe("library", () => {
                 let unmount;
                 const handleClick = () => isToggleOn((prev) => !prev);
                 unmount = render(html `
-            <button id="reRender" onclick=${handleClick}>
-              ${ternary(isToggleOn, "ON", "OFF")}
-            </button>
-          `);
+          <button id="reRender" onclick=${handleClick}>
+            ${ternary(isToggleOn, "ON", "OFF")}
+          </button>
+        `);
                 //@ts-ignore
                 $("#reRender").click();
                 setTimeout(() => {
@@ -1477,10 +1477,10 @@ describe("library", () => {
                 let unmount;
                 const handleClick = () => isToggleOn((prev) => !prev);
                 unmount = render(html `
-            <button id="reRenderF" onclick=${handleClick}>
-              ${ternary(isToggleOn, () => "ON", () => "OFF")}
-            </button>
-          `);
+          <button id="reRenderF" onclick=${handleClick}>
+            ${ternary(isToggleOn, () => "ON", () => "OFF")}
+          </button>
+        `);
                 //@ts-ignore
                 $("#reRenderF").click();
                 setTimeout(() => {
@@ -1627,7 +1627,9 @@ describe("library", () => {
                 const dynamicOne = reactive("classA");
                 const dynamicTwo = reactive("classB");
                 const classes = reactive(`${dynamicOne} ${dynamicTwo}`);
-                const unmount = render(html ` <div id="classes" class=${classes}>test</div> `);
+                const unmount = render(html `
+          <div id="classes" class=${classes}>test</div>
+        `);
                 let cond = $("#classes").classList.contains(getValue(dynamicOne)) &&
                     $("#classes").classList.contains(getValue(dynamicTwo));
                 dynamicOne("foo");
@@ -1672,8 +1674,8 @@ describe("library", () => {
             it("promise handling", async () => {
                 const promise = reactive(new Promise((resolve) => setTimeout(() => resolve(777), 200)));
                 const unmount = render(html `<p id="async">
-          ${ternary(promise, () => html `<h2>${promise}</h2>`, () => html `<h2>Loading...</h2>`)}
-        </p>`);
+            ${ternary(promise, () => html `<h2>${promise}</h2>`, () => html `<h2>Loading...</h2>`)}
+          </p>`);
                 await sleep(201);
                 setTimeout(() => {
                     unmount();
@@ -1822,7 +1824,9 @@ describe("library", () => {
                     Number(e.currentTarget.textContent) + 5),
                 options: { once: true },
             });
-            const unmount = render(html ` <p id="testEvent" onclick=${testEvent}>0</p> `);
+            const unmount = render(html `
+        <p id="testEvent" onclick=${testEvent}>0</p>
+      `);
             //@ts-ignore
             $("#testEvent").click();
             //@ts-ignore
@@ -1849,7 +1853,9 @@ describe("library", () => {
                     Number(e.currentTarget.textContent) + 5),
                 options: { once: true },
             });
-            const unmount = render(html ` <p id="testEvent2" onclick=${testEvent2}>0</p> `);
+            const unmount = render(html `
+        <p id="testEvent2" onclick=${testEvent2}>0</p>
+      `);
             //@ts-ignore
             $("#testEvent2").click();
             //@ts-ignore

@@ -1,4 +1,20 @@
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { Window } from "happy-dom";
+
+const distDir = dirname(fileURLToPath(import.meta.url));
+const rootDir = dirname(distDir);
+
+const args = process.argv.slice(2);
+const flag = (name: string) => {
+  const i = args.indexOf(name);
+  return i !== -1 ? args[i + 1] : undefined;
+};
+const writeBaselinePath = flag("--write-baseline");
+const baselinePath = flag("--baseline");
+const maxRegressionPercent = flag("--max-regression-percent");
+const asJson = args.includes("--json");
 
 const window = new Window({ url: "https://localhost:8080" });
 window.document.write(
@@ -13,15 +29,54 @@ globalThis.document = window.document;
 globalThis.MouseEvent = window.MouseEvent;
 await window.happyDOM.waitUntilComplete();
 
-const { runPerfScenarios, formatPerfReport } =
+const { runPerfScenarios, formatPerfReport, toPerfBaseline, diffPerf } =
   await import("./benchmark.perf.js");
+type PerfBaseline = Awaited<
+  ReturnType<typeof import("./benchmark.perf.js").toPerfBaseline>
+>;
 
 const report = await runPerfScenarios({
-  rows: 200,
-  manyRows: 1000,
+  rows: process.env.PERF_ROWS ? Number(process.env.PERF_ROWS) : 200,
+  manyRows: process.env.PERF_MANY_ROWS
+    ? Number(process.env.PERF_MANY_ROWS)
+    : 1000,
+  ...(process.env.PERF_REPEATS
+    ? { repeats: Number(process.env.PERF_REPEATS) }
+    : {}),
+  ...(process.env.PERF_WARMUPS
+    ? { warmups: Number(process.env.PERF_WARMUPS) }
+    : {}),
   now: () => performance.now(),
   cleanup: () => (globalThis as any).gc?.(),
 });
 
-console.log(formatPerfReport(report));
-process.exit(report.pass ? 0 : 1);
+if (writeBaselinePath) {
+  const target = resolve(rootDir, writeBaselinePath);
+  await mkdir(dirname(target), { recursive: true });
+  await writeFile(
+    target,
+    JSON.stringify(toPerfBaseline(report), null, 2) + "\n",
+  );
+}
+
+let baseline: PerfBaseline | undefined;
+if (baselinePath) {
+  baseline = JSON.parse(
+    await readFile(resolve(rootDir, baselinePath), "utf8"),
+  ) as PerfBaseline;
+}
+
+const tolerance =
+  maxRegressionPercent !== undefined ? Number(maxRegressionPercent) : 15;
+const diff = baseline ? diffPerf(report, baseline, tolerance) : undefined;
+const failures = diff?.failures ?? [];
+
+if (asJson) {
+  console.log(
+    JSON.stringify({ report, deltas: diff?.deltas, failures }, null, 2),
+  );
+} else {
+  console.log(formatPerfReport(report, baseline, failures));
+}
+
+process.exit(report.pass && !failures.length ? 0 : 1);

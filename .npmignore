@@ -1,0 +1,9 @@
+*
+!dist/
+dist/*
+!dist/library.js
+!dist/library.d.ts
+!dist/jsx-runtime.js
+!dist/jsx-runtime.d.ts
+!dist/jsx-dev-runtime.js
+!dist/jsx-dev-runtime.d.ts

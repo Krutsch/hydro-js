@@ -72,7 +72,7 @@ document.head.insertAdjacentHTML(
   .error {
     background-color: #dc3545;
   }
-</style>`
+</style>`,
 );
 const results: Array<{ name: string; success: boolean }> = [];
 
@@ -159,7 +159,7 @@ describe("library", () => {
         const unmount = render(
           html`<div>here</div>
             <div>and here</div>`,
-          text
+          text,
         );
         let condition = document.body.childElementCount === 2;
         unmount();
@@ -221,7 +221,7 @@ describe("library", () => {
         const unmount = render(
           html`<div>here</div>
             <div>and here</div>`,
-          text
+          text,
         );
         let condition = document.body.childElementCount === 2;
         unmount();
@@ -655,61 +655,59 @@ describe("library", () => {
         const select = reactive("cat");
         const datetime = reactive("2018-06-08T00:00");
 
-        const unmount = render(
-          html`
-            <div>
-              <input id="text" type="text" two-way=${text} />
-              <textarea two-way=${text}></textarea>
+        const unmount = render(html`
+          <div>
+            <input id="text" type="text" two-way=${text} />
+            <textarea two-way=${text}></textarea>
 
-              <label>
-                <input id="checkbox1" type="checkbox" two-way=${checked} />
-                John
-              </label>
+            <label>
+              <input id="checkbox1" type="checkbox" two-way=${checked} />
+              John
+            </label>
 
-              <label>
-                <input
-                  id="datetime"
-                  type="datetime-local"
-                  two-way=${datetime}
-                  min="2018-06-07T00:00"
-                  max="2020-06-14T00:00"
-                />
-              </label>
+            <label>
+              <input
+                id="datetime"
+                type="datetime-local"
+                two-way=${datetime}
+                min="2018-06-07T00:00"
+                max="2020-06-14T00:00"
+              />
+            </label>
 
-              <label>
-                <input
-                  id="radio1"
-                  type="radio"
-                  name="group"
-                  value="A"
-                  two-way=${checkedRadio}
-                />
-                A
-              </label>
-              <label>
-                <input
-                  id="radio2"
-                  type="radio"
-                  name="group"
-                  value="B"
-                  two-way=${checkedRadio}
-                />
-                B
-              </label>
+            <label>
+              <input
+                id="radio1"
+                type="radio"
+                name="group"
+                value="A"
+                two-way=${checkedRadio}
+              />
+              A
+            </label>
+            <label>
+              <input
+                id="radio2"
+                type="radio"
+                name="group"
+                value="B"
+                two-way=${checkedRadio}
+              />
+              B
+            </label>
 
-              <label for="pet-select">Choose a pet:</label>
-              <select name="pets" id="pet-select" two-way=${select}>
-                <option value="">--Please choose an option--</option>
-                <option value="dog">Dog</option>
-                <option value="cat">Cat</option>
-                <option value="hamster">Hamster</option>
-                <option value="parrot">Parrot</option>
-                <option value="spider">Spider</option>
-                <option value="goldfish">Goldfish</option>
-              </select>
-            </div>
-          `
-        );
+            <label for="pet-select">Choose a pet:</label>
+            <select name="pets" id="pet-select" two-way=${select}>
+              <option value="">--Please choose an option--</option>
+              <option value="dog">Dog</option>
+              <option value="cat">Cat</option>
+              <option value="hamster">Hamster</option>
+              <option value="parrot">Parrot</option>
+              <option value="spider">Spider</option>
+              <option value="goldfish">Goldfish</option>
+            </select>
+          </div>
+        `);
         let cond =
           //@ts-ignore
           $("#text")!.value === "text" &&
@@ -978,7 +976,7 @@ describe("library", () => {
         const elem = reactive(html`<p>${number}</p>`);
         const unmount = render(elem);
         const cond = getValue(elem).textContent!.includes(
-          String(getValue(number))
+          String(getValue(number)),
         );
 
         setTimeout(() => number(6), 50);
@@ -1067,7 +1065,7 @@ describe("library", () => {
       it("elem is svg, with where", () => {
         document.body.insertAdjacentHTML(
           "beforeend",
-          '<p id="hello2">here</p>'
+          '<p id="hello2">here</p>',
         );
         const elem = html`<svg height="100" width="100">
           <circle
@@ -1088,7 +1086,7 @@ describe("library", () => {
       it("elem is textNode, with where", () => {
         document.body.insertAdjacentHTML(
           "beforeend",
-          '<p id="hello3">here</p>'
+          '<p id="hello3">here</p>',
         );
         const elem = html`what`;
         const unmount = render(elem, "#hello3");
@@ -1104,7 +1102,7 @@ describe("library", () => {
       it("elem is Element, with where", () => {
         document.body.insertAdjacentHTML(
           "beforeend",
-          '<p id="hello4">here</p>'
+          '<p id="hello4">here</p>',
         );
         const elem = html`<p id="testThisWhat">what</p>`;
         const unmount = render(elem, "#hello4");
@@ -1274,7 +1272,7 @@ describe("library", () => {
           render(
             document.createElement("html"),
             document.documentElement,
-            false
+            false,
           );
           condition =
             condition && 0 === document.documentElement.childElementCount;
@@ -1337,7 +1335,7 @@ describe("library", () => {
           render(
             document.createElement("html"),
             document.documentElement,
-            false
+            false,
           );
           condition =
             condition && 0 === document.documentElement.childElementCount;
@@ -1357,16 +1355,14 @@ describe("library", () => {
     describe("reactive", () => {
       it("primitive value", () => {
         const counter = reactive(0);
-        const unmount = render(
-          html`
-            <div
-              id="reactClick"
-              onclick=${() => counter((prev: number) => prev + 1)}
-            >
-              ${counter}
-            </div>
-          `
-        );
+        const unmount = render(html`
+          <div
+            id="reactClick"
+            onclick=${() => counter((prev: number) => prev + 1)}
+          >
+            ${counter}
+          </div>
+        `);
         //@ts-ignore
         $("#reactClick").click();
 
@@ -1382,32 +1378,30 @@ describe("library", () => {
         let obj1 = reactive({ a: { b: 5 } });
         let obj2 = reactive({ a: { b: 5 } });
 
-        const unmount = render(
-          html`
-            <div>
-              <div
-                id="reactiveObj1"
-                onclick=${() =>
+        const unmount = render(html`
+          <div>
+            <div
+              id="reactiveObj1"
+              onclick=${() =>
                   obj1((current: typeof obj1) => {
                     current.a.b = 777;
 
                     return current;
                   })}
-              >
-                ${obj1.a.b}
-              </div>
-              <div
-                id="reactiveObj2"
-                onclick=${() =>
+            >
+              ${obj1.a.b}
+            </div>
+            <div
+              id="reactiveObj2"
+              onclick=${() =>
                   obj2((current: typeof obj2) => {
                     current.a.b = 777;
                   })}
-              >
-                ${obj2.a.b}
-              </div>
+            >
+              ${obj2.a.b}
             </div>
-          `
-        );
+          </div>
+        `);
         //@ts-ignore
         $("#reactiveObj1").click();
         //@ts-ignore
@@ -1427,50 +1421,48 @@ describe("library", () => {
         const arr1 = reactive([1, [2]]);
         const arr2 = reactive([3, [4]]);
 
-        const unmount = render(
-          html`
-            <div
-              id="reactiveArr1"
-              onclick=${() =>
+        const unmount = render(html`
+          <div
+            id="reactiveArr1"
+            onclick=${() =>
                 arr1((current: any) => {
                   current[0] += 1;
 
                   return current;
                 })}
-            >
-              ${arr1[0]}
-            </div>
-            <div
-              id="reactiveArr2"
-              onclick=${() =>
+          >
+            ${arr1[0]}
+          </div>
+          <div
+            id="reactiveArr2"
+            onclick=${() =>
                 arr1((current: any) => {
                   current[1][0] += 1;
 
                   return current;
                 })}
-            >
-              ${arr1[1][0]}
-            </div>
-            <div
-              id="reactiveArr3"
-              onclick=${() =>
+          >
+            ${arr1[1][0]}
+          </div>
+          <div
+            id="reactiveArr3"
+            onclick=${() =>
                 arr2((current: any) => {
                   current[0] += 1;
                 })}
-            >
-              ${arr2[0]}
-            </div>
-            <div
-              id="reactiveArr4"
-              onclick=${() =>
+          >
+            ${arr2[0]}
+          </div>
+          <div
+            id="reactiveArr4"
+            onclick=${() =>
                 arr2((current: any) => {
                   current[1][0] += 1;
                 })}
-            >
-              ${arr2[1][0]}
-            </div>
-          `
-        );
+          >
+            ${arr2[1][0]}
+          </div>
+        `);
         //@ts-ignore
         $("#reactiveArr1").click();
         //@ts-ignore
@@ -1802,7 +1794,7 @@ describe("library", () => {
           () => getValue(isTrue),
           () => (wasSetTrue = false),
           () => (wasSetTrue = true),
-          isTrue
+          isTrue,
         );
 
         isTrue(false);
@@ -1819,13 +1811,11 @@ describe("library", () => {
 
         const handleClick = () => isToggleOn((prev: Boolean) => !prev);
 
-        unmount = render(
-          html`
-            <button id="reRender" onclick=${handleClick}>
-              ${ternary(isToggleOn, "ON", "OFF")}
-            </button>
-          `
-        );
+        unmount = render(html`
+          <button id="reRender" onclick=${handleClick}>
+            ${ternary(isToggleOn, "ON", "OFF")}
+          </button>
+        `);
 
         //@ts-ignore
         $("#reRender").click();
@@ -1844,17 +1834,15 @@ describe("library", () => {
 
         const handleClick = () => isToggleOn((prev: Boolean) => !prev);
 
-        unmount = render(
-          html`
-            <button id="reRenderF" onclick=${handleClick}>
-              ${ternary(
+        unmount = render(html`
+          <button id="reRenderF" onclick=${handleClick}>
+            ${ternary(
                 isToggleOn,
                 () => "ON",
-                () => "OFF"
+                () => "OFF",
               )}
-            </button>
-          `
-        );
+          </button>
+        `);
 
         //@ts-ignore
         $("#reRenderF").click();
@@ -1946,9 +1934,9 @@ describe("library", () => {
           html`<div>
             ${hydro.data.map(
               (_: unknown, i: number) =>
-                html`<p id="data-${i}">Name: {{data[${i}].name}}</p>`
+                html`<p id="data-${i}">Name: {{data[${i}].name}}</p>`,
             )}
-          </div>`
+          </div>`,
         );
 
         [hydro.data[0], hydro.data[1]] = [hydro.data[1], hydro.data[0]];
@@ -2050,9 +2038,9 @@ describe("library", () => {
         const dynamicOne = reactive("classA");
         const dynamicTwo = reactive("classB");
         const classes = reactive(`${dynamicOne} ${dynamicTwo}`);
-        const unmount = render(
-          html` <div id="classes" class=${classes}>test</div> `
-        );
+        const unmount = render(html`
+          <div id="classes" class=${classes}>test</div>
+        `);
 
         let cond =
           $("#classes")!.classList.contains(getValue(dynamicOne)) &&
@@ -2112,16 +2100,18 @@ describe("library", () => {
 
       it("promise handling", async () => {
         const promise = reactive(
-          new Promise((resolve) => setTimeout(() => resolve(777), 200))
+          new Promise((resolve) => setTimeout(() => resolve(777), 200)),
         );
 
-        const unmount = render(html`<p id="async">
-          ${ternary(
+        const unmount = render(
+          html`<p id="async">
+            ${ternary(
             promise,
             () => html`<h2>${promise}</h2>`,
-            () => html`<h2>Loading...</h2>`
+            () => html`<h2>Loading...</h2>`,
           )}
-        </p>`);
+          </p>`,
+        );
 
         await sleep(201);
 
@@ -2155,7 +2145,7 @@ describe("library", () => {
               }}"
             >
               Reactive: ${data[i].id}, Non-reactive: ${item.label}
-            </li>`
+            </li>`,
         );
 
         await sleep(300);
@@ -2211,7 +2201,7 @@ describe("library", () => {
               }}"
             >
               Reactive: ${data[i].id}, Non-reactive: ${item.label}
-            </li>`
+            </li>`,
         );
 
         await sleep(300);
@@ -2325,9 +2315,9 @@ describe("library", () => {
         options: { once: true },
       });
 
-      const unmount = render(
-        html` <p id="testEvent" onclick=${testEvent}>0</p> `
-      );
+      const unmount = render(html`
+        <p id="testEvent" onclick=${testEvent}>0</p>
+      `);
 
       //@ts-ignore
       $("#testEvent").click();
@@ -2364,9 +2354,9 @@ describe("library", () => {
         options: { once: true },
       });
 
-      const unmount = render(
-        html` <p id="testEvent2" onclick=${testEvent2}>0</p> `
-      );
+      const unmount = render(html`
+        <p id="testEvent2" onclick=${testEvent2}>0</p>
+      `);
 
       //@ts-ignore
       $("#testEvent2").click();
@@ -2378,7 +2368,7 @@ describe("library", () => {
       testEvent2(
         (x: any) => (e: any) =>
           (e.currentTarget.textContent =
-            Number(e.currentTarget.textContent) + 10)
+            Number(e.currentTarget.textContent) + 10),
       );
 
       //@ts-ignore
@@ -2432,13 +2422,13 @@ function done() {
               <span class="badge ${result.success ? "success" : "error"}"
                 >${result.success ? "✔️  Success" : "❗  Error"}</span
               >: ${result.name}
-            </p>`
+            </p>`,
     );
   });
 
   document.body.insertAdjacentHTML(
     "beforeend",
-    `<div id="done">Testing done</div>`
+    `<div id="done">Testing done</div>`,
   );
 }
 

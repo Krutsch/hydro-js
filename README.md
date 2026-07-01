@@ -312,8 +312,12 @@ args:
 #### Example
 
 ```js
-const data = reactive([{ id: 4, label: "Red Onions" }])
-view('.table', data, (item, i) => <tr>Reactive: {data[i].id}, Non-reactive: {item.id}</tr>)
+const data = reactive([{ id: 4, label: "Red Onions" }]);
+view(".table", data, (item, i) => (
+  <tr>
+    Reactive: {data[i].id}, Non-reactive: {item.id}
+  </tr>
+));
 ```
 
 ### emit
@@ -335,7 +339,7 @@ render(
     <p onclick=${({ target }) => emit("fav", "Cheesecake", target)}>
       Click to emit your favorite cake 🍰
     </p>
-  </div>`
+  </div>`,
 );
 ```
 
@@ -355,7 +359,7 @@ render(
     >
       Click to emit your favorite cake 🍰
     </p>
-  </div>`
+  </div>`,
 );
 ```
 
@@ -386,8 +390,6 @@ setTimeout(() => unset(data), 1000); // will remove the element
 ### SSR
 
 For Integrations, please refer here: https://github.com/Krutsch/hydro-js-integrations
-
-
 
 ## Further
 
