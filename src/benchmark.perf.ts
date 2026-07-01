@@ -10,7 +10,7 @@ import {
   view,
 } from "./library.js";
 
-type ImplName = "html" | "h" | "view";
+type ImplName = "html" | "h" | "view" | "view-html";
 type OperationName =
   | "create rows"
   | "replace all rows"
@@ -29,6 +29,16 @@ type PerfApp = {
   rowClass: (index: number) => string;
   firstId: () => string;
   dispose: () => void;
+  // Only the reactive `view` apps expose this: it lets the keyed-ness check drive
+  // the framework's own swap/remove and inspect DOM node identity afterwards.
+  keyed?: KeyedProbe;
+};
+
+type KeyedProbe = {
+  nodeAt: (index: number) => Element | undefined;
+  idAt: (index: number) => string;
+  swap: (i: number, j: number) => void;
+  removeAt: (index: number) => void;
 };
 
 type Operation = {
@@ -70,7 +80,19 @@ export interface PerfResult {
 export interface PerfReport {
   config: Required<PerfConfig>;
   results: PerfResult[];
+  keyed: KeyedResult[];
   pass: boolean;
+}
+
+export interface KeyedResult {
+  impl: ImplName;
+  // After swapping rows i and j through the framework, the two original DOM nodes
+  // are the ones now sitting at j and i (moved, not recreated + text-patched).
+  swapKeepsIdentity: boolean;
+  // After removing a row, that exact node is detached and its former neighbour is
+  // still the same node, one slot up.
+  removeKeepsIdentity: boolean;
+  ok: boolean;
 }
 
 const ADJECTIVES = [
@@ -202,6 +224,7 @@ export async function runPerfScenarios(
     ["html", createHtmlApp],
     ["h", createHApp],
     ["view", createViewApp],
+    ["view-html", createViewHtmlApp],
   ];
 
   for (const [impl, createApp] of impls) {
@@ -235,30 +258,127 @@ export async function runPerfScenarios(
     }
   }
 
-  return { config, results, pass: results.every((result) => result.ok) };
+  const keyed = runKeyedChecks(impls, config);
+
+  return {
+    config,
+    results,
+    keyed,
+    pass:
+      results.every((result) => result.ok) &&
+      keyed.every((result) => result.ok),
+  };
+}
+
+// Proves the framework is keyed: drive a swap and a remove through the reactive
+// data and assert DOM node identity is preserved (moved), not recreated.
+function runKeyedChecks(
+  impls: Array<[ImplName, () => PerfApp]>,
+  config: Required<PerfConfig>,
+): KeyedResult[] {
+  const keyed: KeyedResult[] = [];
+  const count = Math.max(config.rows, 4);
+  const i = 1;
+  const j = count - 2;
+  const removeIndex = count >> 1;
+
+  for (const [impl, createApp] of impls) {
+    const probe = createApp();
+    if (!probe.keyed) {
+      probe.dispose();
+      continue;
+    }
+    probe.dispose();
+
+    const build = createDataBuilder(impl.length + 1);
+
+    // Swap: capture the two nodes, swap through the framework, expect them moved.
+    const swapApp = createApp();
+    swapApp.run(build(count));
+    const swap = swapApp.keyed!;
+    const nodeI = swap.nodeAt(i);
+    const nodeJ = swap.nodeAt(j);
+    const idI = swap.idAt(i);
+    const idJ = swap.idAt(j);
+    swap.swap(i, j);
+    const swapKeepsIdentity =
+      !!nodeI &&
+      !!nodeJ &&
+      swap.nodeAt(i) === nodeJ &&
+      swap.nodeAt(j) === nodeI &&
+      swap.idAt(i) === idJ &&
+      swap.idAt(j) === idI;
+    swapApp.dispose();
+
+    // Remove: the removed node detaches, its neighbour keeps identity one slot up.
+    const removeApp = createApp();
+    removeApp.run(build(count));
+    const remove = removeApp.keyed!;
+    const target = remove.nodeAt(removeIndex);
+    const neighbour = remove.nodeAt(removeIndex + 1);
+    remove.removeAt(removeIndex);
+    const removeKeepsIdentity =
+      !!target &&
+      !!neighbour &&
+      !target.isConnected &&
+      remove.nodeAt(removeIndex) === neighbour &&
+      removeApp.rowCount() === count - 1;
+    removeApp.dispose();
+
+    keyed.push({
+      impl,
+      swapKeepsIdentity,
+      removeKeepsIdentity,
+      ok: swapKeepsIdentity && removeKeepsIdentity,
+    });
+  }
+
+  return keyed;
 }
 
 export function formatPerfReport(report: PerfReport): string {
   const lines: string[] = [];
   lines.push("");
   lines.push("hydro-js performance benchmark");
-  lines.push("=".repeat(86));
+  lines.push("=".repeat(88));
   lines.push(
-    `${"impl".padEnd(7)} ${"operation".padEnd(28)} ${"rows".padStart(
+    `${"impl".padEnd(9)} ${"operation".padEnd(28)} ${"rows".padStart(
       7,
     )} ${"median".padStart(10)} ${"min".padStart(10)}  status`,
   );
-  lines.push("-".repeat(86));
+  lines.push("-".repeat(88));
   for (const result of report.results) {
     lines.push(
-      `${result.impl.padEnd(7)} ${result.operation.padEnd(28)} ${String(
+      `${result.impl.padEnd(9)} ${result.operation.padEnd(28)} ${String(
         result.rows,
       ).padStart(7)} ${formatMs(result.medianMs).padStart(
         10,
       )} ${formatMs(result.minMs).padStart(10)}  ${result.ok ? "ok" : "FAIL"}`,
     );
   }
-  lines.push("=".repeat(86));
+
+  if (report.keyed.length) {
+    lines.push("=".repeat(88));
+    lines.push("keyed-ness (DOM node identity through the framework)");
+    lines.push("-".repeat(88));
+    lines.push(
+      `${"impl".padEnd(9)} ${"swap keeps node".padEnd(20)} ${"remove keeps node".padEnd(
+        20,
+      )}  status`,
+    );
+    for (const result of report.keyed) {
+      lines.push(
+        `${result.impl.padEnd(9)} ${(result.swapKeepsIdentity
+          ? "yes"
+          : "NO"
+        ).padEnd(20)} ${(result.removeKeepsIdentity ? "yes" : "NO").padEnd(
+          20,
+        )}  ${result.ok ? "keyed" : "FAIL"}`,
+      );
+    }
+  }
+
+  lines.push("=".repeat(88));
   lines.push(report.pass ? "RESULT: PASS" : "RESULT: FAIL");
   lines.push("");
   return lines.join("\n");
@@ -402,7 +522,63 @@ function createDirectApp(
   };
 }
 
+type RowBuilder = (ctx: {
+  row: Row;
+  index: number;
+  className: any;
+  data: any;
+  selected: any;
+}) => HTMLTableRowElement;
+
+// Same reactive row, one built with `h`, one with `html`. Both carry reactive
+// slots (class, bind, id, label), so `html` cannot hit the compiled cache and
+// falls back to per-row parsing – exactly the comparison we want to measure.
+const hRowBuilder: RowBuilder = ({ row, index, className, data, selected }) =>
+  h(
+    "tr",
+    { class: className, bind: data[index] },
+    h("td", { class: "col-md-1" }, data[index].id),
+    h(
+      "td",
+      { class: "col-md-4" },
+      h("a", { onclick: () => selected(row.id) }, data[index].label),
+    ),
+    h(
+      "td",
+      { class: "col-md-1" },
+      h(
+        "a",
+        null,
+        h("span", {
+          class: "glyphicon glyphicon-remove",
+          "aria-hidden": "true",
+        }),
+      ),
+    ),
+    h("td", { class: "col-md-6" }),
+  ) as HTMLTableRowElement;
+
+const htmlRowBuilder: RowBuilder = ({ row, index, className, data, selected }) =>
+  html`<tr class="${className}" bind="${data[index]}">
+    <td class="col-md-1">${data[index].id}</td>
+    <td class="col-md-4">
+      <a onclick=${() => selected(row.id)}>${data[index].label}</a>
+    </td>
+    <td class="col-md-1">
+      <a><span class="glyphicon glyphicon-remove" aria-hidden="true"></span></a>
+    </td>
+    <td class="col-md-6"></td>
+  </tr>` as HTMLTableRowElement;
+
 function createViewApp(): PerfApp {
+  return createReactiveViewApp(hRowBuilder);
+}
+
+function createViewHtmlApp(): PerfApp {
+  return createReactiveViewApp(htmlRowBuilder);
+}
+
+function createReactiveViewApp(buildRow: RowBuilder): PerfApp {
   const { table, tbody } = createTable();
   const data = reactive<Row[]>([]) as any;
   const selected = reactive<number | null>(null) as any;
@@ -414,29 +590,7 @@ function createViewApp(): PerfApp {
       "",
       selected,
     );
-    const tr = h(
-      "tr",
-      { class: className, bind: data[index] },
-      h("td", { class: "col-md-1" }, data[index].id),
-      h(
-        "td",
-        { class: "col-md-4" },
-        h("a", { onclick: () => selected(row.id) }, data[index].label),
-      ),
-      h(
-        "td",
-        { class: "col-md-1" },
-        h(
-          "a",
-          null,
-          h("span", {
-            class: "glyphicon glyphicon-remove",
-            "aria-hidden": "true",
-          }),
-        ),
-      ),
-      h("td", { class: "col-md-6" }),
-    ) as HTMLTableRowElement;
+    const tr = buildRow({ row, index, className, data, selected });
     onCleanup(unset, tr, className);
     return tr;
   });
@@ -460,6 +614,19 @@ function createViewApp(): PerfApp {
       data([]);
       unset(selected);
       table.remove();
+    },
+    keyed: {
+      nodeAt: (index) => getRow(tbody, index),
+      idAt: (index) =>
+        getRow(tbody, index)?.querySelector("td")?.textContent ?? "",
+      swap: (i, j) =>
+        data((prev: Row[]) => {
+          [prev[i], prev[j]] = [prev[j], prev[i]];
+        }),
+      removeAt: (index) =>
+        data((curr: Row[]) => {
+          curr[index] = null as any;
+        }),
     },
   };
 }

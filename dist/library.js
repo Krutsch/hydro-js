@@ -348,13 +348,17 @@ function createCachedHTML(htmlArray, variables) {
 }
 function markerValue(index, variables, values) {
     const cached = values[index];
-    return cached !== undefined ? cached : (values[index] = String(variables[index]));
+    return cached !== undefined
+        ? cached
+        : (values[index] = String(variables[index]));
 }
 function replaceCompiledMarkers(template, markers, variables, values) {
     let out = template;
     for (let i = 0; i < markers.length; i++) {
         const index = markers[i];
-        out = out.split(`__hydro${index}__`).join(markerValue(index, variables, values));
+        out = out
+            .split(`__hydro${index}__`)
+            .join(markerValue(index, variables, values));
     }
     return out;
 }
@@ -1827,33 +1831,41 @@ function updateDOM(nodeToChangeMap, val, oldVal) {
         }
     });
 }
-function finishViewElements(rootElem, elements, onlyNewElements = false) {
-    for (const elem of elements)
-        runLifecyle(elem, onRenderMap);
-    if (!rootElem.hasChildNodes())
-        return;
-    if (!onlyNewElements || elements.some(isDocumentFragment)) {
-        setReactivity(rootElem, viewElementsEventFunctions);
-    }
-    else {
-        for (const elem of elements) {
-            setReactivity(elem, viewElementsEventFunctions);
-        }
-    }
-    viewElementsEventFunctions.clear();
-}
-function appendViewElements(rootElem, elements) {
+// Mount freshly rendered view rows. The reactive wiring happens in a SINGLE
+// setReactivity pass. For the common case (each row is one Node) it runs over a
+// detached fragment holding only the new rows – one NodeIterator, and no
+// re-scanning of already-mounted rows – then the fragment is attached. This is
+// what keeps "append rows to large table" cheap: the previous per-row
+// setReactivity spun up one NodeIterator per row (very costly in Chrome).
+function addViewRows(rootElem, elements) {
+    const hasFragmentItems = elements.some(isDocumentFragment);
     const fragment = document.createDocumentFragment();
     for (const elem of elements)
         fragment.appendChild(elem);
-    rootElem.appendChild(fragment);
+    if (!hasFragmentItems) {
+        setReactivity(fragment, viewElementsEventFunctions);
+        viewElementsEventFunctions.clear();
+        rootElem.appendChild(fragment);
+        for (const elem of elements)
+            runLifecyle(elem, onRenderMap);
+    }
+    else {
+        // A row rendered to a DocumentFragment loses its identity once attached, so
+        // fall back to attaching first and wiring the whole root in one pass.
+        rootElem.appendChild(fragment);
+        for (const elem of elements)
+            runLifecyle(elem, onRenderMap);
+        if (rootElem.hasChildNodes()) {
+            setReactivity(rootElem, viewElementsEventFunctions);
+            viewElementsEventFunctions.clear();
+        }
+    }
 }
 function view(root, data, renderFunction) {
     viewElements = true;
     const rootElem = $(root);
     const elements = getValue(data).map(renderFunction);
-    appendViewElements(rootElem, elements);
-    finishViewElements(rootElem, elements);
+    addViewRows(rootElem, elements);
     onCleanup(unset, rootElem, data);
     viewElements = false;
     const stopViewObserver = observe(data, (newData, oldData) => {
@@ -1878,8 +1890,7 @@ function view(root, data, renderFunction) {
             const length = oldData.length;
             const slicedData = newData.slice(length);
             const newElements = slicedData.map((item, i) => renderFunction(item, i + length));
-            appendViewElements(rootElem, newElements);
-            finishViewElements(rootElem, newElements, true);
+            addViewRows(rootElem, newElements);
         }
         // Add new
         else if (oldData?.length === 0 || (!reuseElements && newData?.length)) {
@@ -1887,8 +1898,7 @@ function view(root, data, renderFunction) {
                 rootElem.textContent = "";
             }
             const elements = newData.map(renderFunction);
-            appendViewElements(rootElem, elements);
-            finishViewElements(rootElem, elements);
+            addViewRows(rootElem, elements);
         }
         viewElements = false;
         /* c8 ignore end */

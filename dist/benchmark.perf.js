@@ -116,6 +116,7 @@ export async function runPerfScenarios(deps = {}) {
         ["html", createHtmlApp],
         ["h", createHApp],
         ["view", createViewApp],
+        ["view-html", createViewHtmlApp],
     ];
     for (const [impl, createApp] of impls) {
         for (const operation of operations) {
@@ -145,19 +146,91 @@ export async function runPerfScenarios(deps = {}) {
             });
         }
     }
-    return { config, results, pass: results.every((result) => result.ok) };
+    const keyed = runKeyedChecks(impls, config);
+    return {
+        config,
+        results,
+        keyed,
+        pass: results.every((result) => result.ok) &&
+            keyed.every((result) => result.ok),
+    };
+}
+// Proves the framework is keyed: drive a swap and a remove through the reactive
+// data and assert DOM node identity is preserved (moved), not recreated.
+function runKeyedChecks(impls, config) {
+    const keyed = [];
+    const count = Math.max(config.rows, 4);
+    const i = 1;
+    const j = count - 2;
+    const removeIndex = count >> 1;
+    for (const [impl, createApp] of impls) {
+        const probe = createApp();
+        if (!probe.keyed) {
+            probe.dispose();
+            continue;
+        }
+        probe.dispose();
+        const build = createDataBuilder(impl.length + 1);
+        // Swap: capture the two nodes, swap through the framework, expect them moved.
+        const swapApp = createApp();
+        swapApp.run(build(count));
+        const swap = swapApp.keyed;
+        const nodeI = swap.nodeAt(i);
+        const nodeJ = swap.nodeAt(j);
+        const idI = swap.idAt(i);
+        const idJ = swap.idAt(j);
+        swap.swap(i, j);
+        const swapKeepsIdentity = !!nodeI &&
+            !!nodeJ &&
+            swap.nodeAt(i) === nodeJ &&
+            swap.nodeAt(j) === nodeI &&
+            swap.idAt(i) === idJ &&
+            swap.idAt(j) === idI;
+        swapApp.dispose();
+        // Remove: the removed node detaches, its neighbour keeps identity one slot up.
+        const removeApp = createApp();
+        removeApp.run(build(count));
+        const remove = removeApp.keyed;
+        const target = remove.nodeAt(removeIndex);
+        const neighbour = remove.nodeAt(removeIndex + 1);
+        remove.removeAt(removeIndex);
+        const removeKeepsIdentity = !!target &&
+            !!neighbour &&
+            !target.isConnected &&
+            remove.nodeAt(removeIndex) === neighbour &&
+            removeApp.rowCount() === count - 1;
+        removeApp.dispose();
+        keyed.push({
+            impl,
+            swapKeepsIdentity,
+            removeKeepsIdentity,
+            ok: swapKeepsIdentity && removeKeepsIdentity,
+        });
+    }
+    return keyed;
 }
 export function formatPerfReport(report) {
     const lines = [];
     lines.push("");
     lines.push("hydro-js performance benchmark");
-    lines.push("=".repeat(86));
-    lines.push(`${"impl".padEnd(7)} ${"operation".padEnd(28)} ${"rows".padStart(7)} ${"median".padStart(10)} ${"min".padStart(10)}  status`);
-    lines.push("-".repeat(86));
+    lines.push("=".repeat(88));
+    lines.push(`${"impl".padEnd(9)} ${"operation".padEnd(28)} ${"rows".padStart(7)} ${"median".padStart(10)} ${"min".padStart(10)}  status`);
+    lines.push("-".repeat(88));
     for (const result of report.results) {
-        lines.push(`${result.impl.padEnd(7)} ${result.operation.padEnd(28)} ${String(result.rows).padStart(7)} ${formatMs(result.medianMs).padStart(10)} ${formatMs(result.minMs).padStart(10)}  ${result.ok ? "ok" : "FAIL"}`);
+        lines.push(`${result.impl.padEnd(9)} ${result.operation.padEnd(28)} ${String(result.rows).padStart(7)} ${formatMs(result.medianMs).padStart(10)} ${formatMs(result.minMs).padStart(10)}  ${result.ok ? "ok" : "FAIL"}`);
     }
-    lines.push("=".repeat(86));
+    if (report.keyed.length) {
+        lines.push("=".repeat(88));
+        lines.push("keyed-ness (DOM node identity through the framework)");
+        lines.push("-".repeat(88));
+        lines.push(`${"impl".padEnd(9)} ${"swap keeps node".padEnd(20)} ${"remove keeps node".padEnd(20)}  status`);
+        for (const result of report.keyed) {
+            lines.push(`${result.impl.padEnd(9)} ${(result.swapKeepsIdentity
+                ? "yes"
+                : "NO").padEnd(20)} ${(result.removeKeepsIdentity ? "yes" : "NO").padEnd(20)}  ${result.ok ? "keyed" : "FAIL"}`);
+        }
+    }
+    lines.push("=".repeat(88));
     lines.push(report.pass ? "RESULT: PASS" : "RESULT: FAIL");
     lines.push("");
     return lines.join("\n");
@@ -262,16 +335,36 @@ function createDirectApp(table, tbody, createRow, resetSelected) {
         dispose: () => table.remove(),
     };
 }
+// Same reactive row, one built with `h`, one with `html`. Both carry reactive
+// slots (class, bind, id, label), so `html` cannot hit the compiled cache and
+// falls back to per-row parsing – exactly the comparison we want to measure.
+const hRowBuilder = ({ row, index, className, data, selected }) => h("tr", { class: className, bind: data[index] }, h("td", { class: "col-md-1" }, data[index].id), h("td", { class: "col-md-4" }, h("a", { onclick: () => selected(row.id) }, data[index].label)), h("td", { class: "col-md-1" }, h("a", null, h("span", {
+    class: "glyphicon glyphicon-remove",
+    "aria-hidden": "true",
+}))), h("td", { class: "col-md-6" }));
+const htmlRowBuilder = ({ row, index, className, data, selected }) => html `<tr class="${className}" bind="${data[index]}">
+    <td class="col-md-1">${data[index].id}</td>
+    <td class="col-md-4">
+      <a onclick=${() => selected(row.id)}>${data[index].label}</a>
+    </td>
+    <td class="col-md-1">
+      <a><span class="glyphicon glyphicon-remove" aria-hidden="true"></span></a>
+    </td>
+    <td class="col-md-6"></td>
+  </tr>`;
 function createViewApp() {
+    return createReactiveViewApp(hRowBuilder);
+}
+function createViewHtmlApp() {
+    return createReactiveViewApp(htmlRowBuilder);
+}
+function createReactiveViewApp(buildRow) {
     const { table, tbody } = createTable();
     const data = reactive([]);
     const selected = reactive(null);
     view(`#${tbody.id}`, data, (row, index) => {
         const className = ternary((value) => value === row.id, "danger", "", selected);
-        const tr = h("tr", { class: className, bind: data[index] }, h("td", { class: "col-md-1" }, data[index].id), h("td", { class: "col-md-4" }, h("a", { onclick: () => selected(row.id) }, data[index].label)), h("td", { class: "col-md-1" }, h("a", null, h("span", {
-            class: "glyphicon glyphicon-remove",
-            "aria-hidden": "true",
-        }))), h("td", { class: "col-md-6" }));
+        const tr = buildRow({ row, index, className, data, selected });
         onCleanup(unset, tr, className);
         return tr;
     });
@@ -294,6 +387,16 @@ function createViewApp() {
             data([]);
             unset(selected);
             table.remove();
+        },
+        keyed: {
+            nodeAt: (index) => getRow(tbody, index),
+            idAt: (index) => getRow(tbody, index)?.querySelector("td")?.textContent ?? "",
+            swap: (i, j) => data((prev) => {
+                [prev[i], prev[j]] = [prev[j], prev[i]];
+            }),
+            removeAt: (index) => data((curr) => {
+                curr[index] = null;
+            }),
         },
     };
 }

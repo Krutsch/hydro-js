@@ -64,7 +64,13 @@ type eventFunctions = Map<string, eventType>;
 // still containing the `__hydroN__` markers.
 type HTMLPart =
   | { kind: 0; path: number[]; markers: number[]; template: string } // text node
-  | { kind: 1; path: number[]; attr: string; markers: number[]; template: string }; // attribute
+  | {
+      kind: 1;
+      path: number[];
+      attr: string;
+      markers: number[];
+      template: string;
+    }; // attribute
 
 const enum Placeholder {
   attribute = "attribute",
@@ -487,7 +493,9 @@ function createCachedHTML(
 }
 function markerValue(index: number, variables: Array<any>, values: string[]) {
   const cached = values[index];
-  return cached !== undefined ? cached : (values[index] = String(variables[index]));
+  return cached !== undefined
+    ? cached
+    : (values[index] = String(variables[index]));
 }
 function replaceCompiledMarkers(
   template: string,
@@ -498,7 +506,9 @@ function replaceCompiledMarkers(
   let out = template;
   for (let i = 0; i < markers.length; i++) {
     const index = markers[i];
-    out = out.split(`__hydro${index}__`).join(markerValue(index, variables, values));
+    out = out
+      .split(`__hydro${index}__`)
+      .join(markerValue(index, variables, values));
   }
   return out;
 }
@@ -1797,11 +1807,7 @@ function onCleanup(
 // proxy instead of allocating three closures (plus a fresh Symbol) per proxy.
 // This matters when many proxies are created at once (e.g. one per list row).
 const sharedHandlers = Symbol("handlers");
-function observeMethod(
-  this: hydroObject,
-  key: PropertyKey,
-  handler: Function,
-) {
+function observeMethod(this: hydroObject, key: PropertyKey, handler: Function) {
   const map = Reflect.get(this, sharedHandlers) as Map<
     PropertyKey,
     Set<Function>
@@ -2226,31 +2232,32 @@ function updateDOM(nodeToChangeMap: nodeToChangeMap, val: any, oldVal: any) {
     }
   });
 }
-function finishViewElements(
-  rootElem: Element,
-  elements: Node[],
-  onlyNewElements = false,
-) {
-  for (const elem of elements) runLifecyle(elem as Element, onRenderMap);
-
-  if (!rootElem.hasChildNodes()) return;
-
-  if (!onlyNewElements || elements.some(isDocumentFragment)) {
-    setReactivity(rootElem, viewElementsEventFunctions);
-  } else {
-    for (const elem of elements) {
-      setReactivity(
-        elem as ReturnType<typeof html>,
-        viewElementsEventFunctions,
-      );
-    }
-  }
-  viewElementsEventFunctions.clear();
-}
-function appendViewElements(rootElem: Element, elements: Node[]) {
+// Mount freshly rendered view rows. The reactive wiring happens in a SINGLE
+// setReactivity pass. For the common case (each row is one Node) it runs over a
+// detached fragment holding only the new rows – one NodeIterator, and no
+// re-scanning of already-mounted rows – then the fragment is attached. This is
+// what keeps "append rows to large table" cheap: the previous per-row
+// setReactivity spun up one NodeIterator per row (very costly in Chrome).
+function addViewRows(rootElem: Element, elements: Node[]) {
+  const hasFragmentItems = elements.some(isDocumentFragment);
   const fragment = document.createDocumentFragment();
   for (const elem of elements) fragment.appendChild(elem);
-  rootElem.appendChild(fragment);
+
+  if (!hasFragmentItems) {
+    setReactivity(fragment, viewElementsEventFunctions);
+    viewElementsEventFunctions.clear();
+    rootElem.appendChild(fragment);
+    for (const elem of elements) runLifecyle(elem as Element, onRenderMap);
+  } else {
+    // A row rendered to a DocumentFragment loses its identity once attached, so
+    // fall back to attaching first and wiring the whole root in one pass.
+    rootElem.appendChild(fragment);
+    for (const elem of elements) runLifecyle(elem as Element, onRenderMap);
+    if (rootElem.hasChildNodes()) {
+      setReactivity(rootElem, viewElementsEventFunctions);
+      viewElementsEventFunctions.clear();
+    }
+  }
 }
 function view(
   root: string,
@@ -2260,8 +2267,7 @@ function view(
   viewElements = true;
   const rootElem = $(root)!;
   const elements = getValue(data).map(renderFunction);
-  appendViewElements(rootElem, elements);
-  finishViewElements(rootElem, elements);
+  addViewRows(rootElem, elements);
   onCleanup(unset, rootElem, data);
 
   viewElements = false;
@@ -2296,8 +2302,7 @@ function view(
         const newElements = slicedData.map((item, i) =>
           renderFunction(item, i + length),
         );
-        appendViewElements(rootElem, newElements);
-        finishViewElements(rootElem, newElements, true);
+        addViewRows(rootElem, newElements);
       }
 
       // Add new
@@ -2307,8 +2312,7 @@ function view(
         }
 
         const elements = newData.map(renderFunction);
-        appendViewElements(rootElem, elements);
-        finishViewElements(rootElem, elements);
+        addViewRows(rootElem, elements);
       }
       viewElements = false;
       /* c8 ignore end */
