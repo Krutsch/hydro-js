@@ -58,6 +58,13 @@ interface EventObject {
 type reactiveObject<T> = T & hydroObject & ((setter: any) => void);
 type eventType = EventListener | EventObject;
 type eventFunctions = Map<string, eventType>;
+// A precompiled dynamic slot in a cached html`` template. `path` is the chain of
+// childNodes indices from the cloned fragment root to the target node; `markers`
+// are the variable indices referenced; `template` is the original text/attr value
+// still containing the `__hydroN__` markers.
+type HTMLPart =
+  | { kind: 0; path: number[]; markers: number[]; template: string } // text node
+  | { kind: 1; path: number[]; attr: string; markers: number[]; template: string }; // attribute
 
 const enum Placeholder {
   attribute = "attribute",
@@ -114,6 +121,12 @@ const _boundFunctions = Symbol("boundFunctions"); // Cache for bound functions i
 const reactiveSymbol = Symbol("reactive");
 const keysSymbol = Symbol("keys");
 const htmlCache = new WeakMap<TemplateStringsArray, DocumentFragment>();
+// Precompiled marker positions for a cached template, so that applying values on
+// each call is a handful of direct node touches instead of a full-subtree scan.
+const htmlPartsCache = new WeakMap<TemplateStringsArray, HTMLPart[]>();
+// Memoized "is this template site structurally cacheable" decision (depends only
+// on the static strings, not the per-call variables).
+const htmlTemplateCacheable = new WeakMap<TemplateStringsArray, boolean>();
 const viewElementsEventFunctions = new Map() as eventFunctions;
 const isServerSideCached = isServerSide();
 
@@ -177,6 +190,7 @@ const boolAttrSet = new Set([
 ]);
 let lastSwapElem: null | Element = null;
 let internReset = false;
+let reactiveKeyCounter = 0;
 
 const primitiveTypes = new Set([
   "number",
@@ -445,6 +459,7 @@ function createCachedHTML(
     return;
   }
 
+  let parts = htmlPartsCache.get(htmlArray);
   let cached = htmlCache.get(htmlArray);
   if (!cached) {
     const markers = variables.map((_, i) => `__hydro${i}__`);
@@ -456,39 +471,128 @@ function createCachedHTML(
     HTML_FIND_INVALID.lastIndex = 0;
     cached = parser(DOMString);
     htmlCache.set(htmlArray, cached);
+    parts = buildHTMLParts(cached);
+    htmlPartsCache.set(htmlArray, parts);
   }
 
   const DOM = cached.cloneNode(true) as DocumentFragment;
-  const values = variables.map(String);
-  let hasReactiveValue = false;
-  const events: eventFunctions = new Map();
-
-  for (let i = 0; i < variables.length; i++) {
-    const variable = variables[i];
-    const marker = `__hydro${i}__`;
-    if (isFunction(variable) || isEventObject(variable)) {
-      events.set(marker, variable);
-    } else if (containsReactiveValue(variable)) {
-      hasReactiveValue = true;
-    }
-  }
-
-  applyCachedHTMLValues(DOM, values, events);
-  if (hasReactiveValue && !viewElements) setReactivity(DOM);
+  // `values` are stringified lazily (see markerValue) so event handlers never pay
+  // the cost of String(fn).
+  const values = new Array<string>(variables.length);
+  applyCompiledParts(DOM, parts!, variables, values);
 
   if (DOM.childNodes.length > 1) return DOM;
   if (!DOM.firstChild) return document.createTextNode("");
   return DOM.firstChild as Element | Text;
 }
+function markerValue(index: number, variables: Array<any>, values: string[]) {
+  const cached = values[index];
+  return cached !== undefined ? cached : (values[index] = String(variables[index]));
+}
+function replaceCompiledMarkers(
+  template: string,
+  markers: number[],
+  variables: Array<any>,
+  values: string[],
+) {
+  let out = template;
+  for (let i = 0; i < markers.length; i++) {
+    const index = markers[i];
+    out = out.split(`__hydro${index}__`).join(markerValue(index, variables, values));
+  }
+  return out;
+}
+function buildHTMLParts(root: DocumentFragment): HTMLPart[] {
+  const parts: HTMLPart[] = [];
+  walkHTMLParts(root, [], parts);
+  return parts;
+}
+function walkHTMLParts(node: Node, path: number[], parts: HTMLPart[]) {
+  const children = node.childNodes;
+  for (let i = 0; i < children.length; i++) {
+    const child = children[i];
+    if (isTextNode(child as Node)) {
+      const value = (child as Text).nodeValue!;
+      if (value.includes("__hydro")) {
+        parts.push({
+          kind: 0,
+          path: [...path, i],
+          markers: findMarkerIndexes(value),
+          template: value,
+        });
+      }
+    } else if ((child as Node).nodeType === 1) {
+      const elem = child as Element;
+      const childPath = [...path, i];
+      for (const attr of elem.getAttributeNames()) {
+        const value = elem.getAttribute(attr)!;
+        if (value.includes("__hydro")) {
+          parts.push({
+            kind: 1,
+            path: childPath,
+            attr,
+            markers: findMarkerIndexes(value),
+            template: value,
+          });
+        }
+      }
+      walkHTMLParts(elem, childPath, parts);
+    }
+  }
+}
+function findMarkerIndexes(value: string): number[] {
+  const result: number[] = [];
+  const regex = /__hydro(\d+)__/g;
+  let match;
+  while ((match = regex.exec(value))) result.push(Number(match[1]));
+  return result;
+}
+function applyCompiledParts(
+  root: DocumentFragment,
+  parts: HTMLPart[],
+  variables: Array<any>,
+  values: string[],
+) {
+  for (let p = 0; p < parts.length; p++) {
+    const part = parts[p];
+    let node: Node = root;
+    const path = part.path;
+    for (let i = 0; i < path.length; i++) node = node.childNodes[path[i]];
+
+    if (part.kind === 0) {
+      (node as Text).nodeValue = replaceCompiledMarkers(
+        part.template,
+        part.markers,
+        variables,
+        values,
+      );
+    } else {
+      const elem = node as Element;
+      const attr = part.attr;
+      if (part.markers.length === 1 && attr.startsWith("on")) {
+        const variable = variables[part.markers[0]];
+        if (isFunction(variable) || isEventObject(variable)) {
+          elem.removeAttribute(attr);
+          addEventListener(elem, attr.replace(onEventRegex, ""), variable);
+          continue;
+        }
+      }
+      setAttribute(
+        elem,
+        attr,
+        replaceCompiledMarkers(part.template, part.markers, variables, values),
+      );
+    }
+  }
+}
 function canCacheHTMLVariables(
   htmlArray: TemplateStringsArray,
   variables: Array<any>,
 ) {
-  if (Array.from(htmlArray).some(containsReactiveMarker)) return false;
+  if (!isTemplateCacheable(htmlArray)) return false;
 
   for (let i = 0; i < variables.length; i++) {
     const variable = variables[i];
-    if (!canCacheHTMLPosition(htmlArray, i)) return false;
     if (isNode(variable) || Array.isArray(variable)) return false;
     if (containsReactiveValue(variable)) return false;
     if (
@@ -508,6 +612,30 @@ function canCacheHTMLVariables(
   }
   return true;
 }
+// Structural cacheability depends only on the static template strings, so memoize
+// it per template site instead of recomputing (Array.from + regex) every call.
+function isTemplateCacheable(htmlArray: TemplateStringsArray) {
+  const cached = htmlTemplateCacheable.get(htmlArray);
+  if (cached !== undefined) return cached;
+
+  let ok = true;
+  for (let i = 0; i < htmlArray.length; i++) {
+    if (containsReactiveMarker(htmlArray[i])) {
+      ok = false;
+      break;
+    }
+  }
+  if (ok) {
+    for (let i = 0; i < htmlArray.length - 1; i++) {
+      if (!canCacheHTMLPosition(htmlArray, i)) {
+        ok = false;
+        break;
+      }
+    }
+  }
+  htmlTemplateCacheable.set(htmlArray, ok);
+  return ok;
+}
 function canCacheHTMLPosition(htmlArray: TemplateStringsArray, index: number) {
   const before = htmlArray[index];
   const after = htmlArray[index + 1];
@@ -523,47 +651,6 @@ function containsReactiveMarker(value: string) {
 }
 function containsParsedHTML(value: string) {
   return value.includes("<") || containsReactiveMarker(value);
-}
-function applyCachedHTMLValues(
-  root: DocumentFragment,
-  values: string[],
-  events: eventFunctions,
-) {
-  const textNodes = document.createNodeIterator(
-    root,
-    window.NodeFilter.SHOW_TEXT,
-  );
-  let textNode;
-  while ((textNode = textNodes.nextNode() as Text | null)) {
-    const value = replaceHTMLMarkers(textNode.nodeValue!, values);
-    if (value !== textNode.nodeValue) textNode.nodeValue = value;
-  }
-
-  const elements = document.createNodeIterator(
-    root,
-    window.NodeFilter.SHOW_ELEMENT,
-  );
-  let elem;
-  while ((elem = elements.nextNode() as Element | null)) {
-    for (const key of elem.getAttributeNames()) {
-      const value = elem.getAttribute(key)!;
-      const event = events.get(value);
-      if (event && key.startsWith("on")) {
-        elem.removeAttribute(key);
-        addEventListener(elem, key.replace(onEventRegex, ""), event);
-      } else {
-        const replaced = replaceHTMLMarkers(value, values);
-        if (replaced !== value) setAttribute(elem, key, replaced);
-      }
-    }
-  }
-}
-function replaceHTMLMarkers(value: string, values: string[]) {
-  for (let i = 0; i < values.length; i++) {
-    const marker = `__hydro${i}__`;
-    if (value.includes(marker)) value = value.split(marker).join(values[i]);
-  }
-  return value;
 }
 function fillDOM(
   elem: ReturnType<typeof html>,
@@ -1468,7 +1555,12 @@ async function schedule(fn: Function, ...args: any): Promise<void> {
 function reactive<T>(initial: T): reactiveObject<T> {
   let key: string;
 
-  do key = randomText();
+  // Monotonic counter instead of randomText() in a collision loop: reactive() is
+  // hot (one per row via ternary in list rendering). Keep the key all-lowercase –
+  // reactive keys can land in attribute *names* (`<p ${obj}>` -> `{{key}}`) which
+  // the HTML parser lowercases, so an uppercase char would break resolution. The
+  // guard still advances on the rare collision with a user-set hydro property.
+  do key = `hydror${reactiveKeyCounter++}`;
   while (Reflect.has(hydro, key));
 
   Reflect.set(hydro, key, initial);
@@ -1699,8 +1791,67 @@ function onCleanup(
 }
 
 // Core of the library
+
+// A single shared symbol keys every proxy's observer Map, so the observe/
+// getObservers/unobserve methods can be defined once and reused across every
+// proxy instead of allocating three closures (plus a fresh Symbol) per proxy.
+// This matters when many proxies are created at once (e.g. one per list row).
+const sharedHandlers = Symbol("handlers");
+function observeMethod(
+  this: hydroObject,
+  key: PropertyKey,
+  handler: Function,
+) {
+  const map = Reflect.get(this, sharedHandlers) as Map<
+    PropertyKey,
+    Set<Function>
+  >;
+  if (map.has(key)) {
+    map.get(key)!.add(handler);
+  } else {
+    map.set(key, new Set([handler]));
+  }
+
+  return () => {
+    const handlersForKey = map.get(key);
+    if (!handlersForKey) return;
+
+    handlersForKey.delete(handler);
+    if (handlersForKey.size === 0) {
+      map.delete(key);
+    }
+  };
+}
+function getObserversMethod(this: hydroObject) {
+  return Reflect.get(this, sharedHandlers);
+}
+function unobserveMethod(
+  this: hydroObject,
+  key: PropertyKey,
+  handler: Function,
+) {
+  const map = Reflect.get(this, sharedHandlers) as Map<
+    PropertyKey,
+    Set<Function>
+  >;
+
+  if (key) {
+    if (map.has(key)) {
+      if (handler == null) {
+        map.delete(key);
+      } else {
+        const set = map.get(key);
+        if (set?.has(handler)) {
+          set.delete(handler);
+        }
+      }
+    }
+    /* c8 ignore next 3 */
+  } else {
+    map.clear();
+  }
+}
 function generateProxy(obj?: Record<PropertyKey, unknown>): hydroObject {
-  const handlers = Symbol("handlers"); // For observer pattern
   const boundFunctions = new WeakMap<Function, Function>();
 
   const proxy = new Proxy(obj ?? {}, {
@@ -1731,7 +1882,7 @@ function generateProxy(obj?: Record<PropertyKey, unknown>): hydroObject {
         }
 
         // Inform the Observers about null change and unobserve
-        const observer = Reflect.get(target, handlers, receiver);
+        const observer = Reflect.get(target, sharedHandlers, receiver);
         if (observer.has(key)) {
           let set = observer.get(key);
           for (const handler of set) {
@@ -1853,7 +2004,7 @@ function generateProxy(obj?: Record<PropertyKey, unknown>): hydroObject {
 
       // Inform the Observers
       if (returnSet) {
-        Reflect.get(target, handlers, receiver)
+        Reflect.get(target, sharedHandlers, receiver)
           .get(key)
           ?.forEach((handler: Function) => handler(newVal, oldVal));
       }
@@ -1893,63 +2044,19 @@ function generateProxy(obj?: Record<PropertyKey, unknown>): hydroObject {
     value: globalSchedule,
     writable: true,
   });
-  Reflect.defineProperty(proxy, handlers, {
+  Reflect.defineProperty(proxy, sharedHandlers, {
     value: new Map<PropertyKey, Set<Function>>(),
   });
   Reflect.defineProperty(proxy, Placeholder.observe, {
-    value(key: PropertyKey, handler: Function) {
-      const map = Reflect.get(proxy, handlers) as Map<
-        PropertyKey,
-        Set<Function>
-      >;
-
-      if (map.has(key)) {
-        map.get(key)!.add(handler);
-      } else {
-        map.set(key, new Set([handler]));
-      }
-
-      return () => {
-        const handlersForKey = map.get(key);
-        if (!handlersForKey) return;
-
-        handlersForKey.delete(handler);
-        if (handlersForKey.size === 0) {
-          map.delete(key);
-        }
-      };
-    },
+    value: observeMethod,
     configurable: true,
   });
   Reflect.defineProperty(proxy, Placeholder.getObservers, {
-    value() {
-      return Reflect.get(proxy, handlers);
-    },
+    value: getObserversMethod,
     configurable: true,
   });
   Reflect.defineProperty(proxy, Placeholder.unobserve, {
-    value(key: PropertyKey, handler: Function) {
-      const map = Reflect.get(proxy, handlers) as Map<
-        PropertyKey,
-        Set<Function>
-      >;
-
-      if (key) {
-        if (map.has(key)) {
-          if (handler == null) {
-            map.delete(key);
-          } else {
-            const set = map.get(key);
-            if (set?.has(handler)) {
-              set.delete(handler);
-            }
-          }
-        }
-        /* c8 ignore next 3 */
-      } else {
-        map.clear();
-      }
-    },
+    value: unobserveMethod,
     configurable: true,
   });
   if (!obj)

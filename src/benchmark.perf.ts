@@ -132,8 +132,8 @@ const NOUNS = [
 const configDefaults: Required<PerfConfig> = {
   rows: 1000,
   manyRows: 10000,
-  repeats: 3,
-  warmups: 1,
+  repeats: 10,
+  warmups: 3,
 };
 
 const operations: Operation[] = [

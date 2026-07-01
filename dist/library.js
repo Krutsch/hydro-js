@@ -24,6 +24,12 @@ const _boundFunctions = Symbol("boundFunctions"); // Cache for bound functions i
 const reactiveSymbol = Symbol("reactive");
 const keysSymbol = Symbol("keys");
 const htmlCache = new WeakMap();
+// Precompiled marker positions for a cached template, so that applying values on
+// each call is a handful of direct node touches instead of a full-subtree scan.
+const htmlPartsCache = new WeakMap();
+// Memoized "is this template site structurally cacheable" decision (depends only
+// on the static strings, not the per-call variables).
+const htmlTemplateCacheable = new WeakMap();
 const viewElementsEventFunctions = new Map();
 const isServerSideCached = isServerSide();
 let globalSchedule = true; // Decides whether to schedule rendering and updating (async)
@@ -82,6 +88,7 @@ const boolAttrSet = new Set([
 ]);
 let lastSwapElem = null;
 let internReset = false;
+let reactiveKeyCounter = 0;
 const primitiveTypes = new Set([
     "number",
     "string",
@@ -313,6 +320,7 @@ function createCachedHTML(htmlArray, variables) {
     if (!shouldSetReactivity || !canCacheHTMLVariables(htmlArray, variables)) {
         return;
     }
+    let parts = htmlPartsCache.get(htmlArray);
     let cached = htmlCache.get(htmlArray);
     if (!cached) {
         const markers = variables.map((_, i) => `__hydro${i}__`);
@@ -324,37 +332,109 @@ function createCachedHTML(htmlArray, variables) {
         HTML_FIND_INVALID.lastIndex = 0;
         cached = parser(DOMString);
         htmlCache.set(htmlArray, cached);
+        parts = buildHTMLParts(cached);
+        htmlPartsCache.set(htmlArray, parts);
     }
     const DOM = cached.cloneNode(true);
-    const values = variables.map(String);
-    let hasReactiveValue = false;
-    const events = new Map();
-    for (let i = 0; i < variables.length; i++) {
-        const variable = variables[i];
-        const marker = `__hydro${i}__`;
-        if (isFunction(variable) || isEventObject(variable)) {
-            events.set(marker, variable);
-        }
-        else if (containsReactiveValue(variable)) {
-            hasReactiveValue = true;
-        }
-    }
-    applyCachedHTMLValues(DOM, values, events);
-    if (hasReactiveValue && !viewElements)
-        setReactivity(DOM);
+    // `values` are stringified lazily (see markerValue) so event handlers never pay
+    // the cost of String(fn).
+    const values = new Array(variables.length);
+    applyCompiledParts(DOM, parts, variables, values);
     if (DOM.childNodes.length > 1)
         return DOM;
     if (!DOM.firstChild)
         return document.createTextNode("");
     return DOM.firstChild;
 }
+function markerValue(index, variables, values) {
+    const cached = values[index];
+    return cached !== undefined ? cached : (values[index] = String(variables[index]));
+}
+function replaceCompiledMarkers(template, markers, variables, values) {
+    let out = template;
+    for (let i = 0; i < markers.length; i++) {
+        const index = markers[i];
+        out = out.split(`__hydro${index}__`).join(markerValue(index, variables, values));
+    }
+    return out;
+}
+function buildHTMLParts(root) {
+    const parts = [];
+    walkHTMLParts(root, [], parts);
+    return parts;
+}
+function walkHTMLParts(node, path, parts) {
+    const children = node.childNodes;
+    for (let i = 0; i < children.length; i++) {
+        const child = children[i];
+        if (isTextNode(child)) {
+            const value = child.nodeValue;
+            if (value.includes("__hydro")) {
+                parts.push({
+                    kind: 0,
+                    path: [...path, i],
+                    markers: findMarkerIndexes(value),
+                    template: value,
+                });
+            }
+        }
+        else if (child.nodeType === 1) {
+            const elem = child;
+            const childPath = [...path, i];
+            for (const attr of elem.getAttributeNames()) {
+                const value = elem.getAttribute(attr);
+                if (value.includes("__hydro")) {
+                    parts.push({
+                        kind: 1,
+                        path: childPath,
+                        attr,
+                        markers: findMarkerIndexes(value),
+                        template: value,
+                    });
+                }
+            }
+            walkHTMLParts(elem, childPath, parts);
+        }
+    }
+}
+function findMarkerIndexes(value) {
+    const result = [];
+    const regex = /__hydro(\d+)__/g;
+    let match;
+    while ((match = regex.exec(value)))
+        result.push(Number(match[1]));
+    return result;
+}
+function applyCompiledParts(root, parts, variables, values) {
+    for (let p = 0; p < parts.length; p++) {
+        const part = parts[p];
+        let node = root;
+        const path = part.path;
+        for (let i = 0; i < path.length; i++)
+            node = node.childNodes[path[i]];
+        if (part.kind === 0) {
+            node.nodeValue = replaceCompiledMarkers(part.template, part.markers, variables, values);
+        }
+        else {
+            const elem = node;
+            const attr = part.attr;
+            if (part.markers.length === 1 && attr.startsWith("on")) {
+                const variable = variables[part.markers[0]];
+                if (isFunction(variable) || isEventObject(variable)) {
+                    elem.removeAttribute(attr);
+                    addEventListener(elem, attr.replace(onEventRegex, ""), variable);
+                    continue;
+                }
+            }
+            setAttribute(elem, attr, replaceCompiledMarkers(part.template, part.markers, variables, values));
+        }
+    }
+}
 function canCacheHTMLVariables(htmlArray, variables) {
-    if (Array.from(htmlArray).some(containsReactiveMarker))
+    if (!isTemplateCacheable(htmlArray))
         return false;
     for (let i = 0; i < variables.length; i++) {
         const variable = variables[i];
-        if (!canCacheHTMLPosition(htmlArray, i))
-            return false;
         if (isNode(variable) || Array.isArray(variable))
             return false;
         if (containsReactiveValue(variable))
@@ -372,6 +452,30 @@ function canCacheHTMLVariables(htmlArray, variables) {
     }
     return true;
 }
+// Structural cacheability depends only on the static template strings, so memoize
+// it per template site instead of recomputing (Array.from + regex) every call.
+function isTemplateCacheable(htmlArray) {
+    const cached = htmlTemplateCacheable.get(htmlArray);
+    if (cached !== undefined)
+        return cached;
+    let ok = true;
+    for (let i = 0; i < htmlArray.length; i++) {
+        if (containsReactiveMarker(htmlArray[i])) {
+            ok = false;
+            break;
+        }
+    }
+    if (ok) {
+        for (let i = 0; i < htmlArray.length - 1; i++) {
+            if (!canCacheHTMLPosition(htmlArray, i)) {
+                ok = false;
+                break;
+            }
+        }
+    }
+    htmlTemplateCacheable.set(htmlArray, ok);
+    return ok;
+}
 function canCacheHTMLPosition(htmlArray, index) {
     const before = htmlArray[index];
     const after = htmlArray[index + 1];
@@ -387,40 +491,6 @@ function containsReactiveMarker(value) {
 }
 function containsParsedHTML(value) {
     return value.includes("<") || containsReactiveMarker(value);
-}
-function applyCachedHTMLValues(root, values, events) {
-    const textNodes = document.createNodeIterator(root, window.NodeFilter.SHOW_TEXT);
-    let textNode;
-    while ((textNode = textNodes.nextNode())) {
-        const value = replaceHTMLMarkers(textNode.nodeValue, values);
-        if (value !== textNode.nodeValue)
-            textNode.nodeValue = value;
-    }
-    const elements = document.createNodeIterator(root, window.NodeFilter.SHOW_ELEMENT);
-    let elem;
-    while ((elem = elements.nextNode())) {
-        for (const key of elem.getAttributeNames()) {
-            const value = elem.getAttribute(key);
-            const event = events.get(value);
-            if (event && key.startsWith("on")) {
-                elem.removeAttribute(key);
-                addEventListener(elem, key.replace(onEventRegex, ""), event);
-            }
-            else {
-                const replaced = replaceHTMLMarkers(value, values);
-                if (replaced !== value)
-                    setAttribute(elem, key, replaced);
-            }
-        }
-    }
-}
-function replaceHTMLMarkers(value, values) {
-    for (let i = 0; i < values.length; i++) {
-        const marker = `__hydro${i}__`;
-        if (value.includes(marker))
-            value = value.split(marker).join(values[i]);
-    }
-    return value;
 }
 function fillDOM(elem, insertNodes, eventFunctions) {
     const root = document.createNodeIterator(elem, window.NodeFilter.SHOW_ELEMENT, {
@@ -1173,8 +1243,13 @@ async function schedule(fn, ...args) {
 }
 function reactive(initial) {
     let key;
+    // Monotonic counter instead of randomText() in a collision loop: reactive() is
+    // hot (one per row via ternary in list rendering). Keep the key all-lowercase –
+    // reactive keys can land in attribute *names* (`<p ${obj}>` -> `{{key}}`) which
+    // the HTML parser lowercases, so an uppercase char would break resolution. The
+    // guard still advances on the rare collision with a user-set hydro property.
     do
-        key = randomText();
+        key = `hydror${reactiveKeyCounter++}`;
     while (Reflect.has(hydro, key));
     Reflect.set(hydro, key, initial);
     Reflect.set(setter, reactiveSymbol, true);
@@ -1352,8 +1427,53 @@ function onCleanup(fn, elem, ...args) {
     onCleanupMap.set(elem, args.length ? fn.bind(fn, ...args) : fn);
 }
 // Core of the library
+// A single shared symbol keys every proxy's observer Map, so the observe/
+// getObservers/unobserve methods can be defined once and reused across every
+// proxy instead of allocating three closures (plus a fresh Symbol) per proxy.
+// This matters when many proxies are created at once (e.g. one per list row).
+const sharedHandlers = Symbol("handlers");
+function observeMethod(key, handler) {
+    const map = Reflect.get(this, sharedHandlers);
+    if (map.has(key)) {
+        map.get(key).add(handler);
+    }
+    else {
+        map.set(key, new Set([handler]));
+    }
+    return () => {
+        const handlersForKey = map.get(key);
+        if (!handlersForKey)
+            return;
+        handlersForKey.delete(handler);
+        if (handlersForKey.size === 0) {
+            map.delete(key);
+        }
+    };
+}
+function getObserversMethod() {
+    return Reflect.get(this, sharedHandlers);
+}
+function unobserveMethod(key, handler) {
+    const map = Reflect.get(this, sharedHandlers);
+    if (key) {
+        if (map.has(key)) {
+            if (handler == null) {
+                map.delete(key);
+            }
+            else {
+                const set = map.get(key);
+                if (set?.has(handler)) {
+                    set.delete(handler);
+                }
+            }
+        }
+        /* c8 ignore next 3 */
+    }
+    else {
+        map.clear();
+    }
+}
 function generateProxy(obj) {
-    const handlers = Symbol("handlers"); // For observer pattern
     const boundFunctions = new WeakMap();
     const proxy = new Proxy(obj ?? {}, {
         // If receiver is a getter, then it is the object on which the search first started for the property|key -> Proxy
@@ -1382,7 +1502,7 @@ function generateProxy(obj) {
                     }
                 }
                 // Inform the Observers about null change and unobserve
-                const observer = Reflect.get(target, handlers, receiver);
+                const observer = Reflect.get(target, sharedHandlers, receiver);
                 if (observer.has(key)) {
                     let set = observer.get(key);
                     for (const handler of set) {
@@ -1497,7 +1617,7 @@ function generateProxy(obj) {
             }
             // Inform the Observers
             if (returnSet) {
-                Reflect.get(target, handlers, receiver)
+                Reflect.get(target, sharedHandlers, receiver)
                     .get(key)
                     ?.forEach((handler) => handler(newVal, oldVal));
             }
@@ -1533,57 +1653,19 @@ function generateProxy(obj) {
         value: globalSchedule,
         writable: true,
     });
-    Reflect.defineProperty(proxy, handlers, {
+    Reflect.defineProperty(proxy, sharedHandlers, {
         value: new Map(),
     });
     Reflect.defineProperty(proxy, "observe" /* Placeholder.observe */, {
-        value(key, handler) {
-            const map = Reflect.get(proxy, handlers);
-            if (map.has(key)) {
-                map.get(key).add(handler);
-            }
-            else {
-                map.set(key, new Set([handler]));
-            }
-            return () => {
-                const handlersForKey = map.get(key);
-                if (!handlersForKey)
-                    return;
-                handlersForKey.delete(handler);
-                if (handlersForKey.size === 0) {
-                    map.delete(key);
-                }
-            };
-        },
+        value: observeMethod,
         configurable: true,
     });
     Reflect.defineProperty(proxy, "getObservers" /* Placeholder.getObservers */, {
-        value() {
-            return Reflect.get(proxy, handlers);
-        },
+        value: getObserversMethod,
         configurable: true,
     });
     Reflect.defineProperty(proxy, "unobserve" /* Placeholder.unobserve */, {
-        value(key, handler) {
-            const map = Reflect.get(proxy, handlers);
-            if (key) {
-                if (map.has(key)) {
-                    if (handler == null) {
-                        map.delete(key);
-                    }
-                    else {
-                        const set = map.get(key);
-                        if (set?.has(handler)) {
-                            set.delete(handler);
-                        }
-                    }
-                }
-                /* c8 ignore next 3 */
-            }
-            else {
-                map.clear();
-            }
-        },
+        value: unobserveMethod,
         configurable: true,
     });
     if (!obj)

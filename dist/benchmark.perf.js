@@ -57,8 +57,8 @@ const NOUNS = [
 const configDefaults = {
     rows: 1000,
     manyRows: 10000,
-    repeats: 3,
-    warmups: 1,
+    repeats: 10,
+    warmups: 3,
 };
 const operations = [
     {
