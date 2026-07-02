@@ -907,6 +907,27 @@ describe("library", () => {
                 setTimeout(unmount);
                 return cond && elem.textContent.includes("2");
             });
+            it("cleans up all event listeners on unmount, not just the first", () => {
+                // Non-function/non-primitive variable (the plain object attr spread)
+                // forces canCacheHTMLVariables() to false, so this goes through the
+                // uncached fillDOM -> setReactivity(elem, eventFunctions) path instead
+                // of the cached applyCompiledParts path.
+                let clicked = 0;
+                let hovered = 0;
+                const elem = html `<div
+          onclick=${() => clicked++}
+          onmouseover=${() => hovered++}
+          ${{ "data-x": "1" }}
+        ></div>`;
+                const unmount = render(elem);
+                elem.dispatchEvent(new window.Event("click"));
+                elem.dispatchEvent(new window.Event("mouseover"));
+                const firedBeforeUnmount = clicked === 1 && hovered === 1;
+                unmount();
+                elem.dispatchEvent(new window.Event("click"));
+                elem.dispatchEvent(new window.Event("mouseover"));
+                return firedBeforeUnmount && clicked === 1 && hovered === 1;
+            });
             it("replacing elements will not stop their state", async () => {
                 await sleep(300);
                 setInsertDiffing(true);

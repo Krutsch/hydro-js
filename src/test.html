@@ -1112,6 +1112,32 @@
                 expect(cond && elem.textContent.includes("2")).to.be.true;
               });
 
+              it("cleans up all event listeners on unmount, not just the first", () => {
+                // Non-function/non-primitive variable (the plain object attr
+                // spread) forces canCacheHTMLVariables() to false, so this goes
+                // through the uncached fillDOM -> setReactivity(elem, eventFunctions)
+                // path instead of the cached applyCompiledParts path.
+                let clicked = 0;
+                let hovered = 0;
+                const elem = html`<div
+                  onclick=${() => clicked++}
+                  onmouseover=${() => hovered++}
+                  ${{ "data-x": "1" }}
+                ></div>`;
+                const unmount = render(elem);
+
+                elem.dispatchEvent(new window.Event("click"));
+                elem.dispatchEvent(new window.Event("mouseover"));
+                const firedBeforeUnmount = clicked === 1 && hovered === 1;
+
+                unmount();
+                elem.dispatchEvent(new window.Event("click"));
+                elem.dispatchEvent(new window.Event("mouseover"));
+
+                expect(firedBeforeUnmount && clicked === 1 && hovered === 1).to
+                  .be.true;
+              });
+
               it("replacing elements will not stop their state", async () => {
                 setInsertDiffing(true);
                 const video1 = html`

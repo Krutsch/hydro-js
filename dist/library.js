@@ -1,3 +1,18 @@
+// Members referenced more than once live as plain top-level consts instead of
+// Placeholder entries: `const enum` is fully erased by tsc (every reference is
+// replaced by its literal string at each call site), so a multi-use value here
+// would repeat itself verbatim at every call site instead of collapsing to a
+// single minifier-renameable binding.
+const STRING_TYPE = "string";
+const IS_PROXY = "isProxy";
+const ASYNC_UPDATE = "asyncUpdate";
+const TEMPLATE_TAG = "template";
+const TWO_WAY = "two-way";
+const CHANGE_EVENT = "change";
+const RADIO_TYPE = "radio";
+const CHECKBOX_TYPE = "checkbox";
+const DUMMY_SUFFIX = "-dummy";
+const REACTIVE_KEY_PREFIX = "hydro-reactive-";
 // Safari Polyfills
 window.requestIdleCallback =
     /* c8 ignore next 4 */
@@ -8,7 +23,7 @@ window.requestIdleCallback =
         }));
 // Safari Polyfills END
 const range = document.createRange();
-range.selectNodeContents(range.createContextualFragment(`<${"template" /* Placeholder.template */}>`).lastChild);
+range.selectNodeContents(range.createContextualFragment(`<${TEMPLATE_TAG}>`).lastChild);
 const defaultParser = range.createContextualFragment.bind(range);
 const allNodeChanges = new WeakMap(); // Maps a Node against an array of changes. An array is necessary because a node can have multiple variables for one text / attribute.
 const elemEventFunctions = new WeakMap(); // Stores event functions in order to compare Elements against each other.
@@ -41,7 +56,7 @@ let shouldSetReactivity = true;
 let viewElements = false;
 let ignoreIsConnected = false;
 const reactivityRegex = new RegExp(isServerSideCached
-    ? `\\{\\{([^]*?)\\}\\}|${"hydro-reactive-" /* Placeholder.reactiveKey */}([a-zA-Z0-9_.-]+)`
+    ? `\\{\\{([^]*?)\\}\\}|${REACTIVE_KEY_PREFIX}([a-zA-Z0-9_.-]+)`
     : `\\{\\{([^]*?)\\}\\}`);
 const HTML_FIND_INVALID = /<(\/?)(html|head|body)(>|\s.*?>)/g;
 const HTML_FIND_TABLE_ROW = /^<tr(>|\s)/i;
@@ -54,50 +69,11 @@ const onEventRegex = /^on/;
 // https://html.spec.whatwg.org/#attributes-3
 // if value for bool attr is falsy, then remove attr
 // INFO: draggable and spellcheck are actually using booleans as string! Also, hidden is not really a bool attr, but is making use of the empty string too. Might consider to add 'translate' (yes and no as string)
-const boolAttrSet = new Set([
-    "allowfullscreen",
-    "alpha",
-    "async",
-    "autofocus",
-    "autoplay",
-    "checked",
-    "controls",
-    "draggable",
-    "default",
-    "defer",
-    "disabled",
-    "formnovalidate",
-    "hidden",
-    "inert",
-    "ismap",
-    "itemscope",
-    "loop",
-    "multiple",
-    "muted",
-    "nomodule",
-    "novalidate",
-    "open",
-    "playsinline",
-    "readonly",
-    "required",
-    "reversed",
-    "selected",
-    "shadowrootclonable",
-    "shadowrootcustomelementregistry",
-    "shadowrootdelegatesfocus",
-    "shadowrootserializable",
-    "spellcheck",
-]);
+const boolAttrSet = new Set("allowfullscreen alpha async autofocus autoplay checked controls draggable default defer disabled formnovalidate hidden inert ismap itemscope loop multiple muted nomodule novalidate open playsinline readonly required reversed selected shadowrootclonable shadowrootcustomelementregistry shadowrootdelegatesfocus shadowrootserializable spellcheck".split(" "));
 let lastSwapElem = null;
 let internReset = false;
 let reactiveKeyCounter = 0;
-const primitiveTypes = new Set([
-    "number",
-    "string",
-    "symbol",
-    "boolean",
-    "bigint",
-]);
+const primitiveTypes = new Set("number string symbol boolean bigint".split(" "));
 function isObject(obj) {
     return obj != null && typeof obj === "object";
 }
@@ -120,7 +96,7 @@ function isProxy(hydroObject) {
     const wasTracking = trackDeps;
     if (wasTracking)
         trackDeps = false;
-    const result = Reflect.get(hydroObject, "isProxy" /* Placeholder.isProxy */);
+    const result = Reflect.get(hydroObject, IS_PROXY);
     if (wasTracking)
         trackDeps = true;
     return result;
@@ -161,7 +137,7 @@ function setIgnoreIsConnected(ignore) {
     ignoreIsConnected = ignore;
 }
 function setHydroRecursive(obj) {
-    Reflect.set(obj, "asyncUpdate" /* Placeholder.asyncUpdate */, globalSchedule);
+    Reflect.set(obj, ASYNC_UPDATE, globalSchedule);
     for (const value of Object.values(obj)) {
         if (isObject(value) && isProxy(value)) {
             setHydroRecursive(value);
@@ -233,7 +209,7 @@ function html(htmlArray, ...variables) {
         return cachedDOM;
     const eventFunctions = new Map(); // Temporarily store a mapping for string -> function, because eventListener have to be registered after the Element's creation
     const insertNodes = []; // Nodes, that will be added after the parsing
-    const template = `<${"template" /* Placeholder.template */} id="lbInsertNodes"></${"template" /* Placeholder.template */}>`;
+    const template = `<${TEMPLATE_TAG} id="lbInsertNodes"></${TEMPLATE_TAG}>`;
     const resolvedVariables = new Array(variables.length);
     for (let i = 0; i < variables.length; i++) {
         const variable = variables[i];
@@ -280,7 +256,7 @@ function html(htmlArray, ...variables) {
     }
     // Find elements <html|head|body>, as they cannot be created by the parser. Replace them by fake Custom Elements and replace them afterwards.
     let DOMString = String.raw(htmlArray, ...resolvedVariables).trim();
-    DOMString = DOMString.replace(HTML_FIND_INVALID, `<$1$2${"-dummy" /* Placeholder.dummy */}$3`);
+    DOMString = DOMString.replace(HTML_FIND_INVALID, `<$1$2${DUMMY_SUFFIX}$3`);
     const DOM = parser(DOMString);
     // Delay Element iteration and manipulation after the elements have been added to the DOM.
     if (!viewElements) {
@@ -419,20 +395,40 @@ function applyCompiledParts(root, parts, variables, values) {
         for (let i = 0; i < path.length; i++)
             node = node.childNodes[path[i]];
         if (part.kind === 0) {
-            node.nodeValue = replaceCompiledMarkers(part.template, part.markers, variables, values);
+            const value = replaceCompiledMarkers(part.template, part.markers, variables, values);
+            node.nodeValue = value;
+            // A reactive marker stringifies to "{{key.chain}}" (see chainKeys'
+            // Symbol.toPrimitive), so resolve + register it the same way the
+            // uncached path does, but targeted at this one known node instead of a
+            // NodeIterator scan over the whole subtree.
+            if (part.markers.some((m) => isReactiveValue(variables[m]))) {
+                setReactivitySingle(node);
+            }
         }
         else {
             const elem = node;
             const attr = part.attr;
             if (part.markers.length === 1 && attr.startsWith("on")) {
                 const variable = variables[part.markers[0]];
-                if (isFunction(variable) || isEventObject(variable)) {
+                // A reactive value can itself be a chainKeys Proxy wrapping a
+                // (callable) setter, so it passes isFunction() too — exclude it here
+                // and let it fall through to setReactivitySingle below, which
+                // resolves the chain first and only then checks isFunction/isEventObject
+                // on the *resolved* value.
+                if (!isReactiveValue(variable) &&
+                    (isFunction(variable) || isEventObject(variable))) {
                     elem.removeAttribute(attr);
                     addEventListener(elem, attr.replace(onEventRegex, ""), variable);
                     continue;
                 }
             }
-            setAttribute(elem, attr, replaceCompiledMarkers(part.template, part.markers, variables, values));
+            const value = replaceCompiledMarkers(part.template, part.markers, variables, values);
+            if (part.markers.some((m) => isReactiveValue(variables[m]))) {
+                setReactivitySingle(elem, attr, value);
+            }
+            else {
+                setAttribute(elem, attr, value);
+            }
         }
     }
 }
@@ -443,10 +439,17 @@ function canCacheHTMLVariables(htmlArray, variables) {
         const variable = variables[i];
         if (isNode(variable) || Array.isArray(variable))
             return false;
+        // A reactive value used directly (not nested in an object/array) is still
+        // cacheable: applyCompiledParts resolves + registers it via
+        // setReactivitySingle instead of leaving a dangling {{placeholder}}, so the
+        // template's static structure can still be reused/cloned. Nested reactive
+        // values (inside an object/array variable) fall through to
+        // containsReactiveValue and still bail, since that shape isn't compiled.
+        if (isReactiveValue(variable))
+            continue;
         if (containsReactiveValue(variable))
             return false;
-        if (typeof variable === "string" /* Placeholder.string */ &&
-            containsParsedHTML(variable)) {
+        if (typeof variable === STRING_TYPE && containsParsedHTML(variable)) {
             return false;
         }
         if (primitiveTypes.has(typeof variable) ||
@@ -493,7 +496,7 @@ function canCacheHTMLPosition(htmlArray, index) {
 }
 function containsReactiveMarker(value) {
     return (value.includes("{{") ||
-        (isServerSideCached && value.includes("hydro-reactive-" /* Placeholder.reactiveKey */)));
+        (isServerSideCached && value.includes(REACTIVE_KEY_PREFIX)));
 }
 function containsParsedHTML(value) {
     return value.includes("<") || containsReactiveMarker(value);
@@ -501,7 +504,7 @@ function containsParsedHTML(value) {
 function fillDOM(elem, insertNodes, eventFunctions) {
     const root = document.createNodeIterator(elem, window.NodeFilter.SHOW_ELEMENT, {
         acceptNode(element) {
-            return element.localName.endsWith("-dummy" /* Placeholder.dummy */)
+            return element.localName.endsWith(DUMMY_SUFFIX)
                 ? window.NodeFilter.FILTER_ACCEPT
                 : window.NodeFilter.FILTER_REJECT;
         },
@@ -512,7 +515,7 @@ function fillDOM(elem, insertNodes, eventFunctions) {
         nodes.push(currentNode);
     }
     for (const node of nodes) {
-        const tag = node.localName.replace("-dummy" /* Placeholder.dummy */, "");
+        const tag = node.localName.replace(DUMMY_SUFFIX, "");
         const replacement = document.createElement(tag);
         /* c8 ignore next 3 */
         for (const key of node.getAttributeNames()) {
@@ -566,9 +569,7 @@ function hWireProp(elem, key, value) {
     }
     if (!isReactiveValue(value))
         return false;
-    if (key === "two-way" /* Placeholder.twoWay */ ||
-        key in elem ||
-        boolAttrSet.has(key)) {
+    if (key === TWO_WAY || key in elem || boolAttrSet.has(key)) {
         return false;
     }
     const keys = value[keysSymbolKey];
@@ -595,18 +596,21 @@ function hWireChild(elem, child) {
     if (isNode(resolvedValue))
         return false; // reactive node child -> placeholder path
     const lastProp = keys[keys.length - 1];
-    const textContent = isObject(resolvedValue)
-        ? window.JSON.stringify(resolvedValue)
-        : (resolvedValue ?? "");
+    const textContent = stringifyIfObject(resolvedValue);
     const textNode = document.createTextNode(String(textContent));
     elem.appendChild(textNode);
     setTraces(0, String(textContent).length, textNode, lastProp, resolvedObj);
     return true;
 }
+// Shared by hWireChild/setReactivitySingle: reactive text stringifies objects
+// as JSON, everything else falls back to "" for null/undefined.
+function stringifyIfObject(value) {
+    return isObject(value) ? window.JSON.stringify(value) : (value ?? "");
+}
 function h(name, props, ...children) {
     if (isFunction(name))
         return name({ ...props, children });
-    const elem = typeof name === "string" /* Placeholder.string */
+    const elem = typeof name === STRING_TYPE
         ? document.createElement(name, props?.hasOwnProperty("is") ? { is: props["is"] } : undefined)
         : document.createDocumentFragment();
     const isFrag = isDocumentFragment(elem);
@@ -616,9 +620,7 @@ function h(name, props, ...children) {
         if (!isFrag && hWireProp(elem, i, value))
             continue;
         if (!needsScan &&
-            (i === "bind" ||
-                i === "two-way" /* Placeholder.twoWay */ ||
-                containsReactiveValue(value))) {
+            (i === "bind" || i === TWO_WAY || containsReactiveValue(value))) {
             needsScan = true;
         }
         i in elem && !boolAttrSet.has(i)
@@ -662,10 +664,8 @@ function getChildren(child) {
 function containsReactiveValue(value) {
     if (isReactiveValue(value))
         return true;
-    if (typeof value === "string" /* Placeholder.string */) {
-        return (value.includes("{{") ||
-            (isServerSideCached && value.includes("hydro-reactive-" /* Placeholder.reactiveKey */)));
-    }
+    if (typeof value === STRING_TYPE)
+        return containsReactiveMarker(value);
     if (Array.isArray(value))
         return value.some(containsReactiveValue);
     if (isObject(value) && !isNode(value)) {
@@ -696,24 +696,7 @@ function setReactivity(DOM, eventFunctions) {
                     continue;
                 }
                 elem.removeAttribute(key);
-                if (isEventObject(event)) {
-                    elem.addEventListener(eventName, event.event, event.options);
-                    if (elemEventFunctions.has(elem)) {
-                        elemEventFunctions.get(elem).get(eventName)?.add(event.event);
-                    }
-                    else {
-                        elemEventFunctions.set(elem, new Map([[eventName, new Set([event.event])]]));
-                    }
-                }
-                else {
-                    elem.addEventListener(eventName, event);
-                    if (elemEventFunctions.has(elem)) {
-                        elemEventFunctions.get(elem).get(eventName)?.add(event);
-                    }
-                    else {
-                        elemEventFunctions.set(elem, new Map([[eventName, new Set([event])]]));
-                    }
-                }
+                addEventListener(elem, eventName, event);
             }
             else {
                 setReactivitySingle(elem, key, val);
@@ -722,9 +705,7 @@ function setReactivity(DOM, eventFunctions) {
         let childNode = elem.firstChild;
         while (childNode) {
             if (isTextNode(childNode) &&
-                (childNode.nodeValue?.includes("{{") ||
-                    (isServerSideCached &&
-                        childNode.nodeValue?.includes("hydro-reactive-" /* Placeholder.reactiveKey */)))) {
+                containsReactiveMarker(childNode.nodeValue ?? "")) {
                 setReactivitySingle(childNode);
             }
             childNode = childNode.nextSibling;
@@ -742,14 +723,12 @@ function setReactivitySingle(node, key, val) {
             // e.g. checked attribute or two-way attribute
             attr_OR_text = key;
             if (attr_OR_text.startsWith("{{") ||
-                (isServerSideCached && attr_OR_text.startsWith("hydro-reactive-" /* Placeholder.reactiveKey */))) {
+                (isServerSideCached && attr_OR_text.startsWith(REACTIVE_KEY_PREFIX))) {
                 node.removeAttribute(attr_OR_text);
             }
         }
     }
-    const hasCurlyBraces = attr_OR_text.includes("{{");
-    const hasReactiveKey = isServerSideCached && attr_OR_text.includes("hydro-reactive-" /* Placeholder.reactiveKey */);
-    if (!hasCurlyBraces && !hasReactiveKey) {
+    if (!containsReactiveMarker(attr_OR_text)) {
         return;
     }
     while ((match = attr_OR_text.match(reactivityRegex))) {
@@ -772,9 +751,7 @@ function setReactivitySingle(node, key, val) {
         }
         // Set Text or set Attribute
         if (isTextNode(node)) {
-            const textContent = isObject(resolvedValue)
-                ? window.JSON.stringify(resolvedValue)
-                : (resolvedValue ?? "");
+            const textContent = stringifyIfObject(resolvedValue);
             attr_OR_text = attr_OR_text.replace(hydroMatch, textContent);
             if (attr_OR_text != null) {
                 node.nodeValue = attr_OR_text;
@@ -801,20 +778,20 @@ function setReactivitySingle(node, key, val) {
                 }
                 continue;
             }
-            else if (key === "two-way" /* Placeholder.twoWay */) {
+            else if (key === TWO_WAY) {
                 if (node instanceof window.HTMLSelectElement) {
                     node.value = resolvedValue;
-                    changeAttrVal("change" /* Placeholder.change */, node, resolvedObj, lastProp);
+                    changeAttrVal(CHANGE_EVENT, node, resolvedObj, lastProp);
                 }
                 else if (node instanceof window.HTMLInputElement &&
-                    node.type === "radio" /* Placeholder.radio */) {
+                    node.type === RADIO_TYPE) {
                     node.checked = node.value === resolvedValue;
-                    changeAttrVal("change" /* Placeholder.change */, node, resolvedObj, lastProp);
+                    changeAttrVal(CHANGE_EVENT, node, resolvedObj, lastProp);
                 }
                 else if (node instanceof window.HTMLInputElement &&
-                    node.type === "checkbox" /* Placeholder.checkbox */) {
+                    node.type === CHECKBOX_TYPE) {
                     node.checked = resolvedValue;
-                    changeAttrVal("change" /* Placeholder.change */, node, resolvedObj, lastProp, true);
+                    changeAttrVal(CHANGE_EVENT, node, resolvedObj, lastProp, true);
                 }
                 else if (node instanceof window.HTMLTextAreaElement ||
                     node instanceof window.HTMLInputElement) {
@@ -822,7 +799,7 @@ function setReactivitySingle(node, key, val) {
                     changeAttrVal("input", node, resolvedObj, lastProp);
                 }
                 attr_OR_text = attr_OR_text.replace(hydroMatch, "");
-                node.toggleAttribute("two-way" /* Placeholder.twoWay */);
+                node.toggleAttribute(TWO_WAY);
             }
             else if (isFunction(resolvedValue) || isEventObject(resolvedValue)) {
                 attr_OR_text = attr_OR_text.replace(hydroMatch, "");
@@ -871,6 +848,15 @@ function changeAttrVal(eventName, node, resolvedObj, lastProp, isChecked = false
             : target.value);
     }
 }
+// Shared by setTraces' two "first change for this key" branches: a Map that
+// resolves both directions (change-array -> node, node -> change-array).
+function pairMap(a, b) {
+    //@ts-ignore
+    return new Map([
+        [a, b],
+        [b, a],
+    ]);
+}
 function setTraces(start, end, node, hydroKey, resolvedObj, key) {
     // Set WeakMaps, that will be used to track a change for a Node but also to check if a Node has any other changes.
     const change = [start, end, key, resolvedObj, hydroKey];
@@ -894,25 +880,11 @@ function setTraces(start, end, node, hydroKey, resolvedObj, key) {
             }
         }
         else {
-            keyToNodeMap.set(hydroKey, 
-            //@ts-ignore
-            new Map([
-                [changeArr, node],
-                [node, changeArr],
-            ]));
+            keyToNodeMap.set(hydroKey, pairMap(changeArr, node));
         }
     }
     else {
-        reactivityMap.set(resolvedObj, new Map([
-            [
-                hydroKey,
-                //@ts-ignore
-                new Map([
-                    [changeArr, node],
-                    [node, changeArr],
-                ]),
-            ],
-        ]));
+        reactivityMap.set(resolvedObj, new Map([[hydroKey, pairMap(changeArr, node)]]));
     }
 }
 // Helper function to return a value and hydro obj from a chain of properties
@@ -1004,7 +976,7 @@ function render(elem, where = "", shouldSchedule = globalSchedule) {
         document.body.append(elem);
     }
     else {
-        if (typeof where === "string" /* Placeholder.string */) {
+        if (typeof where === STRING_TYPE) {
             const resolveStringToElement = $(where);
             if (resolveStringToElement) {
                 where = resolveStringToElement;
@@ -1384,7 +1356,7 @@ function chainKeys(initial, keys) {
             }
             if (subKey === Symbol.toPrimitive) {
                 return () => isServerSideCached
-                    ? `${"hydro-reactive-" /* Placeholder.reactiveKey */}${keys.join(".")}`
+                    ? `${REACTIVE_KEY_PREFIX}${keys.join(".")}`
                     : `{{${keys.join(".")}}}`;
             }
             return chainKeys(target, [...keys, subKey]);
@@ -1757,10 +1729,10 @@ function generateProxy(obj) {
             return boundFunctions.get(value);
         },
     });
-    Reflect.defineProperty(proxy, "isProxy" /* Placeholder.isProxy */, {
+    Reflect.defineProperty(proxy, IS_PROXY, {
         value: true,
     });
-    Reflect.defineProperty(proxy, "asyncUpdate" /* Placeholder.asyncUpdate */, {
+    Reflect.defineProperty(proxy, ASYNC_UPDATE, {
         value: globalSchedule,
         writable: true,
     });
@@ -1802,7 +1774,7 @@ function checkReactivityMap(obj, key, val, oldVal) {
     const nodeToChangeMap = keyToNodeMap.get(String(key));
     if (nodeToChangeMap) {
         /* c8 ignore next 5 */
-        if (Reflect.get(obj, "asyncUpdate" /* Placeholder.asyncUpdate */)) {
+        if (Reflect.get(obj, ASYNC_UPDATE)) {
             schedule(updateDOM, nodeToChangeMap, val, oldVal);
         }
         else {
@@ -1816,7 +1788,7 @@ function checkReactivityMap(obj, key, val, oldVal) {
             const nodeToChangeMap = keyToNodeMap.get(subKey);
             if (nodeToChangeMap) {
                 /* c8 ignore next 5 */
-                if (Reflect.get(obj, "asyncUpdate" /* Placeholder.asyncUpdate */)) {
+                if (Reflect.get(obj, ASYNC_UPDATE)) {
                     schedule(updateDOM, nodeToChangeMap, subVal, subOldVal);
                 }
                 else {
@@ -1864,15 +1836,15 @@ function updateDOM(nodeToChangeMap, val, oldVal) {
                     text.substring(0, start) + String(val) + text.substring(end);
             }
             else {
-                if (key === "two-way" /* Placeholder.twoWay */) {
+                if (key === TWO_WAY) {
                     if (node instanceof window.HTMLInputElement &&
-                        node.type === "radio" /* Placeholder.radio */) {
+                        node.type === RADIO_TYPE) {
                         node.checked = Array.isArray(val)
                             ? val.includes(node.name)
                             : String(val) === node.value;
                     }
                     else if (node instanceof window.HTMLInputElement &&
-                        node.type === "checkbox" /* Placeholder.checkbox */) {
+                        node.type === CHECKBOX_TYPE) {
                         node.checked = val;
                     }
                     else if (node instanceof window.HTMLTextAreaElement ||
