@@ -31,7 +31,7 @@ export async function runScenarios(deps) {
     const { gc, heap } = deps;
     const N = deps.N ?? 3000;
     const lib = await import("./library.js");
-    const { html, render, reactive, unset, hydro, setGlobalSchedule } = lib;
+    const { html, render, reactive, unset, hydro, setGlobalSchedule, view, getValue, } = lib;
     setGlobalSchedule(false); // synchronous render / update — deterministic
     const results = [];
     async function scenario(name, control, run) {
@@ -108,7 +108,22 @@ export async function runScenarios(deps) {
         }
     });
     retainedDetachedWithEvents = [];
-    // 5. CONTROL: non-reactive nodes must always be collectable (~0).
+    // 5. view() registers multiple root cleanup callbacks. They must all run on
+    //    unmount, otherwise the reactive view data remains reachable from hydro.
+    await scenario("view unmount releases reactive data", false, (refs) => {
+        for (let i = 0; i < N; i++) {
+            const id = `bench-view-${i}`;
+            let root = html `<ul id=${id}></ul>`;
+            const unmount = render(root);
+            let data = reactive([{ id: i, label: `row-${i}` }]);
+            view(`#${id}`, data, (item, index) => html `<li>${data[index].id}</li>`);
+            refs.push(new WeakRef(getValue(data)));
+            unmount();
+            root = null;
+            data = null;
+        }
+    });
+    // 6. CONTROL: non-reactive nodes must always be collectable (~0).
     await scenario("control: non-reactive", true, (refs) => {
         for (let i = 0; i < N; i++) {
             let e = html `<p>static-${i}</p>`;
@@ -117,7 +132,7 @@ export async function runScenarios(deps) {
             e = null;
         }
     });
-    // 6. CONTROL: reactive + unset already cleans today (~0).
+    // 7. CONTROL: reactive + unset already cleans today (~0).
     await scenario("control: reactive + unset", true, (refs) => {
         for (let i = 0; i < N; i++) {
             const d = reactive({ n: i });

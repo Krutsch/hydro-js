@@ -119,13 +119,15 @@ const reactivityMap = new WeakMap<hydroObject, keyToNodeMap>(); // Maps Proxy Ob
 const bindMap = new WeakMap<hydroObject, Array<Element>>(); // Bind an Element to data. If the data is being unset, the DOM Element disappears too.
 const boundElemProxies = new WeakMap<Element, Set<hydroObject>>(); // Reverse of bindMap: which Proxies an Element is bound to, so it can be removed from bindMap when the Element is purged.
 const tmpSwap = new WeakMap<hydroObject, keyToNodeMap>(); // Take over keyToNodeMap if the new value is a hydro Proxy. Save old reactivityMap entry here, in case for a swap operation.
-const onRenderMap = new WeakMap<ReturnType<typeof html>, Function>(); // Lifecycle Hook that is being called after rendering
-const onCleanupMap = new WeakMap<ReturnType<typeof html>, Function>(); // Lifecycle Hook that is being called when unmount function is being called
+type lifecycleFn = Function | Function[];
+const onRenderMap = new WeakMap<ReturnType<typeof html>, lifecycleFn>(); // Lifecycle Hook that is being called after rendering
+const onCleanupMap = new WeakMap<ReturnType<typeof html>, lifecycleFn>(); // Lifecycle Hook that is being called when unmount function is being called
 const fragmentToElements = new WeakMap<DocumentFragment, Array<ChildNode>>(); // Used to retreive Elements from DocumentFragment after it has been rendered – for diffing
 const hydroToReactive = new WeakMap<hydroObject, reactiveObject<any>>(); // Used for internal mapping from hydroKeys to the the Proxy created by the reactive function
 const _boundFunctions = Symbol("boundFunctions"); // Cache for bound functions in Proxy, so that we create the bound version of each function only once
 const reactiveSymbol = Symbol("reactive");
 const keysSymbol = Symbol("keys");
+const keysSymbolKey = keysSymbol.description!;
 const htmlCache = new WeakMap<TemplateStringsArray, DocumentFragment>();
 // Precompiled marker positions for a cached template, so that applying values on
 // each call is a handful of direct node touches instead of a full-subtree scan.
@@ -134,6 +136,7 @@ const htmlPartsCache = new WeakMap<TemplateStringsArray, HTMLPart[]>();
 // on the static strings, not the per-call variables).
 const htmlTemplateCacheable = new WeakMap<TemplateStringsArray, boolean>();
 const viewElementsEventFunctions = new Map() as eventFunctions;
+const hWiredSymbol = Symbol("hWired");
 const isServerSideCached = isServerSide();
 
 let globalSchedule = true; // Decides whether to schedule rendering and updating (async)
@@ -704,6 +707,83 @@ function fillDOM(
 
   if (shouldSetReactivity) setReactivity(elem, eventFunctions);
 }
+function isReactiveValue(v: unknown): boolean {
+  return (isObject(v) || isFunction(v)) && Reflect.has(v, reactiveSymbol);
+}
+function isHWired(node: Node) {
+  // @ts-ignore
+  return !!node[hWiredSymbol];
+}
+function markHWired(node: DocumentFragment | HTMLElement) {
+  // @ts-ignore
+  node[hWiredSymbol] = true;
+}
+// Direct-wire a whole-value reactive prop (or `bind`) at element-creation time,
+// so the `h`/JSX path never emits a `{{placeholder}}` that setReactivity has to
+// re-parse (regex + resolve + a second setAttribute + a full NodeIterator pass).
+// Only the unambiguous scalar/bind cases are handled; anything exotic (two-way,
+// bool attrs, node/object/function results) returns false and takes the old path.
+function hWireProp(elem: Element, key: string, value: any): boolean {
+  if (key === "bind") {
+    if (!isReactiveValue(value)) return false;
+    const keys = value[keysSymbolKey] as PropertyKey[];
+    const [resolvedValue, resolvedObj] = resolveObject(keys);
+    const proxy =
+      isObject(resolvedValue) && isProxy(resolvedValue)
+        ? resolvedValue
+        : resolvedObj;
+    if (bindMap.has(proxy)) bindMap.get(proxy)!.push(elem);
+    else bindMap.set(proxy, [elem]);
+    if (boundElemProxies.has(elem)) boundElemProxies.get(elem)!.add(proxy);
+    else boundElemProxies.set(elem, new Set([proxy]));
+    return true;
+  }
+  if (!isReactiveValue(value)) return false;
+  if (
+    key === "two-way" /* Placeholder.twoWay */ ||
+    key in elem ||
+    boolAttrSet.has(key)
+  ) {
+    return false;
+  }
+  const keys = value[keysSymbolKey] as PropertyKey[];
+  const [resolvedValue, resolvedObj] = resolveObject(keys);
+  if (
+    isNode(resolvedValue) ||
+    isFunction(resolvedValue) ||
+    isEventObject(resolvedValue) ||
+    isObject(resolvedValue)
+  ) {
+    return false; // exotic result -> let the placeholder path handle it
+  }
+  if (resolvedValue == null) return false;
+  const lastProp = keys[keys.length - 1] as string;
+  const applied = setAttribute(elem, key, resolvedValue ?? "");
+  setTraces(
+    0,
+    applied ? String(resolvedValue ?? "").length : 0,
+    elem,
+    lastProp,
+    resolvedObj,
+    key,
+  );
+  return true;
+}
+// Direct-wire a single reactive text child (the common `{data[i].label}` case).
+function hWireChild(elem: Element | DocumentFragment, child: any): boolean {
+  if (!isReactiveValue(child)) return false;
+  const keys = child[keysSymbolKey] as PropertyKey[];
+  const [resolvedValue, resolvedObj] = resolveObject(keys);
+  if (isNode(resolvedValue)) return false; // reactive node child -> placeholder path
+  const lastProp = keys[keys.length - 1] as string;
+  const textContent = isObject(resolvedValue)
+    ? window.JSON.stringify(resolvedValue)
+    : (resolvedValue ?? "");
+  const textNode = document.createTextNode(String(textContent));
+  elem.appendChild(textNode);
+  setTraces(0, String(textContent).length, textNode, lastProp, resolvedObj);
+  return true;
+}
 /* c8 ignore start */
 type FragmentCase = { children: ReturnType<typeof h>[] };
 function h(
@@ -720,24 +800,49 @@ function h(
           props?.hasOwnProperty("is") ? { is: props["is"] } : undefined,
         )
       : document.createDocumentFragment();
+  const isFrag = isDocumentFragment(elem);
+  let needsScan = false;
   for (const i in props) {
+    const value = props[i];
+    if (!isFrag && hWireProp(elem, i, value)) continue;
+    if (
+      !needsScan &&
+      (i === "bind" ||
+        i === "two-way" /* Placeholder.twoWay */ ||
+        containsReactiveValue(value))
+    ) {
+      needsScan = true;
+    }
     i in elem && !boolAttrSet.has(i)
       ? //@ts-ignore
-        (elem[i] = props[i])
-      : setAttribute(elem as HTMLElement, i, props[i]);
+        (elem[i] = value)
+      : setAttribute(elem as HTMLElement, i, value);
   }
 
-  if (isDocumentFragment(elem)) {
+  if (isFrag) {
     children = (name as FragmentCase).children;
   }
-  elem.append(
-    ...(children.some((i) => Array.isArray(i))
-      ? children.map(getChildren).flat()
-      : children),
-  );
-  if (!viewElements && needsHReactivity(props, children)) {
+  const flatChildren = children.some((i) => Array.isArray(i))
+    ? children.map(getChildren).flat()
+    : children;
+  for (const child of flatChildren) {
+    if (hWireChild(elem, child)) continue;
+    if (!needsScan) {
+      if (isNode(child)) {
+        needsScan = !isHWired(child);
+      } else if (containsReactiveValue(child)) {
+        needsScan = true;
+      }
+    }
+    elem.append(child);
+  }
+  if (needsScan) {
+    if (viewElements) {
+      return elem;
+    }
     setReactivity(elem);
   }
+  markHWired(elem);
   return elem;
 }
 function getChildren(child: unknown) {
@@ -745,31 +850,9 @@ function getChildren(child: unknown) {
     ? Object.values(child)
     : child;
 }
-function needsHReactivity(
-  props: Record<keyof any, any> | null,
-  children: Array<any>,
-) {
-  if (props) {
-    for (const [key, value] of Object.entries(props)) {
-      if (
-        key === "bind" ||
-        key === Placeholder.twoWay ||
-        containsReactiveValue(value)
-      ) {
-        return true;
-      }
-    }
-  }
-
-  return children.some(containsReactiveValue);
-}
 function containsReactiveValue(value: any): boolean {
-  if (
-    (isObject(value) || isFunction(value)) &&
-    Reflect.has(value, reactiveSymbol)
-  ) {
-    return true;
-  }
+  if (isReactiveValue(value)) return true;
+
   if (typeof value === Placeholder.string) {
     return (
       value.includes("{{") ||
@@ -1119,10 +1202,10 @@ function compareEvents(
   const whereFunctions: Function[] = [];
 
   if (isTextNode(elem)) {
-    if (onRenderMap.has(elem)) elemFunctions.push(onRenderMap.get(elem)!);
-    if (onCleanupMap.has(elem)) elemFunctions.push(onCleanupMap.get(elem)!);
-    if (onRenderMap.has(where)) whereFunctions.push(onRenderMap.get(where)!);
-    if (onCleanupMap.has(where)) whereFunctions.push(onCleanupMap.get(where)!);
+    pushLifecycleFunctions(elemFunctions, onRenderMap, elem);
+    pushLifecycleFunctions(elemFunctions, onCleanupMap, elem);
+    pushLifecycleFunctions(whereFunctions, onRenderMap, where);
+    pushLifecycleFunctions(whereFunctions, onCleanupMap, where);
 
     return (
       elemFunctions.length === whereFunctions.length &&
@@ -1141,10 +1224,10 @@ function compareEvents(
     });
   }
 
-  if (onRenderMap.has(elem)) elemFunctions.push(onRenderMap.get(elem)!);
-  if (onCleanupMap.has(elem)) elemFunctions.push(onCleanupMap.get(elem)!);
-  if (onRenderMap.has(where)) whereFunctions.push(onRenderMap.get(where)!);
-  if (onCleanupMap.has(where)) whereFunctions.push(onCleanupMap.get(where)!);
+  pushLifecycleFunctions(elemFunctions, onRenderMap, elem);
+  pushLifecycleFunctions(elemFunctions, onCleanupMap, elem);
+  pushLifecycleFunctions(whereFunctions, onRenderMap, where);
+  pushLifecycleFunctions(whereFunctions, onCleanupMap, where);
 
   if (elemFunctions.length !== whereFunctions.length) return false;
   if (String(elemFunctions) !== String(whereFunctions)) return false;
@@ -1164,6 +1247,18 @@ function compareEvents(
   }
 
   return true;
+}
+
+function pushLifecycleFunctions(
+  functions: Function[],
+  lifecyleMap: typeof onRenderMap | typeof onCleanupMap,
+  node: ReturnType<typeof html>,
+) {
+  const fns = lifecyleMap.get(node);
+  if (!fns) return;
+
+  if (Array.isArray(fns)) functions.push(...fns);
+  else functions.push(fns);
 }
 
 function compare(
@@ -1244,13 +1339,14 @@ function executeLifecycle(
   lifecyleMap: typeof onRenderMap | typeof onCleanupMap,
 ) {
   if (lifecyleMap.has(node)) {
-    const fn = lifecyleMap.get(node)!;
+    const fns = lifecyleMap.get(node)!;
+    const execute = () => {
+      if (Array.isArray(fns)) fns.forEach((fn) => fn());
+      else fns();
+    };
 
-    if (globalSchedule) {
-      schedule(fn);
-    } else {
-      fn();
-    }
+    if (globalSchedule) schedule(execute);
+    else execute();
 
     lifecyleMap.delete(node as Element);
   }
@@ -1782,13 +1878,28 @@ function getValue<T extends object>(reactiveHydro: T): T {
 }
 
 let calledOnRender = false;
+function addLifecycle(
+  lifecyleMap: typeof onRenderMap | typeof onCleanupMap,
+  elem: ReturnType<typeof html>,
+  fn: Function,
+) {
+  const current = lifecyleMap.get(elem);
+  if (!current) {
+    lifecyleMap.set(elem, fn);
+  } else if (Array.isArray(current)) {
+    current.push(fn);
+  } else {
+    lifecyleMap.set(elem, [current, fn]);
+  }
+}
+
 function onRender(
   fn: Function,
   elem: ReturnType<typeof html>,
   ...args: Array<any>
 ) {
   calledOnRender = true;
-  onRenderMap.set(elem, args.length ? fn.bind(fn, ...args) : fn);
+  addLifecycle(onRenderMap, elem, args.length ? fn.bind(fn, ...args) : fn);
 }
 let calledOnCleanup = false;
 function onCleanup(
@@ -1797,7 +1908,7 @@ function onCleanup(
   ...args: Array<any>
 ) {
   calledOnCleanup = true;
-  onCleanupMap.set(elem, args.length ? fn.bind(fn, ...args) : fn);
+  addLifecycle(onCleanupMap, elem, args.length ? fn.bind(fn, ...args) : fn);
 }
 
 // Core of the library
@@ -2244,8 +2355,13 @@ function addViewRows(rootElem: Element, elements: Node[]) {
   for (const elem of elements) fragment.appendChild(elem);
 
   if (!hasFragmentItems) {
-    setReactivity(fragment, viewElementsEventFunctions);
-    viewElementsEventFunctions.clear();
+    if (
+      viewElementsEventFunctions.size !== 0 ||
+      !elements.every((elem) => isHWired(elem))
+    ) {
+      setReactivity(fragment, viewElementsEventFunctions);
+      viewElementsEventFunctions.clear();
+    }
     rootElem.appendChild(fragment);
     for (const elem of elements) runLifecyle(elem as Element, onRenderMap);
   } else {
@@ -2268,7 +2384,6 @@ function view(
   const rootElem = $(root)!;
   const elements = getValue(data).map(renderFunction);
   addViewRows(rootElem, elements);
-  onCleanup(unset, rootElem, data);
 
   viewElements = false;
   const stopViewObserver = observe(
@@ -2319,6 +2434,7 @@ function view(
     },
   )!;
   onCleanup(stopViewObserver, rootElem);
+  onCleanup(unset, rootElem, data);
 }
 
 const hydro = generateProxy();

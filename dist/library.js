@@ -23,6 +23,7 @@ const hydroToReactive = new WeakMap(); // Used for internal mapping from hydroKe
 const _boundFunctions = Symbol("boundFunctions"); // Cache for bound functions in Proxy, so that we create the bound version of each function only once
 const reactiveSymbol = Symbol("reactive");
 const keysSymbol = Symbol("keys");
+const keysSymbolKey = keysSymbol.description;
 const htmlCache = new WeakMap();
 // Precompiled marker positions for a cached template, so that applying values on
 // each call is a handful of direct node touches instead of a full-subtree scan.
@@ -31,6 +32,7 @@ const htmlPartsCache = new WeakMap();
 // on the static strings, not the per-call variables).
 const htmlTemplateCacheable = new WeakMap();
 const viewElementsEventFunctions = new Map();
+const hWiredSymbol = Symbol("hWired");
 const isServerSideCached = isServerSide();
 let globalSchedule = true; // Decides whether to schedule rendering and updating (async)
 let reuseElements = true; // Reuses Elements when rendering
@@ -527,27 +529,129 @@ function fillDOM(elem, insertNodes, eventFunctions) {
     if (shouldSetReactivity)
         setReactivity(elem, eventFunctions);
 }
+function isReactiveValue(v) {
+    return (isObject(v) || isFunction(v)) && Reflect.has(v, reactiveSymbol);
+}
+function isHWired(node) {
+    // @ts-ignore
+    return !!node[hWiredSymbol];
+}
+function markHWired(node) {
+    // @ts-ignore
+    node[hWiredSymbol] = true;
+}
+// Direct-wire a whole-value reactive prop (or `bind`) at element-creation time,
+// so the `h`/JSX path never emits a `{{placeholder}}` that setReactivity has to
+// re-parse (regex + resolve + a second setAttribute + a full NodeIterator pass).
+// Only the unambiguous scalar/bind cases are handled; anything exotic (two-way,
+// bool attrs, node/object/function results) returns false and takes the old path.
+function hWireProp(elem, key, value) {
+    if (key === "bind") {
+        if (!isReactiveValue(value))
+            return false;
+        const keys = value[keysSymbolKey];
+        const [resolvedValue, resolvedObj] = resolveObject(keys);
+        const proxy = isObject(resolvedValue) && isProxy(resolvedValue)
+            ? resolvedValue
+            : resolvedObj;
+        if (bindMap.has(proxy))
+            bindMap.get(proxy).push(elem);
+        else
+            bindMap.set(proxy, [elem]);
+        if (boundElemProxies.has(elem))
+            boundElemProxies.get(elem).add(proxy);
+        else
+            boundElemProxies.set(elem, new Set([proxy]));
+        return true;
+    }
+    if (!isReactiveValue(value))
+        return false;
+    if (key === "two-way" /* Placeholder.twoWay */ ||
+        key in elem ||
+        boolAttrSet.has(key)) {
+        return false;
+    }
+    const keys = value[keysSymbolKey];
+    const [resolvedValue, resolvedObj] = resolveObject(keys);
+    if (isNode(resolvedValue) ||
+        isFunction(resolvedValue) ||
+        isEventObject(resolvedValue) ||
+        isObject(resolvedValue)) {
+        return false; // exotic result -> let the placeholder path handle it
+    }
+    if (resolvedValue == null)
+        return false;
+    const lastProp = keys[keys.length - 1];
+    const applied = setAttribute(elem, key, resolvedValue ?? "");
+    setTraces(0, applied ? String(resolvedValue ?? "").length : 0, elem, lastProp, resolvedObj, key);
+    return true;
+}
+// Direct-wire a single reactive text child (the common `{data[i].label}` case).
+function hWireChild(elem, child) {
+    if (!isReactiveValue(child))
+        return false;
+    const keys = child[keysSymbolKey];
+    const [resolvedValue, resolvedObj] = resolveObject(keys);
+    if (isNode(resolvedValue))
+        return false; // reactive node child -> placeholder path
+    const lastProp = keys[keys.length - 1];
+    const textContent = isObject(resolvedValue)
+        ? window.JSON.stringify(resolvedValue)
+        : (resolvedValue ?? "");
+    const textNode = document.createTextNode(String(textContent));
+    elem.appendChild(textNode);
+    setTraces(0, String(textContent).length, textNode, lastProp, resolvedObj);
+    return true;
+}
 function h(name, props, ...children) {
     if (isFunction(name))
         return name({ ...props, children });
     const elem = typeof name === "string" /* Placeholder.string */
         ? document.createElement(name, props?.hasOwnProperty("is") ? { is: props["is"] } : undefined)
         : document.createDocumentFragment();
+    const isFrag = isDocumentFragment(elem);
+    let needsScan = false;
     for (const i in props) {
+        const value = props[i];
+        if (!isFrag && hWireProp(elem, i, value))
+            continue;
+        if (!needsScan &&
+            (i === "bind" ||
+                i === "two-way" /* Placeholder.twoWay */ ||
+                containsReactiveValue(value))) {
+            needsScan = true;
+        }
         i in elem && !boolAttrSet.has(i)
             ? //@ts-ignore
-                (elem[i] = props[i])
-            : setAttribute(elem, i, props[i]);
+                (elem[i] = value)
+            : setAttribute(elem, i, value);
     }
-    if (isDocumentFragment(elem)) {
+    if (isFrag) {
         children = name.children;
     }
-    elem.append(...(children.some((i) => Array.isArray(i))
+    const flatChildren = children.some((i) => Array.isArray(i))
         ? children.map(getChildren).flat()
-        : children));
-    if (!viewElements && needsHReactivity(props, children)) {
+        : children;
+    for (const child of flatChildren) {
+        if (hWireChild(elem, child))
+            continue;
+        if (!needsScan) {
+            if (isNode(child)) {
+                needsScan = !isHWired(child);
+            }
+            else if (containsReactiveValue(child)) {
+                needsScan = true;
+            }
+        }
+        elem.append(child);
+    }
+    if (needsScan) {
+        if (viewElements) {
+            return elem;
+        }
         setReactivity(elem);
     }
+    markHWired(elem);
     return elem;
 }
 function getChildren(child) {
@@ -555,23 +659,9 @@ function getChildren(child) {
         ? Object.values(child)
         : child;
 }
-function needsHReactivity(props, children) {
-    if (props) {
-        for (const [key, value] of Object.entries(props)) {
-            if (key === "bind" ||
-                key === "two-way" /* Placeholder.twoWay */ ||
-                containsReactiveValue(value)) {
-                return true;
-            }
-        }
-    }
-    return children.some(containsReactiveValue);
-}
 function containsReactiveValue(value) {
-    if ((isObject(value) || isFunction(value)) &&
-        Reflect.has(value, reactiveSymbol)) {
+    if (isReactiveValue(value))
         return true;
-    }
     if (typeof value === "string" /* Placeholder.string */) {
         return (value.includes("{{") ||
             (isServerSideCached && value.includes("hydro-reactive-" /* Placeholder.reactiveKey */)));
@@ -839,14 +929,10 @@ function compareEvents(elem, where, onlyTextChildren) {
     const elemFunctions = [];
     const whereFunctions = [];
     if (isTextNode(elem)) {
-        if (onRenderMap.has(elem))
-            elemFunctions.push(onRenderMap.get(elem));
-        if (onCleanupMap.has(elem))
-            elemFunctions.push(onCleanupMap.get(elem));
-        if (onRenderMap.has(where))
-            whereFunctions.push(onRenderMap.get(where));
-        if (onCleanupMap.has(where))
-            whereFunctions.push(onCleanupMap.get(where));
+        pushLifecycleFunctions(elemFunctions, onRenderMap, elem);
+        pushLifecycleFunctions(elemFunctions, onCleanupMap, elem);
+        pushLifecycleFunctions(whereFunctions, onRenderMap, where);
+        pushLifecycleFunctions(whereFunctions, onCleanupMap, where);
         return (elemFunctions.length === whereFunctions.length &&
             String(elemFunctions) === String(whereFunctions));
     }
@@ -860,14 +946,10 @@ function compareEvents(elem, where, onlyTextChildren) {
             handlers.forEach((handler) => whereFunctions.push(handler));
         });
     }
-    if (onRenderMap.has(elem))
-        elemFunctions.push(onRenderMap.get(elem));
-    if (onCleanupMap.has(elem))
-        elemFunctions.push(onCleanupMap.get(elem));
-    if (onRenderMap.has(where))
-        whereFunctions.push(onRenderMap.get(where));
-    if (onCleanupMap.has(where))
-        whereFunctions.push(onCleanupMap.get(where));
+    pushLifecycleFunctions(elemFunctions, onRenderMap, elem);
+    pushLifecycleFunctions(elemFunctions, onCleanupMap, elem);
+    pushLifecycleFunctions(whereFunctions, onRenderMap, where);
+    pushLifecycleFunctions(whereFunctions, onCleanupMap, where);
     if (elemFunctions.length !== whereFunctions.length)
         return false;
     if (String(elemFunctions) !== String(whereFunctions))
@@ -887,6 +969,15 @@ function compareEvents(elem, where, onlyTextChildren) {
         }
     }
     return true;
+}
+function pushLifecycleFunctions(functions, lifecyleMap, node) {
+    const fns = lifecyleMap.get(node);
+    if (!fns)
+        return;
+    if (Array.isArray(fns))
+        functions.push(...fns);
+    else
+        functions.push(fns);
 }
 function compare(elem, where, onlyTextChildren) {
     if (isDocumentFragment(elem) || isDocumentFragment(where))
@@ -947,13 +1038,17 @@ function render(elem, where = "", shouldSchedule = globalSchedule) {
 function noop() { }
 function executeLifecycle(node, lifecyleMap) {
     if (lifecyleMap.has(node)) {
-        const fn = lifecyleMap.get(node);
-        if (globalSchedule) {
-            schedule(fn);
-        }
-        else {
-            fn();
-        }
+        const fns = lifecyleMap.get(node);
+        const execute = () => {
+            if (Array.isArray(fns))
+                fns.forEach((fn) => fn());
+            else
+                fns();
+        };
+        if (globalSchedule)
+            schedule(execute);
+        else
+            execute();
         lifecyleMap.delete(node);
     }
 }
@@ -1421,14 +1516,26 @@ function getValue(reactiveHydro) {
     return resolvedValue;
 }
 let calledOnRender = false;
+function addLifecycle(lifecyleMap, elem, fn) {
+    const current = lifecyleMap.get(elem);
+    if (!current) {
+        lifecyleMap.set(elem, fn);
+    }
+    else if (Array.isArray(current)) {
+        current.push(fn);
+    }
+    else {
+        lifecyleMap.set(elem, [current, fn]);
+    }
+}
 function onRender(fn, elem, ...args) {
     calledOnRender = true;
-    onRenderMap.set(elem, args.length ? fn.bind(fn, ...args) : fn);
+    addLifecycle(onRenderMap, elem, args.length ? fn.bind(fn, ...args) : fn);
 }
 let calledOnCleanup = false;
 function onCleanup(fn, elem, ...args) {
     calledOnCleanup = true;
-    onCleanupMap.set(elem, args.length ? fn.bind(fn, ...args) : fn);
+    addLifecycle(onCleanupMap, elem, args.length ? fn.bind(fn, ...args) : fn);
 }
 // Core of the library
 // A single shared symbol keys every proxy's observer Map, so the observe/
@@ -1843,8 +1950,11 @@ function addViewRows(rootElem, elements) {
     for (const elem of elements)
         fragment.appendChild(elem);
     if (!hasFragmentItems) {
-        setReactivity(fragment, viewElementsEventFunctions);
-        viewElementsEventFunctions.clear();
+        if (viewElementsEventFunctions.size !== 0 ||
+            !elements.every((elem) => isHWired(elem))) {
+            setReactivity(fragment, viewElementsEventFunctions);
+            viewElementsEventFunctions.clear();
+        }
         rootElem.appendChild(fragment);
         for (const elem of elements)
             runLifecyle(elem, onRenderMap);
@@ -1866,7 +1976,6 @@ function view(root, data, renderFunction) {
     const rootElem = $(root);
     const elements = getValue(data).map(renderFunction);
     addViewRows(rootElem, elements);
-    onCleanup(unset, rootElem, data);
     viewElements = false;
     const stopViewObserver = observe(data, (newData, oldData) => {
         /* c8 ignore start */
@@ -1904,6 +2013,7 @@ function view(root, data, renderFunction) {
         /* c8 ignore end */
     });
     onCleanup(stopViewObserver, rootElem);
+    onCleanup(unset, rootElem, data);
 }
 const hydro = generateProxy();
 const $ = document.querySelector.bind(document);

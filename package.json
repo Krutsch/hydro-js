@@ -53,7 +53,6 @@
   "license": "MIT",
   "devDependencies": {
     "@esm-bundle/chai": "^4.3.4",
-    "@types/concurrently": "^7.0.3",
     "@types/jsdom": "^28.0.1",
     "@web/test-runner": "^0.20.2",
     "@web/test-runner-playwright": "^0.11.1",
@@ -68,5 +67,8 @@
     "type": "git",
     "url": "git+https://github.com/Krutsch/hydro-js.git"
   },
-  "bugs": "https://github.com/Krutsch/hydro-js/issues"
+  "bugs": "https://github.com/Krutsch/hydro-js/issues",
+  "allowScripts": {
+    "esbuild@0.28.1": true
+  }
 }
