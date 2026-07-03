@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.9.0 2026-07-01
+## 1.9.0 2026-07-03
 
 - refactor: better performance and memory
 
