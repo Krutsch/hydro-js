@@ -129,6 +129,40 @@ const onRenderMap = new WeakMap<ReturnType<typeof html>, lifecycleFn>(); // Life
 const onCleanupMap = new WeakMap<ReturnType<typeof html>, lifecycleFn>(); // Lifecycle Hook that is being called when unmount function is being called
 const fragmentToElements = new WeakMap<DocumentFragment, Array<ChildNode>>(); // Used to retreive Elements from DocumentFragment after it has been rendered – for diffing
 const hydroToReactive = new WeakMap<hydroObject, reactiveObject<any>>(); // Used for internal mapping from hydroKeys to the the Proxy created by the reactive function
+// ternary() subscribes an observer onto its (often long-lived/shared) condition
+// Proxy and only returns the derived value, not the observe() stop-fn. Without
+// this, unset(ternaryValue) has no way to ever remove that subscription, so it
+// (and everything its closure captures, e.g. a row Proxy) is retained for the
+// lifetime of the condition - typically the whole app. Keyed by the derived
+// ternaryValue so unset() can look its disposer up and tear it down.
+// `poolKey` (when set) additionally tells unset() this slot came from
+// ternarySlotPool and should be released back to the pool instead of going
+// through the generic delete-the-hydro-property path - see ternarySlotPool.
+// `done` guards against unset() running twice for the same ternaryValue: it
+// can legitimately be invoked from two different places for the same row -
+// once directly, if the shared condition itself becomes null (ternary()'s
+// own observer callback), and once via a (possibly deferred, see
+// resetViewRows) onCleanup(unset, tr, className) dispatch. Once torn down,
+// later calls must no-op rather than fall through to the generic path, which
+// would delete a pooled slot's property and undo the whole point of pooling.
+const ternaryDisposers = new WeakMap<
+  reactiveObject<any>,
+  { stop: () => void; poolKey?: string; done?: boolean }
+>();
+// ternary() runs once per list row, and its derived value is thrown away
+// almost as often (unset() fires on every row teardown). reactive()'s normal
+// path mints an ever-incrementing, never-reused key and unset() deletes it -
+// `delete` on a fast-mode (hidden-class-backed) object is a well-known V8
+// trigger for permanently downgrading that object to dictionary-mode (slow,
+// hash-map-backed) properties, and objects generally never transition back.
+// hydro is one single object for the whole app lifetime, so the very FIRST
+// ternary-driven delete anywhere can permanently slow down every future
+// property get/set on hydro - i.e. every reactive access in the whole app,
+// not just clears. Reuse a small bounded pool of slot names instead: once a
+// name has been used, the property stays declared forever and is only ever
+// value-overwritten (no shape churn, no delete).
+const ternarySlotPool: string[] = [];
+let ternarySlotCounter = 0;
 const _boundFunctions = Symbol("boundFunctions"); // Cache for bound functions in Proxy, so that we create the bound version of each function only once
 const reactiveSymbol = Symbol("reactive");
 const keysSymbol = Symbol("keys");
@@ -318,6 +352,13 @@ function removeTrackedEventListener(
   }
 }
 
+// Native removeEventListener calls are kept here deliberately (tempting as it
+// is to drop them for GC purposes alone): unmount()/removeElement() must
+// guarantee a removed node stops responding to events even if something
+// external still holds a strong reference to it and calls dispatchEvent()
+// directly - dispatchEvent doesn't care whether the target is connected or
+// reachable via GC roots elsewhere. See test.html "cleans up all event
+// listeners on unmount, not just the first".
 function purgeTrackedEventListeners(node: Element) {
   const map = elemEventFunctions.get(node);
   if (!map) return;
@@ -1611,18 +1652,37 @@ async function schedule(fn: Function, ...args: any): Promise<void> {
   }
 }
 
-function reactive<T>(initial: T): reactiveObject<T> {
-  let key: string;
-
-  // Monotonic counter instead of randomText() in a collision loop: reactive() is
-  // hot (one per row via ternary in list rendering). Keep the key all-lowercase –
-  // reactive keys can land in attribute *names* (`<p ${obj}>` -> `{{key}}`) which
-  // the HTML parser lowercases, so an uppercase char would break resolution. The
-  // guard still advances on the rare collision with a user-set hydro property.
-  do key = `hydror${reactiveKeyCounter++}`;
-  while (Reflect.has(hydro, key));
-
-  Reflect.set(hydro, key, initial);
+// Shared tail of reactive()'s slot creation: given an already-chosen unique
+// key, install `initial` on hydro and wrap it in a chainKeys proxy. Split out
+// so ternary()'s pooled slots (see ternarySlotPool below) can reuse the exact
+// same setter/hydroToReactive logic while only differing in how the key is
+// chosen and whether the property is enumerable.
+function installReactiveSlot<T>(
+  key: string,
+  initial: T,
+  enumerable: boolean,
+): reactiveObject<T> {
+  if (enumerable) {
+    // reactive()'s original behavior, unchanged: always go through the set
+    // trap so object/array initial values get recursively wrapped into
+    // reactive proxies.
+    Reflect.set(hydro, key, initial);
+  } else if (Reflect.has(hydro, key)) {
+    // ternary()'s pooled slot, reused - value-only overwrite, no shape churn.
+    Reflect.set(hydro, key, initial);
+  } else {
+    // ternary()'s pooled slot, minted for the first time - bypasses the set
+    // trap. Only reached for primitive initial values (see ternary()), so
+    // there is nothing that needs recursive proxy-wrapping here; this also
+    // makes the slot non-enumerable, so it stays as invisible to
+    // JSON.stringify(hydro)/Object.keys(hydro)/for-in as an absent property.
+    Reflect.defineProperty(hydro, key, {
+      value: initial,
+      writable: true,
+      enumerable: false,
+      configurable: true,
+    });
+  }
   Reflect.set(setter, reactiveSymbol, true);
 
   const chainKeysProxy = chainKeys(setter, [key]);
@@ -1650,6 +1710,19 @@ function reactive<T>(initial: T): reactiveObject<T> {
     }
   }
 }
+function reactive<T>(initial: T): reactiveObject<T> {
+  let key: string;
+
+  // Monotonic counter instead of randomText() in a collision loop: reactive() is
+  // hot (one per row via ternary in list rendering). Keep the key all-lowercase –
+  // reactive keys can land in attribute *names* (`<p ${obj}>` -> `{{key}}`) which
+  // the HTML parser lowercases, so an uppercase char would break resolution. The
+  // guard still advances on the rare collision with a user-set hydro property.
+  do key = `hydror${reactiveKeyCounter++}`;
+  while (Reflect.has(hydro, key));
+
+  return installReactiveSlot(key, initial, true);
+}
 function chainKeys(initial: Function | any, keys: Array<PropertyKey>): any {
   return new Proxy(initial, {
     get(target, subKey, _receiver) {
@@ -1676,6 +1749,23 @@ function getReactiveKeys(reactiveHydro: reactiveObject<any>) {
   return [lastProp, keys.length === 1];
 }
 function unset(reactiveHydro: reactiveObject<any>): void {
+  const ternaryTeardown = ternaryDisposers.get(reactiveHydro);
+  if (ternaryTeardown) {
+    if (ternaryTeardown.done) return; // already fully torn down, see comment above
+    ternaryTeardown.stop();
+    ternaryTeardown.done = true;
+    if (ternaryTeardown.poolKey !== undefined) {
+      // Pooled slot: the reactivityMap/bindMap entries tied to whatever node
+      // this was bound to are already handled by purgeReactivity (called on
+      // that node directly by resetViewRows/purgeSubtree), and this slot was
+      // never enumerable/object-valued, so there is nothing else to release -
+      // just return the name for reuse. Skips the delete-the-hydro-property
+      // path entirely (see ternarySlotPool for why that matters).
+      ternarySlotPool.push(ternaryTeardown.poolKey);
+      return;
+    }
+  }
+
   const [lastProp, oneKey] = getReactiveKeys(reactiveHydro);
 
   if (oneKey) {
@@ -1754,13 +1844,34 @@ function ternary(
         ? falseVal()
         : falseVal;
 
-  const ternaryValue = reactive(checkCondition(getValue(reactiveHydro)));
+  const initial = checkCondition(getValue(reactiveHydro));
 
-  observe(reactiveHydro, (newVal: any) => {
+  // Primitive results (the realistic case - a className string etc.) use the
+  // bounded, never-deleted slot pool (see ternarySlotPool). Object-valued
+  // results fall back to plain reactive(): installReactiveSlot's pooled path
+  // installs via defineProperty (bypassing the set trap, so it wouldn't get
+  // recursively proxied the way reactive()'s normal Reflect.set path does),
+  // and object results are rare/unrealistic for ternary() anyway.
+  const usePool = primitiveTypes.has(typeof initial);
+  const poolKey = usePool
+    ? (ternarySlotPool.pop() ?? `hydrot${ternarySlotCounter++}`)
+    : undefined;
+  const ternaryValue = usePool
+    ? installReactiveSlot(poolKey!, initial, false)
+    : reactive(initial);
+
+  // Store the disposer so unset(ternaryValue) (the documented per-instance
+  // cleanup call, e.g. onCleanup(unset, tr, className)) can also stop this
+  // subscription on the (possibly shared/long-lived) condition - see
+  // ternaryDisposers above.
+  const stopObserving = observe(reactiveHydro, (newVal: any) => {
     newVal === null
       ? unset(ternaryValue)
       : ternaryValue(checkCondition(newVal));
   });
+  if (stopObserving) {
+    ternaryDisposers.set(ternaryValue, { stop: stopObserving, poolKey });
+  }
 
   return ternaryValue;
 }
@@ -2302,6 +2413,95 @@ function updateDOM(nodeToChangeMap: nodeToChangeMap, val: any, oldVal: any) {
 // re-scanning of already-mounted rows – then the fragment is attached. This is
 // what keeps "append rows to large table" cheap: the previous per-row
 // setReactivity spun up one NodeIterator per row (very costly in Chrome).
+// view()'s "Reset or re-use" / same-length-replace paths wipe rootElem via
+// textContent = "" instead of going through render()/removeElement() (that's
+// what keeps them cheap - no per-row diffing). But that means the rows being
+// discarded never get runLifecyle(onCleanupMap) (e.g. onCleanup(unset, tr, ...))
+// nor purgeSubtree (allNodeChanges/reactivityMap/bindMap/elemEventFunctions),
+// so anything a row's cleanup would have torn down - notably a ternary()
+// subscription on a shared condition, which pins the row's Proxy (and hence
+// its bound Element, via bindMap) forever - leaks for the lifetime of the app.
+//
+// The visual clear stays exactly as cheap as plain textContent = "" always
+// was - snapshotting the (soon-to-be-former) children into a plain array is
+// just reading a live NodeList once, then the same single native
+// textContent = "" wipe as before. The actual cleanup walk (onCleanup +
+// purgeReactivity per row) is real, unavoidable work, but nothing downstream
+// needs it to have already happened by the time this function returns - the
+// rows are already detached and invisible either way - so it's queued and
+// only actually walked via schedule() instead of running inline on the
+// synchronous "clear" path. updateDOM's existing isConnected check already
+// makes a stale, not-yet-purged binding harmless if something reacts in the
+// meantime; unset()'s `done` guard (see ternaryDisposers) makes a ternary
+// row's teardown safe to run twice (once here, once if its shared condition
+// happens to go through a null transition first, e.g. selected(null) in the
+// js-framework-benchmark app) without double-releasing a pooled slot.
+//
+// schedule() only ever actually runs once the host yields (idle callback /
+// postTask) - callers that never yield between operations (e.g. a tight
+// synchronous loop with no `await`, like a microbenchmark harness driving
+// hundreds of trials back to back) would otherwise let the queue grow
+// without bound until something finally yields, if ever. pendingCleanupRows
+// / PENDING_CLEANUP_LIMIT is a hard backstop: past that many queued rows,
+// flush synchronously right now instead of waiting for an idle moment,
+// bounding worst-case backlog to one flush's worth regardless of whether the
+// host ever yields.
+const pendingCleanupRows: ChildNode[][] = [];
+let pendingCleanupCount = 0;
+let cleanupFlushScheduled = false;
+const PENDING_CLEANUP_LIMIT = 2000;
+
+function resetViewRows(rootElem: Element) {
+  const rows = Array.from(rootElem.childNodes);
+  rootElem.textContent = "";
+  if (!rows.length) return;
+
+  pendingCleanupRows.push(rows);
+  pendingCleanupCount += rows.length;
+
+  if (pendingCleanupCount >= PENDING_CLEANUP_LIMIT) {
+    flushCleanupQueue();
+  } else if (!cleanupFlushScheduled) {
+    cleanupFlushScheduled = true;
+    schedule(flushCleanupQueue);
+  }
+}
+function flushCleanupQueue() {
+  cleanupFlushScheduled = false;
+  const batches = pendingCleanupRows.splice(0, pendingCleanupRows.length);
+  pendingCleanupCount = 0;
+  for (const rows of batches) cleanupDetachedRows(rows);
+}
+function cleanupDetachedRows(rows: ChildNode[]) {
+  const hasCleanup = calledOnCleanup;
+  for (const row of rows) {
+    if (isTextNode(row)) {
+      if (hasCleanup) executeLifecycle(row, onCleanupMap);
+      purgeReactivity(row);
+      continue;
+    }
+
+    // document.createNodeIterator yields its own root first (same assumption
+    // setReactivity/runLifecyle already make), so `row` itself is covered.
+    const elements = document.createNodeIterator(
+      row,
+      window.NodeFilter.SHOW_ELEMENT,
+    );
+    let elem;
+    while ((elem = elements.nextNode())) {
+      if (hasCleanup) executeLifecycle(elem as Element, onCleanupMap);
+      purgeReactivity(elem as Element);
+      let child = (elem as Element).firstChild;
+      while (child) {
+        if (isTextNode(child)) {
+          if (hasCleanup) executeLifecycle(child, onCleanupMap);
+          purgeReactivity(child);
+        }
+        child = child.nextSibling;
+      }
+    }
+  }
+}
 function addViewRows(rootElem: Element, elements: Node[]) {
   const hasFragmentItems = elements.some(isDocumentFragment);
   const fragment = document.createDocumentFragment();
@@ -2350,7 +2550,7 @@ function view(
         !newData?.length ||
         (!reuseElements && newData?.length === oldData?.length)
       ) {
-        rootElem.textContent = "";
+        resetViewRows(rootElem);
       } else if (reuseElements) {
         for (let i = 0; i < oldData?.length && newData?.length; i++) {
           oldData[i].id = newData[i].id;
@@ -2376,7 +2576,7 @@ function view(
       // Add new
       else if (oldData?.length === 0 || (!reuseElements && newData?.length)) {
         if (!reuseElements && oldData?.length && rootElem.hasChildNodes()) {
-          rootElem.textContent = "";
+          resetViewRows(rootElem);
         }
 
         const elements = newData.map(renderFunction);

@@ -31,7 +31,7 @@ export async function runScenarios(deps) {
     const { gc, heap } = deps;
     const N = deps.N ?? 3000;
     const lib = await import("./library.js");
-    const { html, render, reactive, unset, hydro, setGlobalSchedule, view, getValue, } = lib;
+    const { html, render, reactive, unset, hydro, setGlobalSchedule, view, getValue, onCleanup, ternary, setReuseElements, } = lib;
     setGlobalSchedule(false); // synchronous render / update — deterministic
     const results = [];
     async function scenario(name, control, run) {
@@ -122,6 +122,88 @@ export async function runScenarios(deps) {
             root = null;
             data = null;
         }
+    });
+    // 5b. Real-world list pattern: view() + ternary(shared condition) + bind,
+    // with the exact run()/clear() sequence used by the js-framework-benchmark
+    // keyed app (selected(null) around each data swap). This passes even
+    // without the view()/ternary() fixes below, because nulling the shared
+    // condition happens to force-clear its whole observer Set as a side effect
+    // - kept as a faithful reproduction of the actual benchmark app for context/
+    // regression coverage of that exact sequence, not as the primary guard
+    // (see 5c for that).
+    await scenario("view + ternary(shared) + bind: repeated create/clear (real app pattern)", false, async (refs) => {
+        setReuseElements(false); // matches js-framework-benchmark keyed app
+        const rootId = "bench-view-realworld";
+        const root = html `<ul id=${rootId}></ul>`;
+        render(root);
+        const selected = reactive(-1);
+        const data = reactive([]);
+        view(`#${rootId}`, data, (item, i) => {
+            const className = ternary((val) => val === item.id, "danger", "", selected);
+            const li = html `<li class=${className} bind=${data[i]}
+          >${data[i].id}</li
+        >`;
+            onCleanup(unset, li, className);
+            refs.push(new WeakRef(li));
+            return li;
+        });
+        const cycles = Math.max(3, Math.floor(N / 100));
+        const rowsPerCycle = 25;
+        let nextId = 0;
+        for (let c = 0; c < cycles; c++) {
+            selected(null);
+            const rows = new Array(rowsPerCycle);
+            for (let i = 0; i < rowsPerCycle; i++)
+                rows[i] = { id: nextId++ };
+            data(rows);
+            data([]);
+            selected(null);
+        }
+        root.remove();
+        setReuseElements(true);
+    });
+    // 5c. Same as 5b but WITHOUT ever nulling the shared condition (`selected`).
+    // A "currently selected id" that legitimately persists across data reloads
+    // (never nulled) is at least as realistic as 5b's pattern, and is the actual
+    // regression guard: reverting either fix below fails it.
+    //   - Without view()'s resetViewRows (the textContent="" reset skipping
+    //     runLifecyle/purgeSubtree): rows' onCleanup(unset, li, className)
+    //     never runs at all, so nothing here is exercised - the <li> Elements
+    //     leak (the expensive part: DOM nodes, Text children, listeners).
+    //   - With resetViewRows but without ternary()'s disposer wiring: unset()
+    //     now runs, and purgeSubtree's explicit bindMap/reactivityMap deletes
+    //     free the <li> Elements regardless - but the observe(selected, ...)
+    //     subscription itself is still never stopped, so the row Proxy (and the
+    //     closure capturing it) leaks forever, smaller but unbounded.
+    //   - Both together: neither leaks.
+    await scenario("view + ternary(shared, never-nulled) + bind: repeated create/clear", false, async (refs) => {
+        setReuseElements(false);
+        const rootId = "bench-view-realworld-nonull";
+        const root = html `<ul id=${rootId}></ul>`;
+        render(root);
+        const selected = reactive(-1); // never nulled below, unlike scenario 5b
+        const data = reactive([]);
+        view(`#${rootId}`, data, (item, i) => {
+            const className = ternary((val) => val === item.id, "danger", "", selected);
+            const li = html `<li class=${className} bind=${data[i]}
+          >${data[i].id}</li
+        >`;
+            onCleanup(unset, li, className);
+            refs.push(new WeakRef(li));
+            return li;
+        });
+        const cycles = Math.max(3, Math.floor(N / 100));
+        const rowsPerCycle = 25;
+        let nextId = 0;
+        for (let c = 0; c < cycles; c++) {
+            const rows = new Array(rowsPerCycle);
+            for (let i = 0; i < rowsPerCycle; i++)
+                rows[i] = { id: nextId++ };
+            data(rows);
+            data([]);
+        }
+        root.remove();
+        setReuseElements(true);
     });
     // 6. CONTROL: non-reactive nodes must always be collectable (~0).
     await scenario("control: non-reactive", true, (refs) => {

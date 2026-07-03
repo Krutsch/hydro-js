@@ -235,6 +235,26 @@ const operations: Operation[] = [
   },
 ];
 
+// Real usage always has a discrete gap between operations (paint/idle between
+// clicks) in which the library's own deferred/scheduled work (e.g. view()'s
+// resetViewRows cleanup) gets a chance to run. setTimeout(0) and
+// scheduler.postTask are different task queues with no guaranteed relative
+// order, so a plain setTimeout yield isn't reliably "after" a previously
+// posted scheduler task. Yield via the exact same mechanism/priority the
+// library's own schedule() uses instead - same-priority scheduler.postTask
+// tasks run FIFO, so this reliably waits for a prior one to have already run.
+function yieldToScheduler(): Promise<void> {
+  return new Promise((resolve) => {
+    if ("scheduler" in window) {
+      // @ts-ignore
+      window.scheduler.postTask(() => resolve(), { priority: "user-blocking" });
+    } else {
+      // @ts-ignore
+      window.requestIdleCallback(() => resolve());
+    }
+  });
+}
+
 let hostId = 0;
 
 export async function runPerfScenarios(
@@ -273,6 +293,13 @@ export async function runPerfScenarios(
         ok = operation.verify(app, data) && ok;
         app.dispose();
         cleanup();
+        // Real usage always has a discrete gap between operations (paint/idle
+        // between clicks) in which the library's own deferred/scheduled work
+        // (e.g. view()'s resetViewRows cleanup) gets a chance to run. Yield
+        // once per trial so this harness reflects that instead of measuring a
+        // tight, never-yielding loop that pathologically starves scheduled
+        // cleanup and trips its own safety-valve mid-benchmark.
+        await yieldToScheduler();
 
         if (i >= config.warmups) samples.push(elapsed);
       }
