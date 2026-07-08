@@ -222,6 +222,33 @@ function removeTrackedEventListener(node, eventName, handler) {
         elemEventFunctions.delete(node);
     }
 }
+function trackBoundElement(proxy, elem) {
+    if (bindMap.has(proxy))
+        bindMap.get(proxy).push(elem);
+    else
+        bindMap.set(proxy, [elem]);
+    const current = boundElemProxies.get(elem);
+    if (!current) {
+        boundElemProxies.set(elem, proxy);
+    }
+    else if (Array.isArray(current)) {
+        if (!current.includes(proxy))
+            current.push(proxy);
+    }
+    else if (current !== proxy) {
+        boundElemProxies.set(elem, [current, proxy]);
+    }
+}
+function untrackBoundElement(proxy, elem) {
+    const arr = bindMap.get(proxy);
+    if (!arr)
+        return;
+    const idx = arr.indexOf(elem);
+    if (idx !== -1)
+        arr.splice(idx, 1);
+    if (arr.length === 0)
+        bindMap.delete(proxy);
+}
 // Native removeEventListener calls are kept here deliberately (tempting as it
 // is to drop them for GC purposes alone): unmount()/removeElement() must
 // guarantee a removed node stops responding to events even if something
@@ -356,10 +383,13 @@ function createCachedHTML(htmlArray, variables) {
     // the cost of String(fn).
     const values = new Array(variables.length);
     applyCompiledParts(DOM, parts, variables, values);
-    if (DOM.childNodes.length > 1)
+    if (DOM.childNodes.length > 1) {
+        markHWired(DOM);
         return DOM;
+    }
     if (!DOM.firstChild)
         return document.createTextNode("");
+    markHWired(DOM.firstChild);
     return DOM.firstChild;
 }
 function markerValue(index, variables, values) {
@@ -595,14 +625,7 @@ function hWireProp(elem, key, value) {
         const proxy = isObject(resolvedValue) && isProxy(resolvedValue)
             ? resolvedValue
             : resolvedObj;
-        if (bindMap.has(proxy))
-            bindMap.get(proxy).push(elem);
-        else
-            bindMap.set(proxy, [elem]);
-        if (boundElemProxies.has(elem))
-            boundElemProxies.get(elem).add(proxy);
-        else
-            boundElemProxies.set(elem, new Set([proxy]));
+        trackBoundElement(proxy, elem);
         return true;
     }
     if (!isReactiveValue(value))
@@ -802,18 +825,7 @@ function setReactivitySingle(node, key, val) {
                 const proxy = isObject(resolvedValue) && isProxy(resolvedValue)
                     ? resolvedValue
                     : resolvedObj;
-                if (bindMap.has(proxy)) {
-                    bindMap.get(proxy).push(node);
-                }
-                else {
-                    bindMap.set(proxy, [node]);
-                }
-                if (boundElemProxies.has(node)) {
-                    boundElemProxies.get(node).add(proxy);
-                }
-                else {
-                    boundElemProxies.set(node, new Set([proxy]));
-                }
+                trackBoundElement(proxy, node);
                 continue;
             }
             else if (key === TWO_WAY) {
@@ -1257,15 +1269,12 @@ function purgeReactivity(node) {
     // Drop bind references (bindMap holds Elements strongly).
     const proxies = boundElemProxies.get(node);
     if (proxies) {
-        for (const proxy of proxies) {
-            const arr = bindMap.get(proxy);
-            if (arr) {
-                const idx = arr.indexOf(node);
-                if (idx !== -1)
-                    arr.splice(idx, 1);
-                if (arr.length === 0)
-                    bindMap.delete(proxy);
-            }
+        if (Array.isArray(proxies)) {
+            for (const proxy of proxies)
+                untrackBoundElement(proxy, node);
+        }
+        else {
+            untrackBoundElement(proxies, node);
         }
         boundElemProxies.delete(node);
     }
@@ -2083,30 +2092,23 @@ function flushCleanupQueue() {
 function cleanupDetachedRows(rows) {
     const hasCleanup = calledOnCleanup;
     for (const row of rows) {
-        if (isTextNode(row)) {
-            if (hasCleanup)
-                executeLifecycle(row, onCleanupMap);
-            purgeReactivity(row);
-            continue;
-        }
-        // document.createNodeIterator yields its own root first (same assumption
-        // setReactivity/runLifecyle already make), so `row` itself is covered.
-        const elements = document.createNodeIterator(row, window.NodeFilter.SHOW_ELEMENT);
-        let elem;
-        while ((elem = elements.nextNode())) {
-            if (hasCleanup)
-                executeLifecycle(elem, onCleanupMap);
-            purgeReactivity(elem);
-            let child = elem.firstChild;
-            while (child) {
-                if (isTextNode(child)) {
-                    if (hasCleanup)
-                        executeLifecycle(child, onCleanupMap);
-                    purgeReactivity(child);
-                }
-                child = child.nextSibling;
-            }
-        }
+        cleanupDetachedNode(row, hasCleanup);
+    }
+}
+function cleanupDetachedNode(node, hasCleanup) {
+    if (isTextNode(node)) {
+        if (hasCleanup)
+            executeLifecycle(node, onCleanupMap);
+        purgeReactivity(node);
+        return;
+    }
+    if (hasCleanup)
+        executeLifecycle(node, onCleanupMap);
+    purgeReactivity(node);
+    let child = node.firstChild;
+    while (child) {
+        cleanupDetachedNode(child, hasCleanup);
+        child = child.nextSibling;
     }
 }
 function addViewRows(rootElem, elements) {
