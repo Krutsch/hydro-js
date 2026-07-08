@@ -37,6 +37,9 @@
     "bench:perf:baseline": "tsc && node --expose-gc dist/benchmark.perf.node.js --write-baseline perf-baseline.json",
     "bench:perf:check": "tsc && node --expose-gc dist/benchmark.perf.node.js --baseline perf-baseline.json --max-regression-percent 15",
     "bench:perf:browser": "tsc && wtr --config web-test-runner.perf.config.mjs",
+    "bench:perf:browser:node": "tsc && node dist/benchmark.perf.browser.node.js",
+    "bench:perf:browser:baseline": "tsc && node dist/benchmark.perf.browser.node.js --write-baseline perf-baseline.browser.json",
+    "bench:perf:browser:check": "tsc && node dist/benchmark.perf.browser.node.js --baseline perf-baseline.browser.json",
     "bench:size": "tsc && node dist/benchmark.size.node.js",
     "update": "npx npm-check-updates -u && npx typesync && npm i && npm outdated"
   },
@@ -60,6 +63,7 @@
     "esbuild": "^0.28.1",
     "happy-dom": "^20.10.6",
     "jsdom": "^29.1.1",
+    "playwright-core": "^1.61.0",
     "serve": "^14.2.6",
     "typescript": "^6.0.3"
   },

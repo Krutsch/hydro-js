@@ -1,0 +1,42 @@
+<!doctype html>
+<!--
+  Minimal page for `benchmark.perf.browser.node.ts` to drive via CDP (no
+  @web/test-runner/mocha dependency, unlike benchmark.perf.html). Reads
+  rows/manyRows/repeats/warmups from the query string so the Node driver can
+  control config the same way the happy-dom harness uses PERF_* env vars, then
+  prints the full report as one JSON line for the driver to capture.
+
+  Deliberately does NOT force a GC before each sample here (unlike the
+  happy-dom node harness, which calls `cleanup: () => gc()` to avoid OOMs) -
+  this harness exists to measure real, GC-pause-inclusive timing in an actual
+  browser, since forcing gc() beforehand hides the exact cost this benchmark
+  is meant to catch regressions in.
+-->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <script type="module">
+      import { runPerfScenarios } from "../dist/benchmark.perf.js";
+
+      const params = new URLSearchParams(location.search);
+      const num = (name, fallback) =>
+        params.has(name) ? Number(params.get(name)) : fallback;
+
+      (async () => {
+        const report = await runPerfScenarios({
+          rows: num("rows", 200),
+          manyRows: num("manyRows", 1000),
+          repeats: num("repeats", 10),
+          warmups: num("warmups", 3),
+          now: () => performance.now(),
+        });
+        console.log("PERF_REPORT_JSON:" + JSON.stringify(report));
+        window.__perfDone = true;
+      })().catch((err) => {
+        console.error("PERF_REPORT_ERROR:" + (err?.stack || String(err)));
+        window.__perfDone = true;
+      });
+    </script>
+  </head>
+  <body></body>
+</html>
