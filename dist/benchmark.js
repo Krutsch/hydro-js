@@ -140,9 +140,9 @@ export async function runScenarios(deps) {
         const data = reactive([]);
         view(`#${rootId}`, data, (item, i) => {
             const className = ternary((val) => val === item.id, "danger", "", selected);
-            const li = html `<li class=${className} bind=${data[i]}
-          >${data[i].id}</li
-        >`;
+            const li = html `<li class=${className} bind=${data[i]}>
+          ${data[i].id}
+        </li>`;
             onCleanup(unset, li, className);
             refs.push(new WeakRef(li));
             return li;
@@ -185,9 +185,9 @@ export async function runScenarios(deps) {
         const data = reactive([]);
         view(`#${rootId}`, data, (item, i) => {
             const className = ternary((val) => val === item.id, "danger", "", selected);
-            const li = html `<li class=${className} bind=${data[i]}
-          >${data[i].id}</li
-        >`;
+            const li = html `<li class=${className} bind=${data[i]}>
+          ${data[i].id}
+        </li>`;
             onCleanup(unset, li, className);
             refs.push(new WeakRef(li));
             return li;

@@ -1412,20 +1412,20 @@ describe("library", () => {
             <div
               id="reactiveObj1"
               onclick=${() =>
-                  obj1((current: typeof obj1) => {
-                    current.a.b = 777;
+                obj1((current: typeof obj1) => {
+                  current.a.b = 777;
 
-                    return current;
-                  })}
+                  return current;
+                })}
             >
               ${obj1.a.b}
             </div>
             <div
               id="reactiveObj2"
               onclick=${() =>
-                  obj2((current: typeof obj2) => {
-                    current.a.b = 777;
-                  })}
+                obj2((current: typeof obj2) => {
+                  current.a.b = 777;
+                })}
             >
               ${obj2.a.b}
             </div>
@@ -1454,40 +1454,40 @@ describe("library", () => {
           <div
             id="reactiveArr1"
             onclick=${() =>
-                arr1((current: any) => {
-                  current[0] += 1;
+              arr1((current: any) => {
+                current[0] += 1;
 
-                  return current;
-                })}
+                return current;
+              })}
           >
             ${arr1[0]}
           </div>
           <div
             id="reactiveArr2"
             onclick=${() =>
-                arr1((current: any) => {
-                  current[1][0] += 1;
+              arr1((current: any) => {
+                current[1][0] += 1;
 
-                  return current;
-                })}
+                return current;
+              })}
           >
             ${arr1[1][0]}
           </div>
           <div
             id="reactiveArr3"
             onclick=${() =>
-                arr2((current: any) => {
-                  current[0] += 1;
-                })}
+              arr2((current: any) => {
+                current[0] += 1;
+              })}
           >
             ${arr2[0]}
           </div>
           <div
             id="reactiveArr4"
             onclick=${() =>
-                arr2((current: any) => {
-                  current[1][0] += 1;
-                })}
+              arr2((current: any) => {
+                current[1][0] += 1;
+              })}
           >
             ${arr2[1][0]}
           </div>
@@ -1866,10 +1866,10 @@ describe("library", () => {
         unmount = render(html`
           <button id="reRenderF" onclick=${handleClick}>
             ${ternary(
-                isToggleOn,
-                () => "ON",
-                () => "OFF",
-              )}
+              isToggleOn,
+              () => "ON",
+              () => "OFF",
+            )}
           </button>
         `);
 
@@ -2135,10 +2135,10 @@ describe("library", () => {
         const unmount = render(
           html`<p id="async">
             ${ternary(
-            promise,
-            () => html`<h2>${promise}</h2>`,
-            () => html`<h2>Loading...</h2>`,
-          )}
+              promise,
+              () => html`<h2>${promise}</h2>`,
+              () => html`<h2>Loading...</h2>`,
+            )}
           </p>`,
         );
 

@@ -204,9 +204,9 @@ export async function runScenarios(deps: BenchDeps): Promise<BenchReport> {
           "",
           selected,
         );
-        const li: any = html`<li class=${className} bind=${data[i]}
-          >${data[i].id}</li
-        >`;
+        const li: any = html`<li class=${className} bind=${data[i]}>
+          ${data[i].id}
+        </li>`;
         onCleanup(unset, li, className);
         refs.push(new WeakRef(li));
         return li;
@@ -262,9 +262,9 @@ export async function runScenarios(deps: BenchDeps): Promise<BenchReport> {
           "",
           selected,
         );
-        const li: any = html`<li class=${className} bind=${data[i]}
-          >${data[i].id}</li
-        >`;
+        const li: any = html`<li class=${className} bind=${data[i]}>
+          ${data[i].id}
+        </li>`;
         onCleanup(unset, li, className);
         refs.push(new WeakRef(li));
         return li;

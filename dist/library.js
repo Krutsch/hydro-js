@@ -66,6 +66,16 @@ const ternaryDisposers = new WeakMap();
 // value-overwritten (no shape churn, no delete).
 const ternarySlotPool = [];
 let ternarySlotCounter = 0;
+let eventKeyCounter = 0;
+// Parallel to ternarySlotPool: caches the chainKeys proxy that
+// installReactiveSlot built the first time a given pooled key was minted.
+// Reusing a pooled key only ever needs a value-overwrite (see
+// installReactiveSlot's `enumerable=false` branches below) - re-deriving the
+// proxy + its setter closure on every reuse was pure waste, and was the #1
+// confirmed heap-allocation site (installReactiveSlot) in CDP heap sampling,
+// driven by ternary()'s once-per-row-per-render call frequency. Never
+// deleted, mirrors ternarySlotPool's own never-deleted lifetime.
+const ternarySlotProxies = new Map();
 const _boundFunctions = Symbol("boundFunctions"); // Cache for bound functions in Proxy, so that we create the bound version of each function only once
 const reactiveSymbol = Symbol("reactive");
 const keysSymbol = Symbol("keys");
@@ -142,14 +152,8 @@ function isServerSide() {
         window.navigator.userAgent.includes("HappyDOM") ||
         window.navigator.userAgent.includes("jsdom"));
 }
-function randomText() {
-    const randomChars = "abcdefghijklmnopqrstuvwxyz0123456789";
-    let result = "";
-    for (let i = 0; i < 6; i++) {
-        result += randomChars.charAt(Math.floor(Math.random() * randomChars.length));
-    }
-    return result;
-    // return Math.random().toString(32).slice(2);
+function eventKey() {
+    return `__hydroe${eventKeyCounter++}__`;
 }
 function setGlobalSchedule(willSchedule) {
     globalSchedule = willSchedule;
@@ -287,7 +291,7 @@ function html(htmlArray, ...variables) {
             resolvedVariables[i] = String(variable);
         }
         else if (isFunction(variable) || isEventObject(variable)) {
-            const funcName = randomText();
+            const funcName = eventKey();
             eventFunctions.set(funcName, variable);
             if (viewElements)
                 viewElementsEventFunctions.set(funcName, variable);
@@ -307,7 +311,7 @@ function html(htmlArray, ...variables) {
             let result = "";
             for (const [key, value] of Object.entries(variable)) {
                 if (isFunction(value) || isEventObject(value)) {
-                    const funcName = randomText();
+                    const funcName = eventKey();
                     eventFunctions.set(funcName, value);
                     viewElements && viewElementsEventFunctions.set(funcName, value);
                     result += `${key}="${funcName}"`;
@@ -469,7 +473,7 @@ function applyCompiledParts(root, parts, variables, values) {
             // Symbol.toPrimitive), so resolve + register it the same way the
             // uncached path does, but targeted at this one known node instead of a
             // NodeIterator scan over the whole subtree.
-            if (part.markers.some((m) => isReactiveValue(variables[m]))) {
+            if (hasReactiveMarker(part.markers, variables)) {
                 setReactivitySingle(node);
             }
         }
@@ -491,7 +495,7 @@ function applyCompiledParts(root, parts, variables, values) {
                 }
             }
             const value = replaceCompiledMarkers(part.template, part.markers, variables, values);
-            if (part.markers.some((m) => isReactiveValue(variables[m]))) {
+            if (hasReactiveMarker(part.markers, variables)) {
                 setReactivitySingle(elem, attr, value);
             }
             else {
@@ -499,6 +503,13 @@ function applyCompiledParts(root, parts, variables, values) {
             }
         }
     }
+}
+function hasReactiveMarker(markers, variables) {
+    for (let i = 0; i < markers.length; i++) {
+        if (isReactiveValue(variables[markers[i]]))
+            return true;
+    }
+    return false;
 }
 function canCacheHTMLVariables(htmlArray, variables) {
     if (!isTemplateCacheable(htmlArray))
@@ -901,11 +912,10 @@ function changeAttrVal(eventName, node, resolvedObj, lastProp, isChecked = false
 // Shared by setTraces' two "first change for this key" branches: a Map that
 // resolves both directions (change-array -> node, node -> change-array).
 function pairMap(a, b) {
-    //@ts-ignore
-    return new Map([
-        [a, b],
-        [b, a],
-    ]);
+    const map = new Map();
+    map.set(a, b);
+    map.set(b, a);
+    return map;
 }
 function setTraces(start, end, node, hydroKey, resolvedObj, key) {
     // Set WeakMaps, that will be used to track a change for a Node but also to check if a Node has any other changes.
@@ -1372,8 +1382,12 @@ function installReactiveSlot(key, initial, enumerable) {
         Reflect.set(hydro, key, initial);
     }
     else if (Reflect.has(hydro, key)) {
-        // ternary()'s pooled slot, reused - value-only overwrite, no shape churn.
+        // ternary()'s pooled slot, reused - value-only overwrite, no shape churn,
+        // and (see ternarySlotProxies) no re-creation of the proxy/setter either.
         Reflect.set(hydro, key, initial);
+        const cachedProxy = ternarySlotProxies.get(key);
+        if (cachedProxy)
+            return cachedProxy;
     }
     else {
         // ternary()'s pooled slot, minted for the first time - bypasses the set
@@ -1393,10 +1407,12 @@ function installReactiveSlot(key, initial, enumerable) {
     if (isObject(initial)) {
         hydroToReactive.set(Reflect.get(hydro, key), chainKeysProxy);
     }
+    if (!enumerable)
+        ternarySlotProxies.set(key, chainKeysProxy);
     return chainKeysProxy;
     function setter(val) {
         const keys = // @ts-ignore
-         (this && Reflect.has(this, reactiveSymbol) ? this : chainKeysProxy)[keysSymbol.description];
+         (this && Reflect.has(this, reactiveSymbol) ? this : chainKeysProxy)[keysSymbolKey];
         const [resolvedValue, resolvedObj] = resolveObject(keys);
         const lastProp = keys[keys.length - 1];
         if (isFunction(val)) {
@@ -1428,7 +1444,7 @@ function chainKeys(initial, keys) {
         get(target, subKey, _receiver) {
             if (subKey === reactiveSymbol.description)
                 return true;
-            if (subKey === keysSymbol.description) {
+            if (subKey === keysSymbolKey) {
                 return keys;
             }
             if (subKey === Symbol.toPrimitive) {
@@ -1441,7 +1457,7 @@ function chainKeys(initial, keys) {
     });
 }
 function getReactiveKeys(reactiveHydro) {
-    const keys = reactiveHydro[keysSymbol.description];
+    const keys = reactiveHydro[keysSymbolKey];
     const lastProp = keys[keys.length - 1];
     return [lastProp, keys.length === 1];
 }
@@ -1471,7 +1487,7 @@ function unset(reactiveHydro) {
         }
     }
     else {
-        const [_, resolvedObj] = resolveObject(reactiveHydro[keysSymbol.description]);
+        const [_, resolvedObj] = resolveObject(reactiveHydro[keysSymbolKey]);
         Reflect.set(resolvedObj, lastProp, null);
     }
 }
@@ -1481,7 +1497,7 @@ function setAsyncUpdate(reactiveHydro, asyncUpdate) {
         hydro.asyncUpdate = asyncUpdate;
     }
     else {
-        const [_, resolvedObj] = resolveObject(reactiveHydro[keysSymbol.description]);
+        const [_, resolvedObj] = resolveObject(reactiveHydro[keysSymbolKey]);
         resolvedObj.asyncUpdate = asyncUpdate;
     }
 }
@@ -1493,7 +1509,7 @@ function observe(reactiveHydro, fn) {
         return hydro.observe(lastProp, fn);
     }
     else {
-        const [_, resolvedObj] = resolveObject(reactiveHydro[keysSymbol.description]);
+        const [_, resolvedObj] = resolveObject(reactiveHydro[keysSymbolKey]);
         return resolvedObj.observe(lastProp, fn);
     }
 }
@@ -1503,7 +1519,7 @@ function unobserve(reactiveHydro) {
         hydro.unobserve(lastProp);
     }
     else {
-        const [_, resolvedObj] = resolveObject(reactiveHydro[keysSymbol.description]);
+        const [_, resolvedObj] = resolveObject(reactiveHydro[keysSymbolKey]);
         resolvedObj.unobserve(lastProp);
     }
 }
@@ -1598,7 +1614,7 @@ function watchEffect(fn) {
 function getValue(reactiveHydro) {
     if (reactiveHydro === undefined)
         return reactiveHydro;
-    const [resolvedValue] = resolveObject(Reflect.get(reactiveHydro, keysSymbol.description));
+    const [resolvedValue] = resolveObject(Reflect.get(reactiveHydro, keysSymbolKey));
     return resolvedValue;
 }
 let calledOnRender = false;

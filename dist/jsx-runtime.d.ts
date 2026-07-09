@@ -1,7 +1,7 @@
 type Props = {
     children?: unknown;
 } & Record<string, unknown>;
-export declare function jsx(type: any, props: Props): Element | Text | DocumentFragment;
+export declare function jsx(type: any, props: Props): DocumentFragment | Element | Text;
 export declare const jsxs: typeof jsx;
 export declare const jsxDEV: typeof jsx;
 export declare function Fragment(props: Props): DocumentFragment;

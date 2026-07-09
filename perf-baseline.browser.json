@@ -1,125 +1,125 @@
 {
-  "generatedAt": "2026-07-08T14:27:28.097Z",
+  "generatedAt": "2026-07-09T19:26:48.628Z",
   "entries": [
     {
       "impl": "html",
       "operation": "create rows",
       "minMs": 1,
-      "medianMs": 1.150000000372529
+      "medianMs": 1.099999999976717
     },
     {
       "impl": "html",
       "operation": "replace all rows",
-      "minMs": 2.300000000745058,
-      "medianMs": 2.849999999627471
+      "minMs": 2,
+      "medianMs": 2.2000000000116415
     },
     {
       "impl": "html",
       "operation": "select row",
-      "minMs": 1,
-      "medianMs": 1.0999999977648258
+      "minMs": 0.8999999999650754,
+      "medianMs": 1
     },
     {
       "impl": "html",
       "operation": "create many rows",
-      "minMs": 4.399999998509884,
-      "medianMs": 4.650000002235174
+      "minMs": 4.400000000023283,
+      "medianMs": 4.75
     },
     {
       "impl": "html",
       "operation": "append rows to large table",
-      "minMs": 1.6000000014901161,
-      "medianMs": 1.849999999627471
+      "minMs": 1.8999999999650754,
+      "medianMs": 1.900000000023283
     },
     {
       "impl": "h",
       "operation": "create rows",
-      "minMs": 0.8999999985098839,
+      "minMs": 0.7999999999883585,
       "medianMs": 1
     },
     {
       "impl": "h",
       "operation": "replace all rows",
-      "minMs": 1.5999999977648258,
-      "medianMs": 1.650000000372529
+      "minMs": 1.599999999976717,
+      "medianMs": 1.7000000000116415
     },
     {
       "impl": "h",
       "operation": "select row",
-      "minMs": 0.8000000007450581,
-      "medianMs": 0.8000000007450581
+      "minMs": 0.7999999999883585,
+      "medianMs": 0.9000000000232831
     },
     {
       "impl": "h",
       "operation": "create many rows",
       "minMs": 4,
-      "medianMs": 4.200000001117587
+      "medianMs": 4.2000000000116415
     },
     {
       "impl": "h",
       "operation": "append rows to large table",
-      "minMs": 1.5999999977648258,
-      "medianMs": 1.799999998882413
+      "minMs": 1.7000000000116415,
+      "medianMs": 1.7999999999883585
     },
     {
       "impl": "view",
       "operation": "create rows",
-      "minMs": 1.699999999254942,
-      "medianMs": 2
+      "minMs": 1.8999999999650754,
+      "medianMs": 2.099999999976717
     },
     {
       "impl": "view",
       "operation": "replace all rows",
-      "minMs": 3.199999999254942,
-      "medianMs": 3.550000000745058
+      "minMs": 3.2999999999883585,
+      "medianMs": 3.400000000023283
     },
     {
       "impl": "view",
       "operation": "select row",
-      "minMs": 1.6000000014901161,
-      "medianMs": 1.75
+      "minMs": 1.3999999999650754,
+      "medianMs": 1.599999999976717
     },
     {
       "impl": "view",
       "operation": "create many rows",
-      "minMs": 7.5,
-      "medianMs": 8.25
+      "minMs": 7.099999999976717,
+      "medianMs": 8.550000000017462
     },
     {
       "impl": "view",
       "operation": "append rows to large table",
-      "minMs": 3.099999997764826,
-      "medianMs": 3.199999999254942
+      "minMs": 2.8999999999650754,
+      "medianMs": 3.0499999999883585
     },
     {
       "impl": "view-html",
       "operation": "create rows",
-      "minMs": 2.300000000745058,
-      "medianMs": 2.449999999254942
+      "minMs": 2.2999999999883585,
+      "medianMs": 2.5
     },
     {
       "impl": "view-html",
       "operation": "replace all rows",
-      "minMs": 4.900000002235174,
-      "medianMs": 5.800000000745058
+      "minMs": 4.7999999999883585,
+      "medianMs": 5.2999999999883585
     },
     {
       "impl": "view-html",
       "operation": "select row",
-      "minMs": 2.300000000745058,
-      "medianMs": 2.399999998509884
+      "minMs": 2.599999999976717,
+      "medianMs": 2.7000000000116415
     },
     {
       "impl": "view-html",
       "operation": "create many rows",
-      "minMs": 12,
-      "medianMs": 13.650000000372529
+      "minMs": 11.899999999965075,
+      "medianMs": 12.949999999982538
     },
     {
       "impl": "view-html",
       "operation": "append rows to large table",
-      "minMs": 4.5,
-      "medianMs": 4.799999998882413
+      "minMs": 4.800000000046566,
+      "medianMs": 5.25
     }
   ]
 }
