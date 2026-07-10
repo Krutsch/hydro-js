@@ -76,7 +76,7 @@ if (asJson) {
     JSON.stringify({ report, deltas: diff?.deltas, failures }, null, 2),
   );
 } else {
-  console.log(formatPerfReport(report, baseline, failures));
+  console.log(formatPerfReport(report, baseline, failures, tolerance));
 }
 
 process.exit(report.pass && !failures.length ? 0 : 1);

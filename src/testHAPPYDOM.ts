@@ -2154,6 +2154,21 @@ describe("library", () => {
     });
 
     describe("view", () => {
+      it("handles unset data while mounted", () => {
+        setReuseElements(false);
+        const data = reactive([{ id: 1 }]);
+        const list = html`<ul id="viewUnset"></ul>` as HTMLUListElement;
+        const unmount = render(list);
+
+        view("#viewUnset", data, (_item, i) => html`<li>${data[i].id}</li>`);
+        unset(data);
+
+        const condition = list.childElementCount === 0;
+        unmount();
+        setReuseElements(true);
+        return condition;
+      });
+
       it("creates a view that will handle add, delete and swap", async () => {
         let condition: boolean;
         let triggeredEvent = false;

@@ -1,6 +1,7 @@
 import {
   h,
   html,
+  getValue,
   onCleanup,
   reactive,
   setGlobalSchedule,
@@ -14,20 +15,30 @@ type ImplName = "html" | "h" | "view" | "view-html";
 type OperationName =
   | "create rows"
   | "replace all rows"
+  | "update every 10th row"
   | "select row"
+  | "swap rows"
+  | "remove row"
   | "create many rows"
-  | "append rows to large table";
+  | "append rows to large table"
+  | "clear rows";
 
 type Row = { id: number; label: string };
 
 type PerfApp = {
   run: (rows: Row[]) => void;
   add: (rows: Row[]) => void;
+  updateEvery10th: () => void;
   select: (index: number) => void;
+  swap: (i: number, j: number) => void;
+  removeAt: (index: number) => void;
+  clear: () => void;
   rowCount: () => number;
   selectedCount: () => number;
   rowClass: (index: number) => string;
   firstId: () => string;
+  idAt: (index: number) => string;
+  labelAt: (index: number) => string;
   dispose: () => void;
   // Only the reactive `view` apps expose this: it lets the keyed-ness check drive
   // the framework's own swap/remove and inspect DOM node identity afterwards.
@@ -44,6 +55,7 @@ type KeyedProbe = {
 type Operation = {
   name: OperationName;
   rows: (config: Required<PerfConfig>) => number;
+  setup?: (app: PerfApp, data: SampleData) => void;
   run: (app: PerfApp, data: SampleData) => void;
   verify: (app: PerfApp, data: SampleData) => boolean;
 };
@@ -197,22 +209,47 @@ const operations: Operation[] = [
   {
     name: "replace all rows",
     rows: (config) => config.rows,
-    run: (app, data) => {
-      app.run(data.base);
-      app.run(data.replacement);
-    },
+    setup: (app, data) => app.run(data.base),
+    run: (app, data) => app.run(data.replacement),
     verify: (app, data) =>
       app.rowCount() === data.replacement.length &&
       app.firstId() === String(data.replacement[0].id),
   },
   {
+    name: "update every 10th row",
+    rows: (config) => Math.ceil(config.rows / 10),
+    setup: (app, data) => app.run(data.base),
+    run: (app) => app.updateEvery10th(),
+    verify: (app, data) =>
+      app.rowCount() === data.replacement.length &&
+      app.labelAt(0).endsWith(" !!!"),
+  },
+  {
     name: "select row",
     rows: () => 1,
-    run: (app, data) => {
+    setup: (app, data) => {
       app.run(data.base);
-      app.select(1);
+      app.select(5);
     },
+    run: (app) => app.select(1),
     verify: (app) => app.selectedCount() === 1 && app.rowClass(1) === "danger",
+  },
+  {
+    name: "swap rows",
+    rows: () => 2,
+    setup: (app, data) => app.run(data.base),
+    run: (app, data) => app.swap(1, data.base.length - 2),
+    verify: (app, data) =>
+      app.rowCount() === data.base.length &&
+      app.firstId() === "1" &&
+      app.idAt(1) === String(data.replacement.length - 1),
+  },
+  {
+    name: "remove row",
+    rows: () => 1,
+    setup: (app, data) => app.run(data.base),
+    run: (app) => app.removeAt(4),
+    verify: (app, data) => app.rowCount() === data.replacement.length - 1,
   },
   {
     name: "create many rows",
@@ -225,13 +262,18 @@ const operations: Operation[] = [
   {
     name: "append rows to large table",
     rows: (config) => config.rows,
-    run: (app, data) => {
-      app.run(data.base);
-      app.add(data.append);
-    },
+    setup: (app, data) => app.run(data.base),
+    run: (app, data) => app.add(data.append),
     verify: (app, data) =>
       app.rowCount() === data.base.length + data.append.length &&
       app.firstId() === "1",
+  },
+  {
+    name: "clear rows",
+    rows: (config) => config.rows,
+    setup: (app, data) => app.run(data.base),
+    run: (app) => app.clear(),
+    verify: (app) => app.rowCount() === 0,
   },
 ];
 
@@ -284,6 +326,7 @@ export async function runPerfScenarios(
       for (let i = 0; i < totalRuns; i++) {
         const data = createSampleData(config, i + 1);
         const app = createApp();
+        operation.setup?.(app, data);
         // Settle GC *before* the timed region so a collection triggered by the
         // previous iteration does not land inside this measurement.
         cleanup();
@@ -399,8 +442,11 @@ export function formatPerfReport(
   report: PerfReport,
   baseline?: PerfBaseline,
   failures: string[] = [],
+  tolerancePct = 15,
 ): string {
-  const deltas = baseline ? diffPerf(report, baseline).deltas : undefined;
+  const deltas = baseline
+    ? diffPerf(report, baseline, tolerancePct).deltas
+    : undefined;
   const deltaByKey = new Map(
     (deltas ?? []).map((d) => [`${d.impl}|${d.operation}`, d]),
   );
@@ -481,6 +527,7 @@ export function diffPerf(
   baseline: PerfBaseline,
   tolerancePct = 15,
 ): { deltas: PerfDelta[]; failures: string[] } {
+  const minAbsoluteRegressionMs = 0.5;
   const before = new Map(
     baseline.entries.map((e) => [`${e.impl}|${e.operation}`, e]),
   );
@@ -489,8 +536,14 @@ export function diffPerf(
   for (const r of report.results) {
     const base = before.get(`${r.impl}|${r.operation}`);
     if (!base) continue;
-    const deltaPct = ((r.minMs - base.minMs) / base.minMs) * 100;
-    const regressed = deltaPct > tolerancePct;
+    const deltaMs = r.minMs - base.minMs;
+    const deltaPct = base.minMs
+      ? (deltaMs / base.minMs) * 100
+      : deltaMs > 0
+        ? Infinity
+        : 0;
+    const regressed =
+      deltaMs > minAbsoluteRegressionMs && deltaPct > tolerancePct;
     deltas.push({
       impl: r.impl,
       operation: r.operation,
@@ -637,13 +690,34 @@ function createDirectApp(
     add(rows) {
       tbody.append(...rows.map(createRow));
     },
+    updateEvery10th() {
+      for (let i = 0; i < tbody.children.length; i += 10) {
+        const link = getRow(tbody, i)?.querySelector("a");
+        if (link) link.textContent += " !!!";
+      }
+    },
     select(index) {
       getRow(tbody, index)?.querySelector("a")?.dispatchEvent(clickEvent());
     },
+    swap(i, j) {
+      const first = getRow(tbody, i);
+      const second = getRow(tbody, j);
+      if (!first || !second) return;
+      const marker = document.createTextNode("");
+      first.before(marker);
+      second.before(first);
+      marker.replaceWith(second);
+    },
+    removeAt(index) {
+      getRow(tbody, index)?.remove();
+    },
+    clear,
     rowCount: () => tbody.children.length,
     selectedCount: () => tbody.querySelectorAll("tr.danger").length,
     rowClass: (index) => getRow(tbody, index)?.className ?? "",
     firstId: () => firstCellText(tbody),
+    idAt: (index) => rowId(tbody, index),
+    labelAt: (index) => rowLabel(tbody, index),
     dispose: () => table.remove(),
   };
 }
@@ -735,15 +809,34 @@ function createReactiveViewApp(buildRow: RowBuilder): PerfApp {
     add(rows) {
       data((current: Row[]) => [...current, ...rows]);
     },
+    updateEvery10th() {
+      for (let i = 0; i < getValue(data).length; i += 10) {
+        data[i].setter((row: Row) => {
+          row.label += " !!!";
+        });
+      }
+    },
     select(index) {
       getRow(tbody, index)?.querySelector("a")?.dispatchEvent(clickEvent());
     },
+    swap: (i, j) =>
+      data((prev: Row[]) => {
+        [prev[i], prev[j]] = [prev[j], prev[i]];
+      }),
+    removeAt: (index) =>
+      data((curr: Row[]) => {
+        curr[index] = null as any;
+      }),
+    clear: () => data([]),
     rowCount: () => tbody.children.length,
     selectedCount: () => tbody.querySelectorAll("tr.danger").length,
     rowClass: (index) => getRow(tbody, index)?.className ?? "",
     firstId: () => firstCellText(tbody),
+    idAt: (index) => rowId(tbody, index),
+    labelAt: (index) => rowLabel(tbody, index),
     dispose() {
       data([]);
+      // unset(data);
       unset(selected);
       table.remove();
     },
@@ -777,7 +870,17 @@ function getRow(tbody: HTMLTableSectionElement, index: number) {
 }
 
 function firstCellText(tbody: HTMLTableSectionElement) {
-  return getRow(tbody, 0)?.querySelector("td")?.textContent ?? "";
+  return rowId(tbody, 0);
+}
+
+function rowId(tbody: HTMLTableSectionElement, index: number) {
+  return getRow(tbody, index)?.querySelector("td")?.textContent ?? "";
+}
+
+function rowLabel(tbody: HTMLTableSectionElement, index: number) {
+  return (
+    getRow(tbody, index)?.querySelectorAll("td")[1]?.textContent?.trim() ?? ""
+  );
 }
 
 function clickEvent() {

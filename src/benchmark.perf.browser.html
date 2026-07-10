@@ -24,8 +24,8 @@
 
       (async () => {
         const report = await runPerfScenarios({
-          rows: num("rows", 200),
-          manyRows: num("manyRows", 1000),
+          rows: num("rows", 1000),
+          manyRows: num("manyRows", 10000),
           repeats: num("repeats", 10),
           warmups: num("warmups", 3),
           now: () => performance.now(),

@@ -1,4 +1,4 @@
-import { h, html, onCleanup, reactive, setGlobalSchedule, setReuseElements, ternary, unset, view, } from "./library.js";
+import { h, html, getValue, onCleanup, reactive, setGlobalSchedule, setReuseElements, ternary, unset, view, } from "./library.js";
 const ADJECTIVES = [
     "pretty",
     "large",
@@ -73,21 +73,44 @@ const operations = [
     {
         name: "replace all rows",
         rows: (config) => config.rows,
-        run: (app, data) => {
-            app.run(data.base);
-            app.run(data.replacement);
-        },
+        setup: (app, data) => app.run(data.base),
+        run: (app, data) => app.run(data.replacement),
         verify: (app, data) => app.rowCount() === data.replacement.length &&
             app.firstId() === String(data.replacement[0].id),
     },
     {
+        name: "update every 10th row",
+        rows: (config) => Math.ceil(config.rows / 10),
+        setup: (app, data) => app.run(data.base),
+        run: (app) => app.updateEvery10th(),
+        verify: (app, data) => app.rowCount() === data.replacement.length &&
+            app.labelAt(0).endsWith(" !!!"),
+    },
+    {
         name: "select row",
         rows: () => 1,
-        run: (app, data) => {
+        setup: (app, data) => {
             app.run(data.base);
-            app.select(1);
+            app.select(5);
         },
+        run: (app) => app.select(1),
         verify: (app) => app.selectedCount() === 1 && app.rowClass(1) === "danger",
+    },
+    {
+        name: "swap rows",
+        rows: () => 2,
+        setup: (app, data) => app.run(data.base),
+        run: (app, data) => app.swap(1, data.base.length - 2),
+        verify: (app, data) => app.rowCount() === data.base.length &&
+            app.firstId() === "1" &&
+            app.idAt(1) === String(data.replacement.length - 1),
+    },
+    {
+        name: "remove row",
+        rows: () => 1,
+        setup: (app, data) => app.run(data.base),
+        run: (app) => app.removeAt(4),
+        verify: (app, data) => app.rowCount() === data.replacement.length - 1,
     },
     {
         name: "create many rows",
@@ -99,12 +122,17 @@ const operations = [
     {
         name: "append rows to large table",
         rows: (config) => config.rows,
-        run: (app, data) => {
-            app.run(data.base);
-            app.add(data.append);
-        },
+        setup: (app, data) => app.run(data.base),
+        run: (app, data) => app.add(data.append),
         verify: (app, data) => app.rowCount() === data.base.length + data.append.length &&
             app.firstId() === "1",
+    },
+    {
+        name: "clear rows",
+        rows: (config) => config.rows,
+        setup: (app, data) => app.run(data.base),
+        run: (app) => app.clear(),
+        verify: (app) => app.rowCount() === 0,
     },
 ];
 // Real usage always has a discrete gap between operations (paint/idle between
@@ -149,6 +177,7 @@ export async function runPerfScenarios(deps = {}) {
             for (let i = 0; i < totalRuns; i++) {
                 const data = createSampleData(config, i + 1);
                 const app = createApp();
+                operation.setup?.(app, data);
                 // Settle GC *before* the timed region so a collection triggered by the
                 // previous iteration does not land inside this measurement.
                 cleanup();
@@ -243,8 +272,10 @@ function runKeyedChecks(impls, config) {
     }
     return keyed;
 }
-export function formatPerfReport(report, baseline, failures = []) {
-    const deltas = baseline ? diffPerf(report, baseline).deltas : undefined;
+export function formatPerfReport(report, baseline, failures = [], tolerancePct = 15) {
+    const deltas = baseline
+        ? diffPerf(report, baseline, tolerancePct).deltas
+        : undefined;
     const deltaByKey = new Map((deltas ?? []).map((d) => [`${d.impl}|${d.operation}`, d]));
     const lines = [];
     lines.push("");
@@ -293,6 +324,7 @@ export function toPerfBaseline(report) {
 // Compare on minMs. A regression only counts when the new best sample is slower
 // than the baseline best by more than `tolerancePct` – below that it is noise.
 export function diffPerf(report, baseline, tolerancePct = 15) {
+    const minAbsoluteRegressionMs = 0.5;
     const before = new Map(baseline.entries.map((e) => [`${e.impl}|${e.operation}`, e]));
     const deltas = [];
     const failures = [];
@@ -300,8 +332,13 @@ export function diffPerf(report, baseline, tolerancePct = 15) {
         const base = before.get(`${r.impl}|${r.operation}`);
         if (!base)
             continue;
-        const deltaPct = ((r.minMs - base.minMs) / base.minMs) * 100;
-        const regressed = deltaPct > tolerancePct;
+        const deltaMs = r.minMs - base.minMs;
+        const deltaPct = base.minMs
+            ? (deltaMs / base.minMs) * 100
+            : deltaMs > 0
+                ? Infinity
+                : 0;
+        const regressed = deltaMs > minAbsoluteRegressionMs && deltaPct > tolerancePct;
         deltas.push({
             impl: r.impl,
             operation: r.operation,
@@ -406,13 +443,36 @@ function createDirectApp(table, tbody, createRow, resetSelected) {
         add(rows) {
             tbody.append(...rows.map(createRow));
         },
+        updateEvery10th() {
+            for (let i = 0; i < tbody.children.length; i += 10) {
+                const link = getRow(tbody, i)?.querySelector("a");
+                if (link)
+                    link.textContent += " !!!";
+            }
+        },
         select(index) {
             getRow(tbody, index)?.querySelector("a")?.dispatchEvent(clickEvent());
         },
+        swap(i, j) {
+            const first = getRow(tbody, i);
+            const second = getRow(tbody, j);
+            if (!first || !second)
+                return;
+            const marker = document.createTextNode("");
+            first.before(marker);
+            second.before(first);
+            marker.replaceWith(second);
+        },
+        removeAt(index) {
+            getRow(tbody, index)?.remove();
+        },
+        clear,
         rowCount: () => tbody.children.length,
         selectedCount: () => tbody.querySelectorAll("tr.danger").length,
         rowClass: (index) => getRow(tbody, index)?.className ?? "",
         firstId: () => firstCellText(tbody),
+        idAt: (index) => rowId(tbody, index),
+        labelAt: (index) => rowLabel(tbody, index),
         dispose: () => table.remove(),
     };
 }
@@ -457,15 +517,32 @@ function createReactiveViewApp(buildRow) {
         add(rows) {
             data((current) => [...current, ...rows]);
         },
+        updateEvery10th() {
+            for (let i = 0; i < getValue(data).length; i += 10) {
+                data[i].setter((row) => {
+                    row.label += " !!!";
+                });
+            }
+        },
         select(index) {
             getRow(tbody, index)?.querySelector("a")?.dispatchEvent(clickEvent());
         },
+        swap: (i, j) => data((prev) => {
+            [prev[i], prev[j]] = [prev[j], prev[i]];
+        }),
+        removeAt: (index) => data((curr) => {
+            curr[index] = null;
+        }),
+        clear: () => data([]),
         rowCount: () => tbody.children.length,
         selectedCount: () => tbody.querySelectorAll("tr.danger").length,
         rowClass: (index) => getRow(tbody, index)?.className ?? "",
         firstId: () => firstCellText(tbody),
+        idAt: (index) => rowId(tbody, index),
+        labelAt: (index) => rowLabel(tbody, index),
         dispose() {
             data([]);
+            // unset(data);
             unset(selected);
             table.remove();
         },
@@ -493,7 +570,13 @@ function getRow(tbody, index) {
     return tbody.children[index];
 }
 function firstCellText(tbody) {
-    return getRow(tbody, 0)?.querySelector("td")?.textContent ?? "";
+    return rowId(tbody, 0);
+}
+function rowId(tbody, index) {
+    return getRow(tbody, index)?.querySelector("td")?.textContent ?? "";
+}
+function rowLabel(tbody, index) {
+    return (getRow(tbody, index)?.querySelectorAll("td")[1]?.textContent?.trim() ?? "");
 }
 function clickEvent() {
     return new MouseEvent("click", { bubbles: true, cancelable: true });

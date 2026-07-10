@@ -1,5 +1,5 @@
 type ImplName = "html" | "h" | "view" | "view-html";
-type OperationName = "create rows" | "replace all rows" | "select row" | "create many rows" | "append rows to large table";
+type OperationName = "create rows" | "replace all rows" | "update every 10th row" | "select row" | "swap rows" | "remove row" | "create many rows" | "append rows to large table" | "clear rows";
 type PerfConfig = {
     rows?: number;
     manyRows?: number;
@@ -51,7 +51,7 @@ export interface KeyedResult {
     ok: boolean;
 }
 export declare function runPerfScenarios(deps?: PerfDeps): Promise<PerfReport>;
-export declare function formatPerfReport(report: PerfReport, baseline?: PerfBaseline, failures?: string[]): string;
+export declare function formatPerfReport(report: PerfReport, baseline?: PerfBaseline, failures?: string[], tolerancePct?: number): string;
 export declare function toPerfBaseline(report: PerfReport): PerfBaseline;
 export declare function diffPerf(report: PerfReport, baseline: PerfBaseline, tolerancePct?: number): {
     deltas: PerfDelta[];

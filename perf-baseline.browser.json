@@ -1,125 +1,221 @@
 {
-  "generatedAt": "2026-07-09T19:26:48.628Z",
+  "generatedAt": "2026-07-10T14:07:45.193Z",
   "entries": [
     {
       "impl": "html",
       "operation": "create rows",
-      "minMs": 1,
-      "medianMs": 1.099999999976717
+      "minMs": 5.5,
+      "medianMs": 5.799999998882413
     },
     {
       "impl": "html",
       "operation": "replace all rows",
-      "minMs": 2,
-      "medianMs": 2.2000000000116415
+      "minMs": 4.699999999254942,
+      "medianMs": 4.900000000372529
+    },
+    {
+      "impl": "html",
+      "operation": "update every 10th row",
+      "minMs": 0,
+      "medianMs": 0.15000000037252903
     },
     {
       "impl": "html",
       "operation": "select row",
-      "minMs": 0.8999999999650754,
-      "medianMs": 1
+      "minMs": 0,
+      "medianMs": 0
+    },
+    {
+      "impl": "html",
+      "operation": "swap rows",
+      "minMs": 0,
+      "medianMs": 0
+    },
+    {
+      "impl": "html",
+      "operation": "remove row",
+      "minMs": 0,
+      "medianMs": 0
     },
     {
       "impl": "html",
       "operation": "create many rows",
-      "minMs": 4.400000000023283,
-      "medianMs": 4.75
+      "minMs": 47.599999997764826,
+      "medianMs": 54.09999999962747
     },
     {
       "impl": "html",
       "operation": "append rows to large table",
-      "minMs": 1.8999999999650754,
-      "medianMs": 1.900000000023283
+      "minMs": 4.5,
+      "medianMs": 4.899999998509884
+    },
+    {
+      "impl": "html",
+      "operation": "clear rows",
+      "minMs": 0.19999999925494194,
+      "medianMs": 0.30000000074505806
     },
     {
       "impl": "h",
       "operation": "create rows",
-      "minMs": 0.7999999999883585,
-      "medianMs": 1
+      "minMs": 3.899999998509884,
+      "medianMs": 4.100000001490116
     },
     {
       "impl": "h",
       "operation": "replace all rows",
-      "minMs": 1.599999999976717,
-      "medianMs": 1.7000000000116415
+      "minMs": 4.399999998509884,
+      "medianMs": 4.650000000372529
+    },
+    {
+      "impl": "h",
+      "operation": "update every 10th row",
+      "minMs": 0,
+      "medianMs": 0.10000000149011612
     },
     {
       "impl": "h",
       "operation": "select row",
-      "minMs": 0.7999999999883585,
-      "medianMs": 0.9000000000232831
+      "minMs": 0,
+      "medianMs": 0
+    },
+    {
+      "impl": "h",
+      "operation": "swap rows",
+      "minMs": 0,
+      "medianMs": 0
+    },
+    {
+      "impl": "h",
+      "operation": "remove row",
+      "minMs": 0,
+      "medianMs": 0
     },
     {
       "impl": "h",
       "operation": "create many rows",
-      "minMs": 4,
-      "medianMs": 4.2000000000116415
+      "minMs": 40.399999998509884,
+      "medianMs": 50.40000000037253
     },
     {
       "impl": "h",
       "operation": "append rows to large table",
-      "minMs": 1.7000000000116415,
-      "medianMs": 1.7999999999883585
+      "minMs": 4.199999999254942,
+      "medianMs": 4.5
+    },
+    {
+      "impl": "h",
+      "operation": "clear rows",
+      "minMs": 0.10000000149011612,
+      "medianMs": 0.19999999925494194
     },
     {
       "impl": "view",
       "operation": "create rows",
-      "minMs": 1.8999999999650754,
-      "medianMs": 2.099999999976717
+      "minMs": 8,
+      "medianMs": 8.649999998509884
     },
     {
       "impl": "view",
       "operation": "replace all rows",
-      "minMs": 3.2999999999883585,
-      "medianMs": 3.400000000023283
+      "minMs": 8,
+      "medianMs": 8.150000000372529
+    },
+    {
+      "impl": "view",
+      "operation": "update every 10th row",
+      "minMs": 0.09999999776482582,
+      "medianMs": 0.19999999925494194
     },
     {
       "impl": "view",
       "operation": "select row",
-      "minMs": 1.3999999999650754,
-      "medianMs": 1.599999999976717
+      "minMs": 0.10000000149011612,
+      "medianMs": 0.19999999925494194
+    },
+    {
+      "impl": "view",
+      "operation": "swap rows",
+      "minMs": 0,
+      "medianMs": 0.09999999962747097
+    },
+    {
+      "impl": "view",
+      "operation": "remove row",
+      "minMs": 0,
+      "medianMs": 0
     },
     {
       "impl": "view",
       "operation": "create many rows",
-      "minMs": 7.099999999976717,
-      "medianMs": 8.550000000017462
+      "minMs": 86.09999999776483,
+      "medianMs": 96.5
     },
     {
       "impl": "view",
       "operation": "append rows to large table",
-      "minMs": 2.8999999999650754,
-      "medianMs": 3.0499999999883585
+      "minMs": 7.700000002980232,
+      "medianMs": 8.25
+    },
+    {
+      "impl": "view",
+      "operation": "clear rows",
+      "minMs": 0.29999999701976776,
+      "medianMs": 0.34999999962747097
     },
     {
       "impl": "view-html",
       "operation": "create rows",
-      "minMs": 2.2999999999883585,
-      "medianMs": 2.5
+      "minMs": 11.699999999254942,
+      "medianMs": 12.199999999254942
     },
     {
       "impl": "view-html",
       "operation": "replace all rows",
-      "minMs": 4.7999999999883585,
-      "medianMs": 5.2999999999883585
+      "minMs": 11.900000002235174,
+      "medianMs": 12.849999999627471
+    },
+    {
+      "impl": "view-html",
+      "operation": "update every 10th row",
+      "minMs": 0.09999999776482582,
+      "medianMs": 0.19999999925494194
     },
     {
       "impl": "view-html",
       "operation": "select row",
-      "minMs": 2.599999999976717,
-      "medianMs": 2.7000000000116415
+      "minMs": 0.09999999776482582,
+      "medianMs": 0.19999999925494194
+    },
+    {
+      "impl": "view-html",
+      "operation": "swap rows",
+      "minMs": 0,
+      "medianMs": 0
+    },
+    {
+      "impl": "view-html",
+      "operation": "remove row",
+      "minMs": 0,
+      "medianMs": 0
     },
     {
       "impl": "view-html",
       "operation": "create many rows",
-      "minMs": 11.899999999965075,
-      "medianMs": 12.949999999982538
+      "minMs": 133.69999999925494,
+      "medianMs": 149.69999999925494
     },
     {
       "impl": "view-html",
       "operation": "append rows to large table",
-      "minMs": 4.800000000046566,
-      "medianMs": 5.25
+      "minMs": 12.199999999254942,
+      "medianMs": 13.150000000372529
+    },
+    {
+      "impl": "view-html",
+      "operation": "clear rows",
+      "minMs": 0.29999999701976776,
+      "medianMs": 0.3999999985098839
     }
   ]
 }
