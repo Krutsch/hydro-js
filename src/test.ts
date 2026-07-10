@@ -2159,6 +2159,62 @@ describe("library", () => {
     });
 
     describe("view", () => {
+      it("keeps ternary rows reactive after replacement cleanup", async () => {
+        setReuseElements(false);
+        const data = reactive<Array<{ id: number }>>([]);
+        const selected = reactive<number | null>(-1);
+        const list = html`<ul id="viewCleanup"></ul>` as HTMLUListElement;
+        const unmount = render(list);
+
+        const dispose = view("#viewCleanup", data, (item, i) => {
+          const className = ternary(
+            (value: number | null) => value === item.id,
+            "selected",
+            "",
+            selected,
+          );
+          const row = h("li", { class: className, bind: data[i] }, item.id);
+          onCleanup(unset, row, className);
+          return row;
+        });
+
+        selected(null);
+        data([{ id: 1 }, { id: 2 }]);
+        selected(null);
+        data([{ id: 3 }, { id: 4 }]);
+        await sleep(50);
+        selected(3);
+
+        const condition = list.firstElementChild?.className === "selected";
+        dispose();
+        unset(selected);
+        unset(data);
+        unmount();
+        setReuseElements(true);
+        return condition;
+      });
+
+      it("returns an idempotent keyed view disposer", () => {
+        setReuseElements(false);
+        const data = reactive([{ id: 1 }, { id: 2 }]);
+        const list = html`<ul id="viewDispose"></ul>` as HTMLUListElement;
+        const unmount = render(list);
+        const dispose = view(
+          "#viewDispose",
+          data,
+          (item) => h("li", null, item.id),
+          { key: (item) => item.id },
+        );
+
+        dispose();
+        dispose();
+        const condition = list.childElementCount === 0;
+        unset(data);
+        unmount();
+        setReuseElements(true);
+        return condition;
+      });
+
       it("sets reactivity and events for appended rows", () => {
         setReuseElements(false);
         let clicked = 0;

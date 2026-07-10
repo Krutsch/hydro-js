@@ -2005,6 +2005,82 @@
             });
 
             describe("view", () => {
+              it("rejects duplicate keys", () => {
+                const data = reactive([]);
+                const list = html`<ul id="duplicate-keys"></ul>`;
+                const unmount = render(list);
+                view("#duplicate-keys", data, (item) => h("li", null, item.id));
+                expect(() => data([{ id: 1 }, { id: 1 }])).to.throw(
+                  "Duplicate view key",
+                );
+                unset(data);
+                unmount();
+              });
+
+              it("keeps external row bindings stable during swaps", () => {
+                const data = reactive([{ id: 1 }, { id: 2 }]);
+                const outside = h("p", null, data[0].id);
+                const list = html`<ul id="external-index"></ul>`;
+                const unmount = render(list);
+                view("#external-index", data, (item) => h("li", null, item.id));
+                data((rows) => {
+                  [rows[0], rows[1]] = [rows[1], rows[0]];
+                });
+                expect(outside.textContent).to.equal("1");
+                unset(data);
+                unmount();
+              });
+
+              it("reacts to raw array mutators and direct unset", () => {
+                const data = reactive([]);
+                const list = html`<ul id="raw-mutator"></ul>`;
+                const unmount = render(list);
+                view("#raw-mutator", data, (item) => h("li", null, item.id));
+                getValue(data).push({ id: 1 });
+                expect(list.childElementCount).to.equal(1);
+                unset(data);
+                expect(list.childElementCount).to.equal(0);
+                unmount();
+              });
+
+              it("keeps ternary rows reactive after replacement cleanup", async () => {
+                const data = reactive([]);
+                const selected = reactive(-1);
+                const list = html`<ul id="view-cleanup"></ul>`;
+                const unmount = render(list);
+                const dispose = view(
+                  "#view-cleanup",
+                  data,
+                  (item, index) => {
+                    const className = ternary(
+                      (value) => value === item.id,
+                      "selected",
+                      "",
+                      selected,
+                    );
+                    const row = h("li", {
+                      class: className,
+                      bind: data[index],
+                    });
+                    onCleanup(unset, row, className);
+                    return row;
+                  },
+                );
+
+                selected(null);
+                data([{ id: 1 }, { id: 2 }]);
+                selected(null);
+                data([{ id: 3 }, { id: 4 }]);
+                await sleep(50);
+                selected(3);
+
+                expect(list.firstElementChild.className).to.equal("selected");
+                dispose();
+                unset(selected);
+                unset(data);
+                unmount();
+              });
+
               it("creates a view that will handle add, delete and swap", async () => {
                 let condition;
                 let triggeredEvent = false;

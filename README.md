@@ -301,23 +301,28 @@ render(html`<span>{{ fruit }}</span>`);
 
 ### view
 
-Render the elements whenever the data changes. It will handle the operation for deletion, addition, swapping etc. This defaults to a non-keyed solution but it can be changed by calling `setReuseElements` with false.
+Render a keyed list whenever the data changes. Rows with the same key and item identity are moved without recreation; a new item object rebuilds its row. `view` returns an idempotent disposer.
 
 args:
 
 - root: `string` (CSS selector)<br>
 - data: `ReturnType<typeof reactive>`<br>
 - renderFunction: `function`, args: item: `any`, i: `number`<br>
+- options?: `{ key?: (item, i) => unknown }` (defaults to `item.id`, then index)<br>
+
+Each render call must return one `ChildNode`. Return a wrapper element for multi-node rows.
 
 #### Example
 
 ```js
 const data = reactive([{ id: 4, label: "Red Onions" }]);
-view(".table", data, (item, i) => (
+const dispose = view(".table", data, (item, i) => (
   <tr>
-    Reactive: {data[i].id}, Non-reactive: {item.id}
+    Reactive: {data[i].label}, Non-reactive: {item.id}
   </tr>
-));
+), { key: item => item.id });
+
+dispose();
 ```
 
 ### emit

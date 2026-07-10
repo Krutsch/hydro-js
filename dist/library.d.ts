@@ -76,7 +76,10 @@ declare function watchEffect(fn: Function): () => void;
 declare function getValue<T extends object>(reactiveHydro: T): T;
 declare function onRender(fn: Function, elem: ReturnType<typeof html>, ...args: Array<any>): void;
 declare function onCleanup(fn: Function, elem: ReturnType<typeof html>, ...args: Array<any>): void;
-declare function view(root: string, data: reactiveObject<Array<any>>, renderFunction: (value: any, index: number) => Node): void;
+type ViewOptions = {
+    key?: (value: any, index: number) => unknown;
+};
+declare function view(root: string, data: reactiveObject<Array<any>>, renderFunction: (value: any, index: number) => Node, options?: ViewOptions): () => void;
 declare const hydro: hydroObject;
 declare const $: <T extends string>(query: T) => QueryResult<T>;
 declare const $$: <T extends string>(query: T) => Array<NonNullable<QueryResult<T>>> | [];

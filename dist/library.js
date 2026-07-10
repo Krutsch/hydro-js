@@ -13,24 +13,12 @@ const RADIO_TYPE = "radio";
 const CHECKBOX_TYPE = "checkbox";
 const DUMMY_SUFFIX = "-dummy";
 const REACTIVE_KEY_PREFIX = "hydro-reactive-";
-// Safari Polyfills
-window.requestIdleCallback =
-    /* c8 ignore next 4 */
-    window.requestIdleCallback ||
-        ((cb, _, start = window.performance.now()) => window.setTimeout(cb, 0, {
-            didTimeout: false,
-            timeRemaining: () => Math.max(0, 5 - (window.performance.now() - start)),
-        }));
-// Safari Polyfills END
-const range = document.createRange();
-range.selectNodeContents(range.createContextualFragment(`<${TEMPLATE_TAG}>`).lastChild);
-const defaultParser = range.createContextualFragment.bind(range);
+let defaultParser;
 const allNodeChanges = new WeakMap(); // Maps a Node against an array of changes. An array is necessary because a node can have multiple variables for one text / attribute.
 const elemEventFunctions = new WeakMap(); // Stores event functions in order to compare Elements against each other.
 const reactivityMap = new WeakMap(); // Maps Proxy Objects to another Map(proxy-key, node).
 const bindMap = new WeakMap(); // Bind an Element to data. If the data is being unset, the DOM Element disappears too.
 const boundElemProxies = new WeakMap(); // Reverse of bindMap: which Proxies an Element is bound to, so it can be removed from bindMap when the Element is purged.
-const tmpSwap = new WeakMap(); // Take over keyToNodeMap if the new value is a hydro Proxy. Save old reactivityMap entry here, in case for a swap operation.
 const onRenderMap = new WeakMap(); // Lifecycle Hook that is being called after rendering
 const onCleanupMap = new WeakMap(); // Lifecycle Hook that is being called when unmount function is being called
 const fragmentToElements = new WeakMap(); // Used to retreive Elements from DocumentFragment after it has been rendered – for diffing
@@ -44,14 +32,10 @@ const hydroToReactive = new WeakMap(); // Used for internal mapping from hydroKe
 // `poolKey` (when set) additionally tells unset() this slot came from
 // ternarySlotPool and should be released back to the pool instead of going
 // through the generic delete-the-hydro-property path - see ternarySlotPool.
-// `done` guards against unset() running twice for the same ternaryValue: it
-// can legitimately be invoked from two different places for the same row -
-// once directly, if the shared condition itself becomes null (ternary()'s
-// own observer callback), and once via a (possibly deferred, see
-// resetViewRows) onCleanup(unset, tr, className) dispatch. Once torn down,
-// later calls must no-op rather than fall through to the generic path, which
-// would delete a pooled slot's property and undo the whole point of pooling.
+// releasedTernaries guards duplicate deferred row cleanup after a condition
+// already disposed its derived value.
 const ternaryDisposers = new WeakMap();
+const releasedTernaries = new WeakSet();
 // ternary() runs once per list row, and its derived value is thrown away
 // almost as often (unset() fires on every row teardown). reactive()'s normal
 // path mints an ever-incrementing, never-reused key and unset() deletes it -
@@ -67,16 +51,6 @@ const ternaryDisposers = new WeakMap();
 const ternarySlotPool = [];
 let ternarySlotCounter = 0;
 let eventKeyCounter = 0;
-// Parallel to ternarySlotPool: caches the chainKeys proxy that
-// installReactiveSlot built the first time a given pooled key was minted.
-// Reusing a pooled key only ever needs a value-overwrite (see
-// installReactiveSlot's `enumerable=false` branches below) - re-deriving the
-// proxy + its setter closure on every reuse was pure waste, and was the #1
-// confirmed heap-allocation site (installReactiveSlot) in CDP heap sampling,
-// driven by ternary()'s once-per-row-per-render call frequency. Never
-// deleted, mirrors ternarySlotPool's own never-deleted lifetime.
-const ternarySlotProxies = new Map();
-const _boundFunctions = Symbol("boundFunctions"); // Cache for bound functions in Proxy, so that we create the bound version of each function only once
 const reactiveSymbol = Symbol("reactive");
 const keysSymbol = Symbol("keys");
 const keysSymbolKey = keysSymbol.description;
@@ -87,14 +61,12 @@ const htmlPartsCache = new WeakMap();
 // Memoized "is this template site structurally cacheable" decision (depends only
 // on the static strings, not the per-call variables).
 const htmlTemplateCacheable = new WeakMap();
-const viewElementsEventFunctions = new Map();
 const hWiredSymbol = Symbol("hWired");
 const isServerSideCached = isServerSide();
 let globalSchedule = true; // Decides whether to schedule rendering and updating (async)
 let reuseElements = true; // Reuses Elements when rendering
 let insertBeforeDiffing = false; // Makes sense in Chrome only
 let shouldSetReactivity = true;
-let viewElements = false;
 let ignoreIsConnected = false;
 const reactivityRegex = new RegExp(isServerSideCached
     ? `\\{\\{([^]*?)\\}\\}|${REACTIVE_KEY_PREFIX}([a-zA-Z0-9_.-]+)`
@@ -111,10 +83,24 @@ const onEventRegex = /^on/;
 // if value for bool attr is falsy, then remove attr
 // INFO: draggable and spellcheck are actually using booleans as string! Also, hidden is not really a bool attr, but is making use of the empty string too. Might consider to add 'translate' (yes and no as string)
 const boolAttrSet = new Set("allowfullscreen alpha async autofocus autoplay checked controls draggable default defer disabled formnovalidate hidden inert ismap itemscope loop multiple muted nomodule novalidate open playsinline readonly required reversed selected shadowrootclonable shadowrootcustomelementregistry shadowrootdelegatesfocus shadowrootserializable spellcheck".split(" "));
-let lastSwapElem = null;
-let internReset = false;
 let reactiveKeyCounter = 0;
+const arrayObservers = new WeakMap();
+let mutatingViewArray;
 const primitiveTypes = new Set("number string symbol boolean bigint".split(" "));
+function notifyArray(array) {
+    arrayObservers.get(array)?.forEach((handler) => handler(array));
+}
+function observeArray(array, handler) {
+    let handlers = arrayObservers.get(array);
+    if (!handlers)
+        arrayObservers.set(array, (handlers = new Set()));
+    handlers.add(handler);
+    return () => {
+        handlers.delete(handler);
+        if (handlers.size === 0)
+            arrayObservers.delete(array);
+    };
+}
 function isObject(obj) {
     return obj != null && typeof obj === "object";
 }
@@ -227,10 +213,13 @@ function removeTrackedEventListener(node, eventName, handler) {
     }
 }
 function trackBoundElement(proxy, elem) {
-    if (bindMap.has(proxy))
-        bindMap.get(proxy).push(elem);
-    else
-        bindMap.set(proxy, [elem]);
+    const bound = bindMap.get(proxy);
+    if (!bound)
+        bindMap.set(proxy, elem);
+    else if (Array.isArray(bound))
+        bound.push(elem);
+    else if (bound !== elem)
+        bindMap.set(proxy, [bound, elem]);
     const current = boundElemProxies.get(elem);
     if (!current) {
         boundElemProxies.set(elem, proxy);
@@ -244,13 +233,20 @@ function trackBoundElement(proxy, elem) {
     }
 }
 function untrackBoundElement(proxy, elem) {
-    const arr = bindMap.get(proxy);
-    if (!arr)
+    const bound = bindMap.get(proxy);
+    if (!bound)
         return;
-    const idx = arr.indexOf(elem);
+    if (!Array.isArray(bound)) {
+        if (bound === elem)
+            bindMap.delete(proxy);
+        return;
+    }
+    const idx = bound.indexOf(elem);
     if (idx !== -1)
-        arr.splice(idx, 1);
-    if (arr.length === 0)
+        bound.splice(idx, 1);
+    if (bound.length === 1)
+        bindMap.set(proxy, bound[0]);
+    else if (bound.length === 0)
         bindMap.delete(proxy);
 }
 // Native removeEventListener calls are kept here deliberately (tempting as it
@@ -293,8 +289,6 @@ function html(htmlArray, ...variables) {
         else if (isFunction(variable) || isEventObject(variable)) {
             const funcName = eventKey();
             eventFunctions.set(funcName, variable);
-            if (viewElements)
-                viewElementsEventFunctions.set(funcName, variable);
             resolvedVariables[i] = funcName;
         }
         else if (Array.isArray(variable)) {
@@ -313,7 +307,6 @@ function html(htmlArray, ...variables) {
                 if (isFunction(value) || isEventObject(value)) {
                     const funcName = eventKey();
                     eventFunctions.set(funcName, value);
-                    viewElements && viewElementsEventFunctions.set(funcName, value);
                     result += `${key}="${funcName}"`;
                 }
                 else {
@@ -327,10 +320,7 @@ function html(htmlArray, ...variables) {
     let DOMString = String.raw(htmlArray, ...resolvedVariables).trim();
     DOMString = DOMString.replace(HTML_FIND_INVALID, `<$1$2${DUMMY_SUFFIX}$3`);
     const DOM = parser(DOMString);
-    // Delay Element iteration and manipulation after the elements have been added to the DOM.
-    if (!viewElements) {
-        fillDOM(DOM, insertNodes, eventFunctions);
-    }
+    fillDOM(DOM, insertNodes, eventFunctions);
     // Return DocumentFragment
     if (DOM.childNodes.length > 1)
         return DOM;
@@ -353,6 +343,11 @@ function parser(DOMString) {
     }
     if (HTML_FIND_TABLE_SECTION.test(trimmed)) {
         return parseTableFragment("table", DOMString);
+    }
+    if (!defaultParser) {
+        const range = document.createRange();
+        range.selectNodeContents(range.createContextualFragment(`<${TEMPLATE_TAG}>`).lastChild);
+        defaultParser = range.createContextualFragment.bind(range);
     }
     return defaultParser(DOMString);
 }
@@ -720,9 +715,6 @@ function h(name, props, ...children) {
         elem.append(child);
     }
     if (needsScan) {
-        if (viewElements) {
-            return elem;
-        }
         setReactivity(elem);
     }
     markHWired(elem);
@@ -909,14 +901,6 @@ function changeAttrVal(eventName, node, resolvedObj, lastProp, isChecked = false
             : target.value);
     }
 }
-// Shared by setTraces' two "first change for this key" branches: a Map that
-// resolves both directions (change-array -> node, node -> change-array).
-function pairMap(a, b) {
-    const map = new Map();
-    map.set(a, b);
-    map.set(b, a);
-    return map;
-}
 function setTraces(start, end, node, hydroKey, resolvedObj, key) {
     // Set WeakMaps, that will be used to track a change for a Node but also to check if a Node has any other changes.
     const change = [start, end, key, resolvedObj, hydroKey];
@@ -931,20 +915,29 @@ function setTraces(start, end, node, hydroKey, resolvedObj, key) {
         const keyToNodeMap = reactivityMap.get(resolvedObj);
         const nodeToChangeMap = keyToNodeMap.get(hydroKey);
         if (nodeToChangeMap) {
-            if (nodeToChangeMap.has(node)) {
-                nodeToChangeMap.get(node).push(change);
+            if (Array.isArray(nodeToChangeMap)) {
+                const binding = nodeToChangeMap.find((entry) => entry.node === node);
+                if (binding)
+                    binding.changes.push(change);
+                else
+                    nodeToChangeMap.push({ node, changes: changeArr });
+            }
+            else if (nodeToChangeMap.node === node) {
+                nodeToChangeMap.changes.push(change);
             }
             else {
-                nodeToChangeMap.set(changeArr, node);
-                nodeToChangeMap.set(node, changeArr);
+                keyToNodeMap.set(hydroKey, [
+                    nodeToChangeMap,
+                    { node, changes: changeArr },
+                ]);
             }
         }
         else {
-            keyToNodeMap.set(hydroKey, pairMap(changeArr, node));
+            keyToNodeMap.set(hydroKey, { node, changes: changeArr });
         }
     }
     else {
-        reactivityMap.set(resolvedObj, new Map([[hydroKey, pairMap(changeArr, node)]]));
+        reactivityMap.set(resolvedObj, new Map([[hydroKey, { node, changes: changeArr }]]));
     }
 }
 // Helper function to return a value and hydro obj from a chain of properties
@@ -1298,12 +1291,19 @@ function purgeReactivity(node) {
         if (!keyToNodeMap)
             continue;
         const nodeToChangeMap = keyToNodeMap.get(hydroKey);
-        if (nodeToChangeMap && nodeToChangeMap.has(node)) {
-            const arr = nodeToChangeMap.get(node);
-            nodeToChangeMap.delete(node);
-            nodeToChangeMap.delete(arr);
-            if (nodeToChangeMap.size === 0)
+        if (Array.isArray(nodeToChangeMap)) {
+            const index = nodeToChangeMap.findIndex((entry) => entry.node === node);
+            if (index !== -1)
+                nodeToChangeMap.splice(index, 1);
+            if (nodeToChangeMap.length === 1) {
+                keyToNodeMap.set(hydroKey, nodeToChangeMap[0]);
+            }
+            else if (nodeToChangeMap.length === 0) {
                 keyToNodeMap.delete(hydroKey);
+            }
+        }
+        else if (nodeToChangeMap?.node === node) {
+            keyToNodeMap.delete(hydroKey);
         }
         if (keyToNodeMap.size === 0)
             reactivityMap.delete(proxy);
@@ -1360,13 +1360,16 @@ function purgeDetached(node) {
 }
 /* c8 ignore next 13 */
 async function schedule(fn, ...args) {
-    if ("scheduler" in window) {
-        // @ts-ignore
-        window.scheduler.postTask(() => fn(...args), { priority: "user-blocking" });
+    const host = window;
+    if ("scheduler" in host) {
+        host.scheduler.postTask(() => fn(...args), { priority: "user-blocking" });
     }
     else {
-        // @ts-ignore
-        window.requestIdleCallback(() => fn(...args));
+        const callback = () => fn(...args);
+        if (host.requestIdleCallback)
+            host.requestIdleCallback(callback);
+        else
+            host.setTimeout(callback);
     }
 }
 // Shared tail of reactive()'s slot creation: given an already-chosen unique
@@ -1382,12 +1385,8 @@ function installReactiveSlot(key, initial, enumerable) {
         Reflect.set(hydro, key, initial);
     }
     else if (Reflect.has(hydro, key)) {
-        // ternary()'s pooled slot, reused - value-only overwrite, no shape churn,
-        // and (see ternarySlotProxies) no re-creation of the proxy/setter either.
+        // ternary()'s pooled slot, reused - value-only overwrite, no shape churn.
         Reflect.set(hydro, key, initial);
-        const cachedProxy = ternarySlotProxies.get(key);
-        if (cachedProxy)
-            return cachedProxy;
     }
     else {
         // ternary()'s pooled slot, minted for the first time - bypasses the set
@@ -1407,20 +1406,35 @@ function installReactiveSlot(key, initial, enumerable) {
     if (isObject(initial)) {
         hydroToReactive.set(Reflect.get(hydro, key), chainKeysProxy);
     }
-    if (!enumerable)
-        ternarySlotProxies.set(key, chainKeysProxy);
     return chainKeysProxy;
     function setter(val) {
-        const keys = // @ts-ignore
-         (this && Reflect.has(this, reactiveSymbol) ? this : chainKeysProxy)[keysSymbolKey];
+        const source = this && Reflect.has(this, reactiveSymbol) ? this : chainKeysProxy;
+        const keys = source[keysSymbolKey];
         const [resolvedValue, resolvedObj] = resolveObject(keys);
         const lastProp = keys[keys.length - 1];
         if (isFunction(val)) {
-            const returnVal = val(resolvedValue);
+            const array = resolvedValue;
+            const observedArray = Array.isArray(resolvedValue) && arrayObservers.has(array);
+            const previousMutation = mutatingViewArray;
+            if (observedArray)
+                mutatingViewArray = array;
+            let returnVal;
+            try {
+                returnVal = val(resolvedValue);
+            }
+            catch (error) {
+                mutatingViewArray = previousMutation;
+                if (observedArray)
+                    notifyArray(array);
+                throw error;
+            }
+            mutatingViewArray = previousMutation;
             const sameObject = resolvedValue === returnVal;
-            if (sameObject)
-                return;
-            Reflect.set(resolvedObj, lastProp, returnVal ?? resolvedValue);
+            if (!sameObject) {
+                Reflect.set(resolvedObj, lastProp, returnVal ?? resolvedValue);
+            }
+            if (observedArray)
+                notifyArray(array);
         }
         else {
             Reflect.set(resolvedObj, lastProp, val);
@@ -1439,22 +1453,32 @@ function reactive(initial) {
     while (Reflect.has(hydro, key));
     return installReactiveSlot(key, initial, true);
 }
+const chainKeysMap = new WeakMap();
+let viewChainRoot;
+let viewChainKey;
+let viewChainValue;
+const chainKeysHandler = {
+    get(target, subKey, receiver) {
+        const keys = chainKeysMap.get(receiver);
+        if (subKey === reactiveSymbol.description)
+            return true;
+        if (subKey === keysSymbolKey)
+            return keys;
+        if (subKey === Symbol.toPrimitive) {
+            return () => isServerSideCached
+                ? `${REACTIVE_KEY_PREFIX}${keys.join(".")}`
+                : `{{${keys.join(".")}}}`;
+        }
+        if (receiver === viewChainRoot && subKey === viewChainKey) {
+            return viewChainValue;
+        }
+        return chainKeys(target, [...keys, subKey]);
+    },
+};
 function chainKeys(initial, keys) {
-    return new Proxy(initial, {
-        get(target, subKey, _receiver) {
-            if (subKey === reactiveSymbol.description)
-                return true;
-            if (subKey === keysSymbolKey) {
-                return keys;
-            }
-            if (subKey === Symbol.toPrimitive) {
-                return () => isServerSideCached
-                    ? `${REACTIVE_KEY_PREFIX}${keys.join(".")}`
-                    : `{{${keys.join(".")}}}`;
-            }
-            return chainKeys(target, [...keys, subKey]);
-        },
-    });
+    const proxy = new Proxy(initial, chainKeysHandler);
+    chainKeysMap.set(proxy, keys);
+    return proxy;
 }
 function getReactiveKeys(reactiveHydro) {
     const keys = reactiveHydro[keysSymbolKey];
@@ -1462,13 +1486,18 @@ function getReactiveKeys(reactiveHydro) {
     return [lastProp, keys.length === 1];
 }
 function unset(reactiveHydro) {
+    if (releasedTernaries.has(reactiveHydro))
+        return;
     const ternaryTeardown = ternaryDisposers.get(reactiveHydro);
     if (ternaryTeardown) {
-        if (ternaryTeardown.done)
-            return; // already fully torn down, see comment above
         ternaryTeardown.stop();
-        ternaryTeardown.done = true;
+        ternaryDisposers.delete(reactiveHydro);
+        releasedTernaries.add(reactiveHydro);
         if (ternaryTeardown.poolKey !== undefined) {
+            const keyMap = reactivityMap.get(hydro);
+            keyMap?.delete(ternaryTeardown.poolKey);
+            if (keyMap?.size === 0)
+                reactivityMap.delete(hydro);
             // Pooled slot: the reactivityMap/bindMap entries tied to whatever node
             // this was bound to are already handled by purgeReactivity (called on
             // that node directly by resetViewRows/purgeSubtree), and this slot was
@@ -1556,10 +1585,17 @@ function ternary(condition, trueVal, falseVal, reactiveHydro = condition) {
     // cleanup call, e.g. onCleanup(unset, tr, className)) can also stop this
     // subscription on the (possibly shared/long-lived) condition - see
     // ternaryDisposers above.
+    let current = initial;
     const stopObserving = observe(reactiveHydro, (newVal) => {
-        newVal === null
-            ? unset(ternaryValue)
-            : ternaryValue(checkCondition(newVal));
+        if (newVal === null) {
+            unset(ternaryValue);
+            return;
+        }
+        const next = checkCondition(newVal);
+        if (next !== current) {
+            current = next;
+            ternaryValue(next);
+        }
     });
     if (stopObserving) {
         ternaryDisposers.set(ternaryValue, { stop: stopObserving, poolKey });
@@ -1630,6 +1666,21 @@ function addLifecycle(lifecyleMap, elem, fn) {
         lifecyleMap.set(elem, [current, fn]);
     }
 }
+function removeLifecycle(lifecyleMap, elem, fn) {
+    const current = lifecyleMap.get(elem);
+    if (current === fn) {
+        lifecyleMap.delete(elem);
+    }
+    else if (Array.isArray(current)) {
+        const index = current.indexOf(fn);
+        if (index !== -1)
+            current.splice(index, 1);
+        if (current.length === 1)
+            lifecyleMap.set(elem, current[0]);
+        else if (current.length === 0)
+            lifecyleMap.delete(elem);
+    }
+}
 function onRender(fn, elem, ...args) {
     calledOnRender = true;
     addLifecycle(onRenderMap, elem, args.length ? fn.bind(fn, ...args) : fn);
@@ -1646,7 +1697,11 @@ function onCleanup(fn, elem, ...args) {
 // This matters when many proxies are created at once (e.g. one per list row).
 const sharedHandlers = Symbol("handlers");
 function observeMethod(key, handler) {
-    const map = Reflect.get(this, sharedHandlers);
+    let map = Reflect.get(this, sharedHandlers);
+    if (!map) {
+        map = new Map();
+        Reflect.defineProperty(this, sharedHandlers, { value: map });
+    }
     if (map.has(key)) {
         map.get(key).add(handler);
     }
@@ -1664,10 +1719,17 @@ function observeMethod(key, handler) {
     };
 }
 function getObserversMethod() {
-    return Reflect.get(this, sharedHandlers);
+    let map = Reflect.get(this, sharedHandlers);
+    if (!map) {
+        map = new Map();
+        Reflect.defineProperty(this, sharedHandlers, { value: map });
+    }
+    return map;
 }
 function unobserveMethod(key, handler) {
     const map = Reflect.get(this, sharedHandlers);
+    if (!map)
+        return;
     if (key) {
         if (map.has(key)) {
             if (handler == null) {
@@ -1686,188 +1748,186 @@ function unobserveMethod(key, handler) {
         map.clear();
     }
 }
-function generateProxy(obj) {
-    const boundFunctions = new WeakMap();
-    const proxy = new Proxy(obj ?? {}, {
-        // If receiver is a getter, then it is the object on which the search first started for the property|key -> Proxy
-        set(target, key, val, receiver) {
-            if (trackDeps) {
-                trackProxies.add(receiver);
-                if (trackMap.has(receiver)) {
-                    trackMap.get(receiver).add(key);
-                }
-                else {
-                    trackMap.set(receiver, new Set([key]));
-                }
-            }
-            let returnSet = true;
-            let oldVal = Reflect.get(target, key, receiver);
-            if (oldVal === val)
-                return returnSet;
-            // Reset Path - mostly GC
-            if (val === null) {
-                // Remove entry from reactitivyMap underlying Map
-                if (reactivityMap.has(receiver)) {
-                    const key2NodeMap = reactivityMap.get(receiver);
-                    key2NodeMap.delete(String(key));
-                    if (key2NodeMap.size === 0) {
-                        reactivityMap.delete(receiver);
-                    }
-                }
-                // Inform the Observers about null change and unobserve
-                const observer = Reflect.get(target, sharedHandlers, receiver);
-                if (observer.has(key)) {
-                    let set = observer.get(key);
-                    for (const handler of set) {
-                        handler(null, oldVal);
-                    }
-                    set.clear();
-                    receiver.unobserve(key);
-                }
-                // If oldVal is a Proxy - clean it
-                if (isObject(oldVal) && isProxy(oldVal)) {
-                    oldVal.unobserve();
-                    reactivityMap.delete(oldVal);
-                    if (bindMap.has(oldVal)) {
-                        // Snapshot + delete before removing, because removeElement now
-                        // purges the Element out of bindMap too (mutation during forEach).
-                        const elems = bindMap.get(oldVal);
-                        bindMap.delete(oldVal);
-                        elems.forEach(removeElement);
-                    }
-                }
-                else {
-                    if (bindMap.has(receiver)) {
-                        const elems = bindMap.get(receiver);
-                        bindMap.delete(receiver);
-                        elems.forEach(removeElement);
-                    }
-                }
-                // Remove item from array
-                /* c8 ignore next 4 */
-                if (!internReset && Array.isArray(receiver)) {
-                    receiver.splice(Number(key), 1);
-                    return returnSet;
-                }
-                return Reflect.deleteProperty(receiver, key);
-            }
-            // Set the value
-            if (isPromise(val)) {
-                val
-                    .then((value) => {
-                    // No Reflect in order to trigger the Getter
-                    receiver[key] = value;
-                })
-                    .catch((e) => {
-                    console.error(e);
-                    receiver[key] = null;
-                });
-                returnSet = Reflect.set(target, key, val, receiver);
-                return returnSet;
-            }
-            else if (isNode(val)) {
-                returnSet = Reflect.set(target, key, val, receiver);
-            }
-            else if (isObject(val) && !isProxy(val)) {
-                returnSet = Reflect.set(target, key, generateProxy(val), receiver);
-                // Recursively set properties to Proxys too
-                for (const [subKey, subVal] of Object.entries(val)) {
-                    if (isObject(subVal) && !isProxy(subVal)) {
-                        Reflect.set(val, subKey, generateProxy(subVal));
-                    }
-                }
+const boundFunctionsByTarget = new WeakMap();
+const arrayMutators = new Set("copyWithin fill pop push reverse shift sort splice unshift".split(" "));
+function resetProxySlot(target, key, receiver, oldVal) {
+    const keyMap = reactivityMap.get(receiver);
+    keyMap?.delete(String(key));
+    if (keyMap?.size === 0)
+        reactivityMap.delete(receiver);
+    const observers = Reflect.get(target, sharedHandlers, receiver);
+    const handlers = observers?.get(key);
+    if (handlers) {
+        for (const handler of handlers)
+            handler(null, oldVal);
+        handlers.clear();
+        receiver.unobserve(key);
+    }
+    const boundProxy = isObject(oldVal) && isProxy(oldVal) ? oldVal : receiver;
+    if (boundProxy !== receiver) {
+        boundProxy.unobserve();
+        reactivityMap.delete(boundProxy);
+    }
+    const bound = bindMap.get(boundProxy);
+    if (bound) {
+        bindMap.delete(boundProxy);
+        if (Array.isArray(bound))
+            bound.forEach(removeElement);
+        else
+            removeElement(bound);
+    }
+}
+const proxyHandler = {
+    // If receiver is a getter, then it is the object on which the search first started for the property|key -> Proxy
+    set(target, key, val, receiver) {
+        if (trackDeps) {
+            trackProxies.add(receiver);
+            if (trackMap.has(receiver)) {
+                trackMap.get(receiver).add(key);
             }
             else {
-                if (!reuseElements &&
-                    Array.isArray(receiver) &&
-                    receiver.includes(oldVal) &&
-                    receiver.includes(val) &&
-                    /* c8 ignore start */
-                    bindMap.has(val)) {
-                    const [elem] = bindMap.get(val);
-                    if (lastSwapElem !== elem) {
-                        const [oldElem] = bindMap.get(oldVal);
-                        lastSwapElem = oldElem;
-                        const prevElem = elem.previousSibling;
-                        const prevOldElem = oldElem.previousSibling;
-                        // Move it in the array too without triggering the proxy set
-                        const index = receiver.findIndex((i) => i === val);
-                        receiver.splice(Number(key), 1, val);
-                        receiver.splice(index, 1, oldVal);
-                        prevElem.after(oldElem);
-                        prevOldElem.after(elem);
-                    }
-                    return true;
+                trackMap.set(receiver, new Set([key]));
+            }
+        }
+        let returnSet = true;
+        let oldVal = Reflect.get(target, key, receiver);
+        if (oldVal === val)
+            return returnSet;
+        const observedArray = Array.isArray(receiver) &&
+            arrayObservers.has(receiver);
+        const observedReceiver = receiver;
+        // Reset Path - mostly GC
+        if (val === null) {
+            resetProxySlot(target, key, receiver, oldVal);
+            // Remove item from array
+            if (Array.isArray(receiver)) {
+                Array.prototype.splice.call(target, Number(key), 1);
+                if (observedArray && observedReceiver !== mutatingViewArray) {
+                    notifyArray(observedReceiver);
                 }
-                else {
-                    /* c8 ignore end */
-                    returnSet = Reflect.set(target, key, val, receiver);
+                return returnSet;
+            }
+            return Reflect.deleteProperty(receiver, key);
+        }
+        // Set the value
+        if (isPromise(val)) {
+            val
+                .then((value) => {
+                // No Reflect in order to trigger the Getter
+                receiver[key] = value;
+            })
+                .catch((e) => {
+                console.error(e);
+                receiver[key] = null;
+            });
+            returnSet = Reflect.set(target, key, val, receiver);
+            if (observedArray && observedReceiver !== mutatingViewArray) {
+                notifyArray(observedReceiver);
+            }
+            return returnSet;
+        }
+        else if (isNode(val)) {
+            returnSet = Reflect.set(target, key, val, receiver);
+        }
+        else if (isObject(val) && !isProxy(val)) {
+            returnSet = Reflect.set(target, key, generateProxy(val), receiver);
+            // Recursively set properties to Proxys too
+            for (const subKey in val) {
+                if (!Object.hasOwn(val, subKey))
+                    continue;
+                const subVal = val[subKey];
+                if (isObject(subVal) && !isProxy(subVal)) {
+                    Reflect.set(val, subKey, generateProxy(subVal));
                 }
             }
-            const newVal = Reflect.get(target, key, receiver);
-            // Check if DOM needs to be updated
-            // oldVal can be Proxy value too
+        }
+        else {
+            returnSet = Reflect.set(target, key, val, receiver);
+        }
+        const newVal = Reflect.get(target, key, receiver);
+        // Check if DOM needs to be updated
+        // oldVal can be Proxy value too
+        if (observedArray) {
+            if (reactivityMap.has(observedReceiver)) {
+                checkReactivityMap(observedReceiver, key, newVal, oldVal);
+            }
+        }
+        else {
             if (reactivityMap.has(oldVal)) {
                 checkReactivityMap(oldVal, key, newVal, oldVal);
             }
             else if (reactivityMap.has(receiver)) {
                 checkReactivityMap(receiver, key, newVal, oldVal);
             }
-            // current val (before setting) is a proxy - take over its keyToNodeMap
-            if (isObject(val) && isProxy(val)) {
-                if (reactivityMap.has(oldVal)) {
-                    // Store old reactivityMap if it is a swap operation
-                    if (reuseElements)
-                        tmpSwap.set(oldVal, reactivityMap.get(oldVal));
-                    if (tmpSwap.has(val)) {
-                        reactivityMap.set(oldVal, tmpSwap.get(val));
-                        tmpSwap.delete(val);
+        }
+        // Inform the Observers
+        if (returnSet) {
+            Reflect.get(target, sharedHandlers, receiver)
+                ?.get(key)
+                ?.forEach((handler) => handler(newVal, oldVal));
+        }
+        if (observedArray) {
+            if (observedReceiver !== mutatingViewArray) {
+                notifyArray(observedReceiver);
+            }
+        }
+        return returnSet;
+    },
+    // fix proxy bugs, e.g Map
+    get(target, prop, receiver) {
+        if (trackDeps) {
+            trackProxies.add(receiver);
+            if (trackMap.has(receiver)) {
+                trackMap.get(receiver).add(prop);
+            }
+            else {
+                trackMap.set(receiver, new Set([prop]));
+            }
+        }
+        const value = Reflect.get(target, prop, receiver);
+        if (!isFunction(value)) {
+            return value;
+        }
+        let boundFunctions = boundFunctionsByTarget.get(target);
+        if (!boundFunctions) {
+            boundFunctions = new WeakMap();
+            boundFunctionsByTarget.set(target, boundFunctions);
+        }
+        if (!boundFunctions.has(value)) {
+            const observedArray = Array.isArray(target) &&
+                arrayObservers.has(receiver) &&
+                arrayMutators.has(String(prop));
+            boundFunctions.set(value, observedArray
+                ? (...args) => {
+                    const array = receiver;
+                    const previousMutation = mutatingViewArray;
+                    const ownsMutation = previousMutation !== array;
+                    if (ownsMutation)
+                        mutatingViewArray = array;
+                    try {
+                        return Reflect.apply(value, receiver, args);
                     }
-                    else {
-                        reactivityMap.set(oldVal, reactivityMap.get(val));
+                    finally {
+                        if (ownsMutation) {
+                            mutatingViewArray = previousMutation;
+                            notifyArray(array);
+                        }
                     }
                 }
-            }
-            // Inform the Observers
-            if (returnSet) {
-                Reflect.get(target, sharedHandlers, receiver)
-                    .get(key)
-                    ?.forEach((handler) => handler(newVal, oldVal));
-            }
-            // If oldVal is a Proxy - clean it
-            !reuseElements && oldVal && cleanProxy(oldVal);
-            return returnSet;
-        },
-        // fix proxy bugs, e.g Map
-        get(target, prop, receiver) {
-            if (trackDeps) {
-                trackProxies.add(receiver);
-                if (trackMap.has(receiver)) {
-                    trackMap.get(receiver).add(prop);
-                }
-                else {
-                    trackMap.set(receiver, new Set([prop]));
-                }
-            }
-            const value = Reflect.get(target, prop, receiver);
-            if (!isFunction(value)) {
-                return value;
-            }
-            if (!boundFunctions.has(value)) {
-                boundFunctions.set(value, value.bind(target));
-            }
-            return boundFunctions.get(value);
-        },
-    });
+                : value.bind(target));
+        }
+        return boundFunctions.get(value);
+    },
+};
+function generateProxy(obj) {
+    const target = obj ?? {};
+    const proxy = new Proxy(target, proxyHandler);
     Reflect.defineProperty(proxy, IS_PROXY, {
         value: true,
     });
     Reflect.defineProperty(proxy, ASYNC_UPDATE, {
         value: globalSchedule,
         writable: true,
-    });
-    Reflect.defineProperty(proxy, sharedHandlers, {
-        value: new Map(),
     });
     Reflect.defineProperty(proxy, "observe" /* Placeholder.observe */, {
         value: observeMethod,
@@ -1881,23 +1941,7 @@ function generateProxy(obj) {
         value: unobserveMethod,
         configurable: true,
     });
-    if (!obj)
-        Reflect.defineProperty(proxy, _boundFunctions, {
-            value: boundFunctions,
-        });
     return proxy;
-}
-function cleanProxy(proxy) {
-    if (isObject(proxy) && isProxy(proxy)) {
-        proxy.unobserve();
-        reactivityMap.delete(proxy);
-        /* c8 ignore next 5 */
-        if (bindMap.has(proxy)) {
-            const elems = bindMap.get(proxy);
-            bindMap.delete(proxy);
-            elems.forEach(removeElement);
-        }
-    }
 }
 function checkReactivityMap(obj, key, val, oldVal) {
     const keyToNodeMap = reactivityMap.get(obj);
@@ -1905,10 +1949,10 @@ function checkReactivityMap(obj, key, val, oldVal) {
     if (nodeToChangeMap) {
         /* c8 ignore next 5 */
         if (Reflect.get(obj, ASYNC_UPDATE)) {
-            schedule(updateDOM, nodeToChangeMap, val, oldVal);
+            schedule(updateDOM, nodeToChangeMap, val, oldVal, keyToNodeMap, String(key));
         }
         else {
-            updateDOM(nodeToChangeMap, val, oldVal);
+            updateDOM(nodeToChangeMap, val, oldVal, keyToNodeMap, String(key));
         }
     }
     if (isObject(val)) {
@@ -1919,43 +1963,49 @@ function checkReactivityMap(obj, key, val, oldVal) {
             if (nodeToChangeMap) {
                 /* c8 ignore next 5 */
                 if (Reflect.get(obj, ASYNC_UPDATE)) {
-                    schedule(updateDOM, nodeToChangeMap, subVal, subOldVal);
+                    schedule(updateDOM, nodeToChangeMap, subVal, subOldVal, keyToNodeMap, subKey);
                 }
                 else {
-                    updateDOM(nodeToChangeMap, subVal, subOldVal);
+                    updateDOM(nodeToChangeMap, subVal, subOldVal, keyToNodeMap, subKey);
                 }
             }
         }
     }
 }
-function updateDOM(nodeToChangeMap, val, oldVal) {
-    nodeToChangeMap.forEach((entry) => {
-        // Circular reference in order to keep Memory low
-        if (isNode(entry)) {
-            /* c8 ignore next 5 */
-            if (!ignoreIsConnected && !entry.isConnected) {
-                const tmpChange = nodeToChangeMap.get(entry);
-                nodeToChangeMap.delete(entry);
-                nodeToChangeMap.delete(tmpChange);
-                if (allNodeChanges.has(entry)) {
-                    allNodeChanges.delete(entry);
+function updateDOM(nodeToChangeMap, val, oldVal, owner, ownerKey) {
+    const bindings = Array.isArray(nodeToChangeMap)
+        ? nodeToChangeMap
+        : [nodeToChangeMap];
+    for (let bindingIndex = bindings.length - 1; bindingIndex >= 0; bindingIndex--) {
+        const binding = bindings[bindingIndex];
+        const { node, changes } = binding;
+        if (!ignoreIsConnected && !node.isConnected) {
+            if (Array.isArray(nodeToChangeMap)) {
+                nodeToChangeMap.splice(bindingIndex, 1);
+                if (owner.get(ownerKey) === nodeToChangeMap) {
+                    if (nodeToChangeMap.length === 1)
+                        owner.set(ownerKey, nodeToChangeMap[0]);
+                    else if (nodeToChangeMap.length === 0)
+                        owner.delete(ownerKey);
                 }
             }
-            return; // Continue in forEach
+            else if (owner.get(ownerKey) === nodeToChangeMap) {
+                owner.delete(ownerKey);
+            }
+            if (allNodeChanges.has(node)) {
+                allNodeChanges.delete(node);
+            }
+            continue;
         }
         // For each change of the node update either attribute or textContent
-        for (const change of entry) {
-            const node = nodeToChangeMap.get(entry);
+        for (const change of changes) {
             const [start, end, key] = change;
             let useStartEnd = false;
             if (isNode(val) && (!isServerSideCached || val !== node)) {
                 replaceElement(val, node);
                 if (isServerSideCached || val !== node) {
-                    nodeToChangeMap.delete(node);
-                    nodeToChangeMap.delete(entry);
                     if (!isDocumentFragment(val)) {
-                        nodeToChangeMap.set(val, entry);
-                        nodeToChangeMap.set(entry, val);
+                        binding.node = val;
                     }
                 }
             }
@@ -2038,7 +2088,7 @@ function updateDOM(nodeToChangeMap, val, oldVal) {
                 }
             }
         }
-    });
+    }
 }
 // Mount freshly rendered view rows. The reactive wiring happens in a SINGLE
 // setReactivity pass. For the common case (each row is one Node) it runs over a
@@ -2065,7 +2115,7 @@ function updateDOM(nodeToChangeMap, val, oldVal) {
 // only actually walked via schedule() instead of running inline on the
 // synchronous "clear" path. updateDOM's existing isConnected check already
 // makes a stale, not-yet-purged binding harmless if something reacts in the
-// meantime; unset()'s `done` guard (see ternaryDisposers) makes a ternary
+// meantime; unset()'s released guard makes a ternary
 // row's teardown safe to run twice (once here, once if its shared condition
 // happens to go through a null transition first, e.g. selected(null) in the
 // js-framework-benchmark app) without double-releasing a pooled slot.
@@ -2128,75 +2178,172 @@ function cleanupDetachedNode(node, hasCleanup) {
     }
 }
 function addViewRows(rootElem, elements) {
-    const hasFragmentItems = elements.some(isDocumentFragment);
     const fragment = document.createDocumentFragment();
     for (const elem of elements)
         fragment.appendChild(elem);
-    if (!hasFragmentItems) {
-        if (viewElementsEventFunctions.size !== 0 ||
-            !elements.every((elem) => isHWired(elem))) {
-            setReactivity(fragment, viewElementsEventFunctions);
-            viewElementsEventFunctions.clear();
-        }
-        rootElem.appendChild(fragment);
+    rootElem.appendChild(fragment);
+    if (calledOnRender) {
         for (const elem of elements)
             runLifecyle(elem, onRenderMap);
-    }
-    else {
-        // A row rendered to a DocumentFragment loses its identity once attached, so
-        // fall back to attaching first and wiring the whole root in one pass.
-        rootElem.appendChild(fragment);
-        for (const elem of elements)
-            runLifecyle(elem, onRenderMap);
-        if (rootElem.hasChildNodes()) {
-            setReactivity(rootElem, viewElementsEventFunctions);
-            viewElementsEventFunctions.clear();
-        }
     }
 }
-function view(root, data, renderFunction) {
-    viewElements = true;
+function removeViewNode(node) {
+    if (node.parentNode)
+        node.parentNode.removeChild(node);
+    cleanupDetachedNode(node, calledOnCleanup);
+}
+function renderViewNode(value, index, reactiveData, reactiveValue, renderFunction) {
+    const previousRoot = viewChainRoot;
+    const previousKey = viewChainKey;
+    const previousValue = viewChainValue;
+    viewChainRoot = reactiveData;
+    viewChainKey = String(index);
+    viewChainValue = reactiveValue;
+    let node;
+    try {
+        node = renderFunction(value, index);
+    }
+    finally {
+        viewChainRoot = previousRoot;
+        viewChainKey = previousKey;
+        viewChainValue = previousValue;
+    }
+    if (isDocumentFragment(node)) {
+        throw new TypeError("view rows must return one ChildNode");
+    }
+    return node;
+}
+function reconcileViewRows(rootElem, data, reactiveData, state, renderFunction, keyOf) {
+    const { keys, values, nodes } = state;
+    let prefix = 0;
+    while (prefix < values.length && values[prefix] === data[prefix])
+        prefix++;
+    if (prefix === values.length && data.length >= values.length) {
+        if (prefix === data.length)
+            return;
+        const newNodes = [];
+        const seen = new Set(keys);
+        for (let i = prefix; i < data.length; i++) {
+            const key = keyOf(data[i], i);
+            if (seen.has(key))
+                throw new Error(`Duplicate view key: ${String(key)}`);
+            seen.add(key);
+            const reactiveValue = reactiveData[i];
+            const node = renderViewNode(data[i], i, reactiveData, reactiveValue, renderFunction);
+            newNodes.push(node);
+            keys.push(key);
+            values.push(data[i]);
+            nodes.push(node);
+        }
+        addViewRows(rootElem, newNodes);
+        return;
+    }
+    const oldByKey = new Map();
+    for (let i = 0; i < keys.length; i++)
+        oldByKey.set(keys[i], i);
+    const nextKeys = new Array(data.length);
+    const seen = new Set();
+    for (let i = 0; i < data.length; i++) {
+        const key = keyOf(data[i], i);
+        if (seen.has(key))
+            throw new Error(`Duplicate view key: ${String(key)}`);
+        seen.add(key);
+        nextKeys[i] = key;
+    }
+    const nextValues = new Array(data.length);
+    const nextNodes = new Array(data.length);
+    const newNodes = [];
+    const staleNodes = [];
+    let reused = 0;
+    for (let i = 0; i < data.length; i++) {
+        const value = data[i];
+        const key = nextKeys[i];
+        const oldIndex = oldByKey.get(key);
+        nextValues[i] = value;
+        if (oldIndex !== undefined && values[oldIndex] === value) {
+            nextNodes[i] = nodes[oldIndex];
+            oldByKey.delete(key);
+            reused++;
+        }
+        else {
+            if (oldIndex !== undefined) {
+                oldByKey.delete(key);
+                staleNodes.push(nodes[oldIndex]);
+            }
+            const reactiveValue = reactiveData[i];
+            const node = renderViewNode(value, i, reactiveData, reactiveValue, renderFunction);
+            nextNodes[i] = node;
+            newNodes.push(node);
+        }
+    }
+    if (values.length && reused === 0) {
+        resetViewRows(rootElem);
+        if (newNodes.length)
+            addViewRows(rootElem, newNodes);
+    }
+    else {
+        for (const node of staleNodes)
+            removeViewNode(node);
+        for (const oldIndex of oldByKey.values())
+            removeViewNode(nodes[oldIndex]);
+        let anchor = null;
+        for (let i = nextNodes.length - 1; i >= 0; i--) {
+            const node = nextNodes[i];
+            if (node.nextSibling !== anchor || node.parentNode !== rootElem) {
+                rootElem.insertBefore(node, anchor);
+            }
+            anchor = node;
+        }
+        if (calledOnRender) {
+            for (const node of newNodes)
+                runLifecyle(node, onRenderMap);
+        }
+    }
+    state.keys = nextKeys;
+    state.values = nextValues;
+    state.nodes = nextNodes;
+}
+function view(root, data, renderFunction, options = {}) {
     const rootElem = $(root);
-    const elements = getValue(data).map(renderFunction);
-    addViewRows(rootElem, elements);
-    viewElements = false;
-    const stopViewObserver = observe(data, (newData, oldData) => {
-        /* c8 ignore start */
-        viewElements = true;
-        // Reset or re-use
-        if (!newData?.length ||
-            (!reuseElements && newData?.length === oldData?.length)) {
-            resetViewRows(rootElem);
+    const keyOf = options.key ??
+        ((value, index) => isObject(value) && "id" in value ? value.id : index);
+    const state = { keys: [], values: [], nodes: [] };
+    reconcileViewRows(rootElem, getValue(data), data, state, renderFunction, keyOf);
+    const onArrayChange = () => reconcileViewRows(rootElem, getValue(data), data, state, renderFunction, keyOf);
+    let stopArrayObserver = observeArray(getValue(data), onArrayChange);
+    let disposed = false;
+    let stopDataObserver;
+    const stop = () => {
+        if (disposed)
+            return;
+        disposed = true;
+        removeLifecycle(onCleanupMap, rootElem, rootCleanup);
+        stopArrayObserver();
+        stopDataObserver?.();
+        for (const node of state.nodes)
+            removeViewNode(node);
+        state.keys.length = 0;
+        state.values.length = 0;
+        state.nodes.length = 0;
+    };
+    stopDataObserver = observe(data, (next) => {
+        if (!Array.isArray(next)) {
+            stop();
+            return;
         }
-        else if (reuseElements) {
-            for (let i = 0; i < oldData?.length && newData?.length; i++) {
-                oldData[i].id = newData[i].id;
-                oldData[i].label = newData[i].label;
-                newData[i] = oldData[i];
-            }
-        }
-        // Add to existing
-        if (oldData?.length &&
-            newData?.length > oldData?.length &&
-            newData[0] === oldData[0]) {
-            const length = oldData.length;
-            const slicedData = newData.slice(length);
-            const newElements = slicedData.map((item, i) => renderFunction(item, i + length));
-            addViewRows(rootElem, newElements);
-        }
-        // Add new
-        else if (oldData?.length === 0 || (!reuseElements && newData?.length)) {
-            if (!reuseElements && oldData?.length && rootElem.hasChildNodes()) {
-                resetViewRows(rootElem);
-            }
-            const elements = newData.map(renderFunction);
-            addViewRows(rootElem, elements);
-        }
-        viewElements = false;
-        /* c8 ignore end */
+        stopArrayObserver();
+        stopArrayObserver = observeArray(next, onArrayChange);
+        reconcileViewRows(rootElem, next, data, state, renderFunction, keyOf);
     });
-    onCleanup(stopViewObserver, rootElem);
-    onCleanup(unset, rootElem, data);
+    const rootCleanup = () => {
+        stop();
+        unset(data);
+    };
+    const dispose = () => {
+        stop();
+    };
+    onCleanup(rootCleanup, rootElem);
+    return dispose;
 }
 const hydro = generateProxy();
 const $ = document.querySelector.bind(document);

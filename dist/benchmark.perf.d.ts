@@ -1,5 +1,5 @@
 type ImplName = "html" | "h" | "view" | "view-html";
-type OperationName = "create rows" | "replace all rows" | "select row" | "create many rows" | "append rows to large table";
+type OperationName = "create rows" | "replace all rows" | "update every 10th row" | "select row" | "swap rows" | "remove row" | "create many rows" | "append rows to large table" | "clear rows";
 type PerfConfig = {
     rows?: number;
     manyRows?: number;

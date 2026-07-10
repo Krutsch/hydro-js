@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- refactor `view` into keyed reconciliation with explicit key support, reactive row access, and a disposer
+- reduce reactive trace and list-row allocation
+- fix stale ternary cleanup and retained row payloads
+- expand browser performance coverage to all keyed benchmark operations
+
 ## 1.9.1 2026-07-08
 
 - performance improvements: cached html() output now marked wired, improved boundElemProxies and resetViewRows cleanup
