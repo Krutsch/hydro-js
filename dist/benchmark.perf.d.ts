@@ -48,6 +48,8 @@ export interface KeyedResult {
     impl: ImplName;
     swapKeepsIdentity: boolean;
     removeKeepsIdentity: boolean;
+    swapDomMutations: number;
+    removeDomMutations: number;
     ok: boolean;
 }
 export declare function runPerfScenarios(deps?: PerfDeps): Promise<PerfReport>;

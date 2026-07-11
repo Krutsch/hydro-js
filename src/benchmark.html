@@ -5,32 +5,40 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>hydro-js memory benchmark</title>
     <script type="module">
-      import { runTests } from "@web/test-runner-mocha";
-      import { expect } from "@esm-bundle/chai";
       import { runScenarios, formatReport } from "../dist/benchmark.js";
 
-      runTests(async () => {
-        describe("memory", () => {
-          it("reactive nodes are released after unmount / diff / unbind", async function () {
-            this.timeout(120000);
+      const params = new URLSearchParams(location.search);
+      const iterations = params.has("iterations")
+        ? Number(params.get("iterations"))
+        : 1500;
 
-            if (typeof window.gc !== "function") {
-              throw new Error(
-                "window.gc is unavailable. Launch chromium with --js-flags=--expose-gc " +
-                  "(see web-test-runner.bench.config.mjs).",
-              );
-            }
+      (async () => {
+        if (typeof window.gc !== "function") {
+          throw new Error(
+            "window.gc is unavailable. Launch Chromium with " +
+              "--js-flags=--expose-gc.",
+          );
+        }
 
-            // Smaller N than node: browser GC is slower but still decisive.
-            const report = await runScenarios({
-              gc: () => window.gc(),
-              N: 1500,
-            });
-            console.log(formatReport(report));
-            expect(report.pass, "\n" + formatReport(report)).to.be.true;
-          });
+        const heap = performance.memory
+          ? () => performance.memory.usedJSHeapSize
+          : undefined;
+        const report = await runScenarios({
+          gc: () => window.gc(),
+          heap,
+          N: iterations,
         });
-      });
+        console.log("MEMORY_REPORT_TEXT:" + formatReport(report));
+        console.log("MEMORY_REPORT_JSON:" + JSON.stringify(report));
+      })()
+        .catch((error) => {
+          console.error(
+            "MEMORY_REPORT_ERROR:" + (error?.stack || String(error)),
+          );
+        })
+        .finally(() => {
+          window.__memoryDone = true;
+        });
     </script>
   </head>
   <body></body>

@@ -50,6 +50,7 @@ type KeyedProbe = {
   idAt: (index: number) => string;
   swap: (i: number, j: number) => void;
   removeAt: (index: number) => void;
+  countMutations: (action: () => void) => number;
 };
 
 type Operation = {
@@ -129,6 +130,8 @@ export interface KeyedResult {
   // After removing a row, that exact node is detached and its former neighbour is
   // still the same node, one slot up.
   removeKeepsIdentity: boolean;
+  swapDomMutations: number;
+  removeDomMutations: number;
   ok: boolean;
 }
 
@@ -195,7 +198,7 @@ const configDefaults: Required<PerfConfig> = {
   // count, so keep the run count low: happy-dom retains memory across iterations
   // and a large repeat count OOMs the "create many rows" op.
   repeats: 10,
-  warmups: 3,
+  warmups: 5,
 };
 
 const operations: Operation[] = [
@@ -402,7 +405,7 @@ function runKeyedChecks(
     const nodeJ = swap.nodeAt(j);
     const idI = swap.idAt(i);
     const idJ = swap.idAt(j);
-    swap.swap(i, j);
+    const swapDomMutations = swap.countMutations(() => swap.swap(i, j));
     const swapKeepsIdentity =
       !!nodeI &&
       !!nodeJ &&
@@ -418,7 +421,9 @@ function runKeyedChecks(
     const remove = removeApp.keyed!;
     const target = remove.nodeAt(removeIndex);
     const neighbour = remove.nodeAt(removeIndex + 1);
-    remove.removeAt(removeIndex);
+    const removeDomMutations = remove.countMutations(() =>
+      remove.removeAt(removeIndex),
+    );
     const removeKeepsIdentity =
       !!target &&
       !!neighbour &&
@@ -431,7 +436,13 @@ function runKeyedChecks(
       impl,
       swapKeepsIdentity,
       removeKeepsIdentity,
-      ok: swapKeepsIdentity && removeKeepsIdentity,
+      swapDomMutations,
+      removeDomMutations,
+      ok:
+        swapKeepsIdentity &&
+        removeKeepsIdentity &&
+        swapDomMutations <= 4 &&
+        removeDomMutations <= 1,
     });
   }
 
@@ -484,7 +495,7 @@ export function formatPerfReport(
     lines.push(
       `${"impl".padEnd(9)} ${"swap keeps node".padEnd(20)} ${"remove keeps node".padEnd(
         20,
-      )}  status`,
+      )} ${"swap DOM".padStart(9)} ${"remove DOM".padStart(10)}  status`,
     );
     for (const result of report.keyed) {
       lines.push(
@@ -493,7 +504,9 @@ export function formatPerfReport(
           : "NO"
         ).padEnd(20)} ${(result.removeKeepsIdentity ? "yes" : "NO").padEnd(
           20,
-        )}  ${result.ok ? "keyed" : "FAIL"}`,
+        )} ${String(result.swapDomMutations).padStart(9)} ${String(
+          result.removeDomMutations,
+        ).padStart(10)}  ${result.ok ? "keyed" : "FAIL"}`,
       );
     }
   }
@@ -844,6 +857,20 @@ function createReactiveViewApp(buildRow: RowBuilder): PerfApp {
       nodeAt: (index) => getRow(tbody, index),
       idAt: (index) =>
         getRow(tbody, index)?.querySelector("td")?.textContent ?? "",
+      countMutations(action) {
+        const observer = new MutationObserver(() => undefined);
+        observer.observe(tbody, { childList: true });
+        action();
+        const count = observer
+          .takeRecords()
+          .reduce(
+            (total, record) =>
+              total + record.addedNodes.length + record.removedNodes.length,
+            0,
+          );
+        observer.disconnect();
+        return count;
+      },
       swap: (i, j) =>
         data((prev: Row[]) => {
           [prev[i], prev[j]] = [prev[j], prev[i]];

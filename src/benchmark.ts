@@ -1,8 +1,8 @@
 // Engine-agnostic memory-leak benchmark for hydro-js.
 //
-// The same scenarios run in Node (happy-dom + `global.gc`, see benchmark.node.ts)
-// and in a real browser (chromium + `window.gc`, see benchmark.html). A GC
-// implementation is injected so the core stays environment-free.
+// Scenarios run in a clean Chromium instance with `window.gc` exposed by
+// Playwright (see benchmark.browser.node.ts and benchmark.html). GC and heap
+// readers are injected so the core stays environment-free.
 //
 // Metric: number of WeakRef survivors after forced GC. A reactive Node that is
 // unmounted / diffed-out / unbound must become collectable. Surviving nodes ==
@@ -11,7 +11,7 @@
 type Lib = typeof import("./library.js");
 
 export interface BenchDeps {
-  gc: () => void; // force GC (node: global.gc, chromium: window.gc w/ --expose-gc)
+  gc: () => void; // force GC (chromium: window.gc with --expose-gc)
   heap?: () => number; // current heap usage in bytes (optional)
   N?: number; // iterations per scenario
 }

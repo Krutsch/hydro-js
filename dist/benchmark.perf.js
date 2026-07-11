@@ -61,7 +61,7 @@ const configDefaults = {
     // count, so keep the run count low: happy-dom retains memory across iterations
     // and a large repeat count OOMs the "create many rows" op.
     repeats: 10,
-    warmups: 3,
+    warmups: 5,
 };
 const operations = [
     {
@@ -242,7 +242,7 @@ function runKeyedChecks(impls, config) {
         const nodeJ = swap.nodeAt(j);
         const idI = swap.idAt(i);
         const idJ = swap.idAt(j);
-        swap.swap(i, j);
+        const swapDomMutations = swap.countMutations(() => swap.swap(i, j));
         const swapKeepsIdentity = !!nodeI &&
             !!nodeJ &&
             swap.nodeAt(i) === nodeJ &&
@@ -256,7 +256,7 @@ function runKeyedChecks(impls, config) {
         const remove = removeApp.keyed;
         const target = remove.nodeAt(removeIndex);
         const neighbour = remove.nodeAt(removeIndex + 1);
-        remove.removeAt(removeIndex);
+        const removeDomMutations = remove.countMutations(() => remove.removeAt(removeIndex));
         const removeKeepsIdentity = !!target &&
             !!neighbour &&
             !target.isConnected &&
@@ -267,7 +267,12 @@ function runKeyedChecks(impls, config) {
             impl,
             swapKeepsIdentity,
             removeKeepsIdentity,
-            ok: swapKeepsIdentity && removeKeepsIdentity,
+            swapDomMutations,
+            removeDomMutations,
+            ok: swapKeepsIdentity &&
+                removeKeepsIdentity &&
+                swapDomMutations <= 4 &&
+                removeDomMutations <= 1,
         });
     }
     return keyed;
@@ -293,11 +298,11 @@ export function formatPerfReport(report, baseline, failures = [], tolerancePct =
         lines.push("=".repeat(100));
         lines.push("keyed-ness (DOM node identity through the framework)");
         lines.push("-".repeat(100));
-        lines.push(`${"impl".padEnd(9)} ${"swap keeps node".padEnd(20)} ${"remove keeps node".padEnd(20)}  status`);
+        lines.push(`${"impl".padEnd(9)} ${"swap keeps node".padEnd(20)} ${"remove keeps node".padEnd(20)} ${"swap DOM".padStart(9)} ${"remove DOM".padStart(10)}  status`);
         for (const result of report.keyed) {
             lines.push(`${result.impl.padEnd(9)} ${(result.swapKeepsIdentity
                 ? "yes"
-                : "NO").padEnd(20)} ${(result.removeKeepsIdentity ? "yes" : "NO").padEnd(20)}  ${result.ok ? "keyed" : "FAIL"}`);
+                : "NO").padEnd(20)} ${(result.removeKeepsIdentity ? "yes" : "NO").padEnd(20)} ${String(result.swapDomMutations).padStart(9)} ${String(result.removeDomMutations).padStart(10)}  ${result.ok ? "keyed" : "FAIL"}`);
         }
     }
     lines.push("=".repeat(100));
@@ -549,6 +554,16 @@ function createReactiveViewApp(buildRow) {
         keyed: {
             nodeAt: (index) => getRow(tbody, index),
             idAt: (index) => getRow(tbody, index)?.querySelector("td")?.textContent ?? "",
+            countMutations(action) {
+                const observer = new MutationObserver(() => undefined);
+                observer.observe(tbody, { childList: true });
+                action();
+                const count = observer
+                    .takeRecords()
+                    .reduce((total, record) => total + record.addedNodes.length + record.removedNodes.length, 0);
+                observer.disconnect();
+                return count;
+            },
             swap: (i, j) => data((prev) => {
                 [prev[i], prev[j]] = [prev[j], prev[i]];
             }),

@@ -27,7 +27,7 @@
           rows: num("rows", 1000),
           manyRows: num("manyRows", 10000),
           repeats: num("repeats", 10),
-          warmups: num("warmups", 3),
+          warmups: num("warmups", 5),
           now: () => performance.now(),
         });
         console.log("PERF_REPORT_JSON:" + JSON.stringify(report));
