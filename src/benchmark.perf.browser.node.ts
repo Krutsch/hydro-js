@@ -27,7 +27,19 @@ const flag = (name: string) => {
 const writeBaselinePath = flag("--write-baseline");
 const baselinePath = flag("--baseline");
 const maxRegressionPercent = flag("--max-regression-percent");
+const maxFirstPaintRegressionPercent = flag(
+  "--max-first-paint-regression-percent",
+);
 const asJson = args.includes("--json");
+const timeout = Number(process.env.PERF_TIMEOUT_MS ?? 120000);
+const firstPaintTimeout = Number(
+  process.env.PERF_FIRST_PAINT_TIMEOUT_MS ?? 30000,
+);
+const firstPaintRepeats = Number(process.env.PERF_FIRST_PAINT_REPEATS ?? 3);
+const firstPaintWarmups = Number(process.env.PERF_FIRST_PAINT_WARMUPS ?? 1);
+const minAbsoluteRegressionMs = Number(
+  process.env.PERF_MIN_ABSOLUTE_REGRESSION_MS ?? 50,
+);
 
 // `benchmark.perf.js` -> `library.js` touches `window`/`document` at module
 // top-level (Safari polyfills, a shared Range). The actual benchmark runs in
@@ -47,7 +59,7 @@ globalThis.document = shimWindow.document;
 globalThis.MouseEvent = shimWindow.MouseEvent;
 await shimWindow.happyDOM.waitUntilComplete();
 
-const { toPerfBaseline, diffPerf, formatPerfReport } =
+const { toPerfBaseline, diffPerf, formatPerfReport, summarizeFirstPaint } =
   await import("./benchmark.perf.js");
 type PerfReport = Awaited<
   ReturnType<typeof import("./benchmark.perf.js").runPerfScenarios>
@@ -55,6 +67,9 @@ type PerfReport = Awaited<
 type PerfBaseline = ReturnType<
   typeof import("./benchmark.perf.js").toPerfBaseline
 >;
+type FirstPaintImpl = import("./benchmark.perf.js").ImplName;
+type FirstPaintReport = import("./benchmark.perf.js").FirstPaintReport;
+type FirstPaintSample = import("./benchmark.perf.js").FirstPaintSample;
 
 const MIME: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -72,6 +87,7 @@ function startStaticServer(
       const filePath = join(root, urlPath);
       const body = await readFile(filePath);
       res.writeHead(200, {
+        "Cache-Control": "no-store",
         "Content-Type": MIME[extname(filePath)] ?? "application/octet-stream",
       });
       res.end(body);
@@ -90,6 +106,90 @@ function startStaticServer(
       });
     });
   });
+}
+
+async function measureFirstPaint(
+  browser: Awaited<ReturnType<typeof chromium.launch>>,
+  port: number,
+  implementation: FirstPaintImpl,
+  sample: number,
+): Promise<FirstPaintSample> {
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  try {
+    const query = new URLSearchParams({
+      impl: implementation,
+      cacheKey: `${implementation}-${sample}-${Date.now()}`,
+    });
+    await page.goto(
+      `http://127.0.0.1:${port}/src/benchmark.first-paint.browser.html?${query}`,
+      { waitUntil: "load" },
+    );
+    await page.waitForFunction("window.__firstPaintDone === true", null, {
+      timeout: firstPaintTimeout,
+    });
+    const result = await page.evaluate(() => {
+      const fixtureWindow = window as typeof window & {
+        __firstPaintError?: string;
+        __firstPaintReport?: Partial<FirstPaintSample> & { mounted?: boolean };
+      };
+      return {
+        error: fixtureWindow.__firstPaintError,
+        report: fixtureWindow.__firstPaintReport,
+      };
+    });
+    if (result.error) throw new Error(result.error);
+    const fcpMs = result.report?.fcpMs;
+    const importMs = result.report?.importMs;
+    const mountMs = result.report?.mountMs;
+    const paintDelayMs = result.report?.paintDelayMs;
+    if (
+      !result.report?.mounted ||
+      typeof fcpMs !== "number" ||
+      typeof importMs !== "number" ||
+      typeof mountMs !== "number" ||
+      typeof paintDelayMs !== "number" ||
+      ![fcpMs, importMs, mountMs, paintDelayMs].every(Number.isFinite)
+    ) {
+      throw new Error(
+        `First-paint fixture produced no valid FCP for ${implementation}`,
+      );
+    }
+    return { fcpMs, importMs, mountMs, paintDelayMs };
+  } finally {
+    await context.close();
+  }
+}
+
+async function runFirstPaintScenarios(
+  browser: Awaited<ReturnType<typeof chromium.launch>>,
+  port: number,
+): Promise<FirstPaintReport> {
+  const implementations: FirstPaintImpl[] = ["html", "h", "view", "view-html"];
+  const results = [];
+
+  for (const implementation of implementations) {
+    const samples: FirstPaintSample[] = [];
+    for (
+      let sample = 0;
+      sample < firstPaintWarmups + firstPaintRepeats;
+      sample++
+    ) {
+      const timing = await measureFirstPaint(
+        browser,
+        port,
+        implementation,
+        sample,
+      );
+      if (sample >= firstPaintWarmups) samples.push(timing);
+    }
+    results.push(summarizeFirstPaint(implementation, samples, true));
+  }
+
+  return {
+    results,
+    pass: results.every((result) => result.ok),
+  };
 }
 
 const { port, close } = await startStaticServer(rootDir);
@@ -125,12 +225,18 @@ try {
     { waitUntil: "load" },
   );
   await page.waitForFunction("window.__perfDone === true", null, {
-    timeout: 120000,
+    timeout,
   });
 
   if (pageError) throw new Error("Browser perf run failed: " + pageError);
   if (!reportJson) throw new Error("Browser perf run produced no report");
-  const report = JSON.parse(reportJson) as PerfReport;
+  const interactionReport = JSON.parse(reportJson) as PerfReport;
+  const firstPaint = await runFirstPaintScenarios(browser, port);
+  const report: PerfReport = {
+    ...interactionReport,
+    firstPaint,
+    pass: interactionReport.pass && firstPaint.pass,
+  };
 
   if (writeBaselinePath) {
     const target = resolve(rootDir, writeBaselinePath);
@@ -148,26 +254,50 @@ try {
     ) as PerfBaseline;
   }
 
-  // Real-browser DOM/GC noise is far higher than happy-dom's (observed up to
-  // ~75-225% IQR spread on view-html operations even with no code change at
-  // all between two consecutive runs - see /memories/repo/view-performance.md
-  // 2026-07-08). happy-dom's node harness can afford a tight 15% default
-  // because it doesn't hit real GC pauses the same way; here 15% would flag
-  // false regressions constantly. 100% still catches the regression class
-  // this file exists to guard against (the 1.8.6 comparison found 300-700%
-  // regressions), while tolerating normal single-run noise. Override with
-  // --max-regression-percent for a stricter one-off check.
+  // Real-browser DOM/GC noise is far higher than happy-dom's. The percentage
+  // tolerance catches large regressions, while the absolute floor prevents
+  // a small best-sample baseline from flagging ordinary scheduler variance.
   const tolerance =
     maxRegressionPercent !== undefined ? Number(maxRegressionPercent) : 100;
-  const diff = baseline ? diffPerf(report, baseline, tolerance) : undefined;
+  const firstPaintTolerance =
+    maxFirstPaintRegressionPercent !== undefined
+      ? Number(maxFirstPaintRegressionPercent)
+      : 25;
+  const diff = baseline
+    ? diffPerf(
+        report,
+        baseline,
+        tolerance,
+        firstPaintTolerance,
+        minAbsoluteRegressionMs,
+      )
+    : undefined;
   const failures = diff?.failures ?? [];
 
   if (asJson) {
     console.log(
-      JSON.stringify({ report, deltas: diff?.deltas, failures }, null, 2),
+      JSON.stringify(
+        {
+          report,
+          deltas: diff?.deltas,
+          firstPaintDeltas: diff?.firstPaintDeltas,
+          failures,
+        },
+        null,
+        2,
+      ),
     );
   } else {
-    console.log(formatPerfReport(report, baseline, failures, tolerance));
+    console.log(
+      formatPerfReport(
+        report,
+        baseline,
+        failures,
+        tolerance,
+        firstPaintTolerance,
+        minAbsoluteRegressionMs,
+      ),
+    );
   }
 
   process.exitCode = report.pass && !failures.length ? 0 : 1;

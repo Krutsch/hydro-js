@@ -11,7 +11,7 @@ import {
   view,
 } from "./library.js";
 
-type ImplName = "html" | "h" | "view" | "view-html";
+export type ImplName = "html" | "h" | "view" | "view-html";
 type OperationName =
   | "create rows"
   | "replace all rows"
@@ -97,6 +97,7 @@ export interface PerfReport {
   config: Required<PerfConfig>;
   results: PerfResult[];
   keyed: KeyedResult[];
+  firstPaint?: FirstPaintReport;
   pass: boolean;
 }
 
@@ -111,11 +112,60 @@ export interface PerfBaselineEntry {
 }
 export interface PerfBaseline {
   generatedAt: string;
+  config: Required<PerfConfig>;
   entries: PerfBaselineEntry[];
+  firstPaint?: FirstPaintBaseline;
 }
 export interface PerfDelta {
   impl: ImplName;
   operation: OperationName;
+  beforeMinMs: number;
+  afterMinMs: number;
+  deltaPct: number;
+  regressed: boolean;
+}
+
+export interface FirstPaintResult {
+  impl: ImplName;
+  samples: number[];
+  importSamples: number[];
+  mountSamples: number[];
+  paintDelaySamples: number[];
+  medianMs: number;
+  minMs: number;
+  importMedianMs: number;
+  mountMedianMs: number;
+  paintDelayMedianMs: number;
+  spreadPct: number;
+  mounted: boolean;
+  ok: boolean;
+}
+
+export interface FirstPaintSample {
+  fcpMs: number;
+  importMs: number;
+  mountMs: number;
+  paintDelayMs: number;
+}
+
+export interface FirstPaintReport {
+  results: FirstPaintResult[];
+  pass: boolean;
+}
+
+export interface FirstPaintBaselineEntry {
+  impl: ImplName;
+  minMs: number;
+  medianMs: number;
+}
+
+export interface FirstPaintBaseline {
+  generatedAt: string;
+  entries: FirstPaintBaselineEntry[];
+}
+
+export interface FirstPaintDelta {
+  impl: ImplName;
   beforeMinMs: number;
   afterMinMs: number;
   deltaPct: number;
@@ -454,10 +504,19 @@ export function formatPerfReport(
   baseline?: PerfBaseline,
   failures: string[] = [],
   tolerancePct = 15,
+  firstPaintTolerancePct = 25,
+  minAbsoluteRegressionMs = 0.5,
 ): string {
-  const deltas = baseline
-    ? diffPerf(report, baseline, tolerancePct).deltas
+  const comparison = baseline
+    ? diffPerf(
+        report,
+        baseline,
+        tolerancePct,
+        firstPaintTolerancePct,
+        minAbsoluteRegressionMs,
+      )
     : undefined;
+  const deltas = comparison?.deltas;
   const deltaByKey = new Map(
     (deltas ?? []).map((d) => [`${d.impl}|${d.operation}`, d]),
   );
@@ -486,6 +545,26 @@ export function formatPerfReport(
         7,
       )} ${deltaStr.padStart(9)}  ${status}`,
     );
+  }
+
+  if (report.firstPaint) {
+    const firstPaintByImpl = new Map(
+      (comparison?.firstPaintDeltas ?? []).map((delta) => [delta.impl, delta]),
+    );
+    lines.push("=".repeat(100));
+    lines.push("navigation first contentful paint (fresh browser context)");
+    lines.push("-".repeat(100));
+    lines.push(
+      `${"impl".padEnd(9)} ${"import".padStart(10)} ${"mount".padStart(10)} ${"paint wait".padStart(12)} ${"median FCP".padStart(12)} ${"min FCP".padStart(12)} ${"spread".padStart(9)} ${"Δmin".padStart(11)}  status`,
+    );
+    for (const result of report.firstPaint.results) {
+      const delta = firstPaintByImpl.get(result.impl);
+      const deltaStr = delta ? formatPct(delta.deltaPct) : "-";
+      const status = delta?.regressed ? "REGRESSED" : result.ok ? "ok" : "FAIL";
+      lines.push(
+        `${result.impl.padEnd(9)} ${formatMs(result.importMedianMs).padStart(10)} ${formatMs(result.mountMedianMs).padStart(10)} ${formatMs(result.paintDelayMedianMs).padStart(12)} ${formatMs(result.medianMs).padStart(12)} ${formatMs(result.minMs).padStart(12)} ${`${result.spreadPct.toFixed(0)}%`.padStart(9)} ${deltaStr.padStart(11)}  ${status}`,
+      );
+    }
   }
 
   if (report.keyed.length) {
@@ -524,12 +603,16 @@ export function formatPerfReport(
 export function toPerfBaseline(report: PerfReport): PerfBaseline {
   return {
     generatedAt: new Date().toISOString(),
+    config: report.config,
     entries: report.results.map((r) => ({
       impl: r.impl,
       operation: r.operation,
       minMs: r.minMs,
       medianMs: r.medianMs,
     })),
+    ...(report.firstPaint
+      ? { firstPaint: toFirstPaintBaseline(report.firstPaint) }
+      : {}),
   };
 }
 
@@ -539,12 +622,45 @@ export function diffPerf(
   report: PerfReport,
   baseline: PerfBaseline,
   tolerancePct = 15,
-): { deltas: PerfDelta[]; failures: string[] } {
-  const minAbsoluteRegressionMs = 0.5;
+  firstPaintTolerancePct = 25,
+  minAbsoluteRegressionMs = 0.5,
+): {
+  deltas: PerfDelta[];
+  firstPaintDeltas: FirstPaintDelta[];
+  failures: string[];
+} {
+  if (!baseline.config) {
+    return {
+      deltas: [],
+      firstPaintDeltas: [],
+      failures: [
+        "performance baseline has no workload config; regenerate the baseline",
+      ],
+    };
+  }
+
+  const configMismatch = (
+    ["rows", "manyRows", "repeats", "warmups"] as const
+  ).filter((key) => report.config[key] !== baseline.config[key]);
+  if (configMismatch.length) {
+    const values = configMismatch
+      .map(
+        (key) =>
+          `${key}: baseline=${baseline.config[key]}, run=${report.config[key]}`,
+      )
+      .join(", ");
+    return {
+      deltas: [],
+      firstPaintDeltas: [],
+      failures: [`performance baseline workload mismatch (${values})`],
+    };
+  }
+
   const before = new Map(
     baseline.entries.map((e) => [`${e.impl}|${e.operation}`, e]),
   );
   const deltas: PerfDelta[] = [];
+  let firstPaintDeltas: FirstPaintDelta[] = [];
   const failures: string[] = [];
   for (const r of report.results) {
     const base = before.get(`${r.impl}|${r.operation}`);
@@ -573,6 +689,100 @@ export function diffPerf(
       );
     }
   }
+
+  if (report.firstPaint && baseline.firstPaint) {
+    const firstPaintDiff = diffFirstPaint(
+      report.firstPaint,
+      baseline.firstPaint,
+      firstPaintTolerancePct,
+    );
+    firstPaintDeltas = firstPaintDiff.deltas;
+    failures.push(...firstPaintDiff.failures);
+  }
+
+  return { deltas, firstPaintDeltas, failures };
+}
+
+export function summarizeFirstPaint(
+  impl: ImplName,
+  timings: FirstPaintSample[],
+  mounted: boolean,
+): FirstPaintResult {
+  const samples = timings.map((sample) => sample.fcpMs);
+  const importSamples = timings.map((sample) => sample.importMs);
+  const mountSamples = timings.map((sample) => sample.mountMs);
+  const paintDelaySamples = timings.map((sample) => sample.paintDelayMs);
+  return {
+    impl,
+    samples,
+    importSamples,
+    mountSamples,
+    paintDelaySamples,
+    medianMs: median(samples),
+    minMs: Math.min(...samples),
+    importMedianMs: median(importSamples),
+    mountMedianMs: median(mountSamples),
+    paintDelayMedianMs: median(paintDelaySamples),
+    spreadPct: spread(samples),
+    mounted,
+    ok:
+      mounted &&
+      timings.length > 0 &&
+      timings.every((timing) => Object.values(timing).every(Number.isFinite)),
+  };
+}
+
+export function toFirstPaintBaseline(
+  report: FirstPaintReport,
+): FirstPaintBaseline {
+  return {
+    generatedAt: new Date().toISOString(),
+    entries: report.results.map((result) => ({
+      impl: result.impl,
+      minMs: result.minMs,
+      medianMs: result.medianMs,
+    })),
+  };
+}
+
+export function diffFirstPaint(
+  report: FirstPaintReport,
+  baseline: FirstPaintBaseline,
+  tolerancePct = 25,
+): { deltas: FirstPaintDelta[]; failures: string[] } {
+  const minAbsoluteRegressionMs = 20;
+  const before = new Map(baseline.entries.map((entry) => [entry.impl, entry]));
+  const deltas: FirstPaintDelta[] = [];
+  const failures: string[] = [];
+
+  for (const result of report.results) {
+    const base = before.get(result.impl);
+    if (!base) continue;
+
+    const deltaMs = result.minMs - base.minMs;
+    const deltaPct = base.minMs
+      ? (deltaMs / base.minMs) * 100
+      : deltaMs > 0
+        ? Infinity
+        : 0;
+    const regressed =
+      deltaMs > minAbsoluteRegressionMs && deltaPct > tolerancePct;
+    deltas.push({
+      impl: result.impl,
+      beforeMinMs: base.minMs,
+      afterMinMs: result.minMs,
+      deltaPct,
+      regressed,
+    });
+    if (regressed) {
+      failures.push(
+        `${result.impl} | navigation FCP min +${deltaPct.toFixed(
+          1,
+        )}% (> ${tolerancePct}%)`,
+      );
+    }
+  }
+
   return { deltas, failures };
 }
 
@@ -933,6 +1143,7 @@ function spread(values: number[]) {
 }
 
 function formatPct(pct: number) {
+  if (!Number.isFinite(pct)) return pct > 0 ? "+∞" : "-∞";
   const sign = pct > 0 ? "+" : "";
   return `${sign}${pct.toFixed(1)}%`;
 }

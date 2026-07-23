@@ -1,18 +1,3 @@
-// Members referenced more than once live as plain top-level consts instead of
-// Placeholder entries: `const enum` is fully erased by tsc (every reference is
-// replaced by its literal string at each call site), so a multi-use value here
-// would repeat itself verbatim at every call site instead of collapsing to a
-// single minifier-renameable binding.
-const STRING_TYPE = "string";
-const IS_PROXY = "isProxy";
-const ASYNC_UPDATE = "asyncUpdate";
-const TEMPLATE_TAG = "template";
-const TWO_WAY = "two-way";
-const CHANGE_EVENT = "change";
-const RADIO_TYPE = "radio";
-const CHECKBOX_TYPE = "checkbox";
-const DUMMY_SUFFIX = "-dummy";
-const REACTIVE_KEY_PREFIX = "hydro-reactive-";
 // Safari Polyfills
 window.requestIdleCallback =
     /* c8 ignore next 4 */
@@ -23,62 +8,26 @@ window.requestIdleCallback =
         }));
 // Safari Polyfills END
 const range = document.createRange();
-range.selectNodeContents(range.createContextualFragment(`<${TEMPLATE_TAG}>`).lastChild);
+range.selectNodeContents(range.createContextualFragment(`<${"template" /* Placeholder.template */}>`).lastChild);
 const defaultParser = range.createContextualFragment.bind(range);
 const allNodeChanges = new WeakMap(); // Maps a Node against an array of changes. An array is necessary because a node can have multiple variables for one text / attribute.
 const elemEventFunctions = new WeakMap(); // Stores event functions in order to compare Elements against each other.
 const reactivityMap = new WeakMap(); // Maps Proxy Objects to another Map(proxy-key, node).
 const bindMap = new WeakMap(); // Bind an Element to data. If the data is being unset, the DOM Element disappears too.
-const boundElemProxies = new WeakMap(); // Reverse of bindMap: which Proxies an Element is bound to, so it can be removed from bindMap when the Element is purged.
+const boundElemProxies = new WeakMap(); // Reverse of bindMap: which Proxies an Element is bound to.
 const tmpSwap = new WeakMap(); // Take over keyToNodeMap if the new value is a hydro Proxy. Save old reactivityMap entry here, in case for a swap operation.
 const onRenderMap = new WeakMap(); // Lifecycle Hook that is being called after rendering
 const onCleanupMap = new WeakMap(); // Lifecycle Hook that is being called when unmount function is being called
-const fragmentToElements = new WeakMap(); // Used to retreive Elements from DocumentFragment after it has been rendered – for diffing
+const fragmentToElements = new WeakMap(); // Used to retreive Elements from DocumentFragment after it has been rendered â€“ for diffing
 const hydroToReactive = new WeakMap(); // Used for internal mapping from hydroKeys to the the Proxy created by the reactive function
-// ternary() subscribes an observer onto its (often long-lived/shared) condition
-// Proxy and only returns the derived value, not the observe() stop-fn. Without
-// this, unset(ternaryValue) has no way to ever remove that subscription, so it
-// (and everything its closure captures, e.g. a row Proxy) is retained for the
-// lifetime of the condition - typically the whole app. Keyed by the derived
-// ternaryValue so unset() can look its disposer up and tear it down.
-// `poolKey` (when set) additionally tells unset() this slot came from
-// ternarySlotPool and should be released back to the pool instead of going
-// through the generic delete-the-hydro-property path - see ternarySlotPool.
-// `done` guards against unset() running twice for the same ternaryValue: it
-// can legitimately be invoked from two different places for the same row -
-// once directly, if the shared condition itself becomes null (ternary()'s
-// own observer callback), and once via a (possibly deferred, see
-// resetViewRows) onCleanup(unset, tr, className) dispatch. Once torn down,
-// later calls must no-op rather than fall through to the generic path, which
-// would delete a pooled slot's property and undo the whole point of pooling.
 const ternaryDisposers = new WeakMap();
-// ternary() runs once per list row, and its derived value is thrown away
-// almost as often (unset() fires on every row teardown). reactive()'s normal
-// path mints an ever-incrementing, never-reused key and unset() deletes it -
-// `delete` on a fast-mode (hidden-class-backed) object is a well-known V8
-// trigger for permanently downgrading that object to dictionary-mode (slow,
-// hash-map-backed) properties, and objects generally never transition back.
-// hydro is one single object for the whole app lifetime, so the very FIRST
-// ternary-driven delete anywhere can permanently slow down every future
-// property get/set on hydro - i.e. every reactive access in the whole app,
-// not just clears. Reuse a small bounded pool of slot names instead: once a
-// name has been used, the property stays declared forever and is only ever
-// value-overwritten (no shape churn, no delete).
-const ternarySlotPool = [];
-let ternarySlotCounter = 0;
-const _boundFunctions = Symbol("boundFunctions"); // Cache for bound functions in Proxy, so that we create the bound version of each function only once
 const reactiveSymbol = Symbol("reactive");
 const keysSymbol = Symbol("keys");
-const keysSymbolKey = keysSymbol.description;
 const htmlCache = new WeakMap();
-// Precompiled marker positions for a cached template, so that applying values on
-// each call is a handful of direct node touches instead of a full-subtree scan.
 const htmlPartsCache = new WeakMap();
-// Memoized "is this template site structurally cacheable" decision (depends only
-// on the static strings, not the per-call variables).
 const htmlTemplateCacheable = new WeakMap();
+const prewiredSymbol = Symbol("prewired");
 const viewElementsEventFunctions = new Map();
-const hWiredSymbol = Symbol("hWired");
 const isServerSideCached = isServerSide();
 let globalSchedule = true; // Decides whether to schedule rendering and updating (async)
 let reuseElements = true; // Reuses Elements when rendering
@@ -87,7 +36,7 @@ let shouldSetReactivity = true;
 let viewElements = false;
 let ignoreIsConnected = false;
 const reactivityRegex = new RegExp(isServerSideCached
-    ? `\\{\\{([^]*?)\\}\\}|${REACTIVE_KEY_PREFIX}([a-zA-Z0-9_.-]+)`
+    ? `\\{\\{([^]*?)\\}\\}|${"hydro-reactive-" /* Placeholder.reactiveKey */}([a-zA-Z0-9_.-]+)`
     : `\\{\\{([^]*?)\\}\\}`);
 const HTML_FIND_INVALID = /<(\/?)(html|head|body)(>|\s.*?>)/g;
 const HTML_FIND_TABLE_ROW = /^<tr(>|\s)/i;
@@ -100,11 +49,50 @@ const onEventRegex = /^on/;
 // https://html.spec.whatwg.org/#attributes-3
 // if value for bool attr is falsy, then remove attr
 // INFO: draggable and spellcheck are actually using booleans as string! Also, hidden is not really a bool attr, but is making use of the empty string too. Might consider to add 'translate' (yes and no as string)
-const boolAttrSet = new Set("allowfullscreen alpha async autofocus autoplay checked controls draggable default defer disabled formnovalidate hidden inert ismap itemscope loop multiple muted nomodule novalidate open playsinline readonly required reversed selected shadowrootclonable shadowrootcustomelementregistry shadowrootdelegatesfocus shadowrootserializable spellcheck".split(" "));
+const boolAttrSet = new Set([
+    "allowfullscreen",
+    "alpha",
+    "async",
+    "autofocus",
+    "autoplay",
+    "checked",
+    "controls",
+    "draggable",
+    "default",
+    "defer",
+    "disabled",
+    "formnovalidate",
+    "hidden",
+    "inert",
+    "ismap",
+    "itemscope",
+    "loop",
+    "multiple",
+    "muted",
+    "nomodule",
+    "novalidate",
+    "open",
+    "playsinline",
+    "readonly",
+    "required",
+    "reversed",
+    "selected",
+    "shadowrootclonable",
+    "shadowrootcustomelementregistry",
+    "shadowrootdelegatesfocus",
+    "shadowrootserializable",
+    "spellcheck",
+]);
 let lastSwapElem = null;
 let internReset = false;
 let reactiveKeyCounter = 0;
-const primitiveTypes = new Set("number string symbol boolean bigint".split(" "));
+const primitiveTypes = new Set([
+    "number",
+    "string",
+    "symbol",
+    "boolean",
+    "bigint",
+]);
 function isObject(obj) {
     return obj != null && typeof obj === "object";
 }
@@ -115,7 +103,7 @@ function isTextNode(node) {
     return node.splitText !== undefined;
 }
 function isNode(node) {
-    return node instanceof window.Node;
+    return isObject(node) && node instanceof window.Node;
 }
 function isDocumentFragment(node) {
     return node.nodeType === 11;
@@ -127,7 +115,7 @@ function isProxy(hydroObject) {
     const wasTracking = trackDeps;
     if (wasTracking)
         trackDeps = false;
-    const result = Reflect.get(hydroObject, IS_PROXY);
+    const result = Reflect.get(hydroObject, "isProxy" /* Placeholder.isProxy */);
     if (wasTracking)
         trackDeps = true;
     return result;
@@ -168,7 +156,7 @@ function setIgnoreIsConnected(ignore) {
     ignoreIsConnected = ignore;
 }
 function setHydroRecursive(obj) {
-    Reflect.set(obj, ASYNC_UPDATE, globalSchedule);
+    Reflect.set(obj, "asyncUpdate" /* Placeholder.asyncUpdate */, globalSchedule);
     for (const value of Object.values(obj)) {
         if (isObject(value) && isProxy(value)) {
             setHydroRecursive(value);
@@ -193,12 +181,12 @@ function addEventListener(node, eventName, obj) {
     const handler = isFn ? obj : obj.event;
     node.addEventListener(eventName, handler, isFn ? {} : obj.options);
     if (elemEventFunctions.has(node)) {
-        const map = elemEventFunctions.get(node);
-        if (map.has(eventName)) {
-            map.get(eventName).add(handler);
+        const events = elemEventFunctions.get(node);
+        if (events.has(eventName)) {
+            events.get(eventName).add(handler);
         }
         else {
-            map.set(eventName, new Set([handler]));
+            events.set(eventName, new Set([handler]));
         }
     }
     else {
@@ -222,11 +210,25 @@ function removeTrackedEventListener(node, eventName, handler) {
         elemEventFunctions.delete(node);
     }
 }
+function purgeTrackedEventListeners(node) {
+    const events = elemEventFunctions.get(node);
+    if (!events)
+        return;
+    events.forEach((handlers, eventName) => {
+        handlers.forEach((handler) => {
+            node.removeEventListener(eventName, handler);
+            node.removeEventListener(eventName, handler, true);
+        });
+    });
+    elemEventFunctions.delete(node);
+}
 function trackBoundElement(proxy, elem) {
-    if (bindMap.has(proxy))
+    if (bindMap.has(proxy)) {
         bindMap.get(proxy).push(elem);
-    else
+    }
+    else {
         bindMap.set(proxy, [elem]);
+    }
     const current = boundElemProxies.get(elem);
     if (!current) {
         boundElemProxies.set(elem, proxy);
@@ -240,33 +242,20 @@ function trackBoundElement(proxy, elem) {
     }
 }
 function untrackBoundElement(proxy, elem) {
-    const arr = bindMap.get(proxy);
-    if (!arr)
+    const elements = bindMap.get(proxy);
+    if (!elements)
         return;
-    const idx = arr.indexOf(elem);
-    if (idx !== -1)
-        arr.splice(idx, 1);
-    if (arr.length === 0)
+    const index = elements.indexOf(elem);
+    if (index !== -1)
+        elements.splice(index, 1);
+    if (elements.length === 0)
         bindMap.delete(proxy);
 }
-// Native removeEventListener calls are kept here deliberately (tempting as it
-// is to drop them for GC purposes alone): unmount()/removeElement() must
-// guarantee a removed node stops responding to events even if something
-// external still holds a strong reference to it and calls dispatchEvent()
-// directly - dispatchEvent doesn't care whether the target is connected or
-// reachable via GC roots elsewhere. See test.html "cleans up all event
-// listeners on unmount, not just the first".
-function purgeTrackedEventListeners(node) {
-    const map = elemEventFunctions.get(node);
-    if (!map)
-        return;
-    map.forEach((handlers, eventName) => {
-        handlers.forEach((handler) => {
-            node.removeEventListener(eventName, handler);
-            node.removeEventListener(eventName, handler, true);
-        });
-    });
-    elemEventFunctions.delete(node);
+function purgeTrackedEventListenersInSubtree(root) {
+    purgeTrackedEventListeners(root);
+    for (const node of root.querySelectorAll("*")) {
+        purgeTrackedEventListeners(node);
+    }
 }
 function html(htmlArray, ...variables) {
     const cachedDOM = createCachedHTML(htmlArray, variables);
@@ -274,7 +263,7 @@ function html(htmlArray, ...variables) {
         return cachedDOM;
     const eventFunctions = new Map(); // Temporarily store a mapping for string -> function, because eventListener have to be registered after the Element's creation
     const insertNodes = []; // Nodes, that will be added after the parsing
-    const template = `<${TEMPLATE_TAG} id="lbInsertNodes"></${TEMPLATE_TAG}>`;
+    const template = `<${"template" /* Placeholder.template */} id="lbInsertNodes"></${"template" /* Placeholder.template */}>`;
     const resolvedVariables = new Array(variables.length);
     for (let i = 0; i < variables.length; i++) {
         const variable = variables[i];
@@ -321,7 +310,7 @@ function html(htmlArray, ...variables) {
     }
     // Find elements <html|head|body>, as they cannot be created by the parser. Replace them by fake Custom Elements and replace them afterwards.
     let DOMString = String.raw(htmlArray, ...resolvedVariables).trim();
-    DOMString = DOMString.replace(HTML_FIND_INVALID, `<$1$2${DUMMY_SUFFIX}$3`);
+    DOMString = DOMString.replace(HTML_FIND_INVALID, `<$1$2${"-dummy" /* Placeholder.dummy */}$3`);
     const DOM = parser(DOMString);
     // Delay Element iteration and manipulation after the elements have been added to the DOM.
     if (!viewElements) {
@@ -359,54 +348,112 @@ function parseTableFragment(parentName, DOMString) {
     fragment.append(...parent.childNodes);
     return fragment;
 }
+function isReactiveValue(value) {
+    return ((isObject(value) || isFunction(value)) && Reflect.has(value, reactiveSymbol));
+}
+function containsReactiveMarker(value) {
+    return (value.includes("{{") ||
+        (isServerSideCached && value.includes("hydro-reactive-" /* Placeholder.reactiveKey */)));
+}
+function containsReactiveValue(value) {
+    if (Array.isArray(value))
+        return value.some(containsReactiveValue);
+    if (isReactiveValue(value))
+        return true;
+    if (typeof value === "string" /* Placeholder.string */)
+        return containsReactiveMarker(value);
+    if (isObject(value) && !isNode(value)) {
+        return Object.values(value).some(containsReactiveValue);
+    }
+    return false;
+}
+function containsParsedHTML(value) {
+    return value.includes("<") || containsReactiveMarker(value);
+}
+function canCacheHTMLPosition(htmlArray, index) {
+    const before = htmlArray[index];
+    const after = htmlArray[index + 1];
+    if (/<\/?$/.test(before))
+        return false;
+    return !/<[^>]*\s$/.test(before) || !/^\s*>/.test(after);
+}
+function isTemplateCacheable(htmlArray) {
+    const cached = htmlTemplateCacheable.get(htmlArray);
+    if (cached !== undefined)
+        return cached;
+    let cacheable = true;
+    for (let index = 0; index < htmlArray.length; index++) {
+        if (containsReactiveMarker(htmlArray[index])) {
+            cacheable = false;
+            break;
+        }
+    }
+    if (cacheable) {
+        for (let index = 0; index < htmlArray.length - 1; index++) {
+            if (!canCacheHTMLPosition(htmlArray, index)) {
+                cacheable = false;
+                break;
+            }
+        }
+    }
+    htmlTemplateCacheable.set(htmlArray, cacheable);
+    return cacheable;
+}
+function canCacheHTMLVariables(htmlArray, variables) {
+    if (!isTemplateCacheable(htmlArray))
+        return false;
+    for (const variable of variables) {
+        if (isNode(variable) || Array.isArray(variable))
+            return false;
+        if (isReactiveValue(variable))
+            continue;
+        if (containsReactiveValue(variable))
+            return false;
+        if (typeof variable === "string" /* Placeholder.string */ &&
+            containsParsedHTML(variable)) {
+            return false;
+        }
+        if (primitiveTypes.has(typeof variable) ||
+            isFunction(variable) ||
+            isEventObject(variable)) {
+            continue;
+        }
+        return false;
+    }
+    return true;
+}
 function createCachedHTML(htmlArray, variables) {
     if (!shouldSetReactivity || !canCacheHTMLVariables(htmlArray, variables)) {
-        return;
+        return undefined;
     }
+    let cachedDOM = htmlCache.get(htmlArray);
     let parts = htmlPartsCache.get(htmlArray);
-    let cached = htmlCache.get(htmlArray);
-    if (!cached) {
-        const markers = variables.map((_, i) => `__hydro${i}__`);
-        let DOMString = String.raw(htmlArray, ...markers).trim();
-        if (HTML_FIND_INVALID.test(DOMString)) {
-            HTML_FIND_INVALID.lastIndex = 0;
-            return;
-        }
-        HTML_FIND_INVALID.lastIndex = 0;
-        cached = parser(DOMString);
-        htmlCache.set(htmlArray, cached);
-        parts = buildHTMLParts(cached);
+    if (!cachedDOM) {
+        const markers = variables.map((_, index) => `__hydro${index}__`);
+        const DOMString = String.raw(htmlArray, ...markers).trim();
+        if (HTML_FIND_INVALID.test(DOMString))
+            return undefined;
+        cachedDOM = parser(DOMString);
+        htmlCache.set(htmlArray, cachedDOM);
+        parts = buildHTMLParts(cachedDOM);
         htmlPartsCache.set(htmlArray, parts);
     }
-    const DOM = cached.cloneNode(true);
-    // `values` are stringified lazily (see markerValue) so event handlers never pay
-    // the cost of String(fn).
-    const values = new Array(variables.length);
-    applyCompiledParts(DOM, parts, variables, values);
+    const DOM = cachedDOM.cloneNode(true);
+    applyCompiledParts(DOM, parts, variables);
     if (DOM.childNodes.length > 1) {
-        markHWired(DOM);
+        markCachedHTMLWired(DOM);
         return DOM;
     }
     if (!DOM.firstChild)
         return document.createTextNode("");
-    markHWired(DOM.firstChild);
+    markCachedHTMLWired(DOM.firstChild);
     return DOM.firstChild;
 }
-function markerValue(index, variables, values) {
-    const cached = values[index];
-    return cached !== undefined
-        ? cached
-        : (values[index] = String(variables[index]));
+function markCachedHTMLWired(node) {
+    Reflect.set(node, prewiredSymbol, true);
 }
-function replaceCompiledMarkers(template, markers, variables, values) {
-    let out = template;
-    for (let i = 0; i < markers.length; i++) {
-        const index = markers[i];
-        out = out
-            .split(`__hydro${index}__`)
-            .join(markerValue(index, variables, values));
-    }
-    return out;
+function isViewPrewired(node) {
+    return !!Reflect.get(node, prewiredSymbol);
 }
 function buildHTMLParts(root) {
     const parts = [];
@@ -414,28 +461,27 @@ function buildHTMLParts(root) {
     return parts;
 }
 function walkHTMLParts(node, path, parts) {
-    const children = node.childNodes;
-    for (let i = 0; i < children.length; i++) {
-        const child = children[i];
+    for (let index = 0; index < node.childNodes.length; index++) {
+        const child = node.childNodes[index];
         if (isTextNode(child)) {
-            const value = child.nodeValue;
+            const value = child.nodeValue ?? "";
             if (value.includes("__hydro")) {
                 parts.push({
-                    kind: 0,
-                    path: [...path, i],
+                    kind: "text",
+                    path: [...path, index],
                     markers: findMarkerIndexes(value),
                     template: value,
                 });
             }
         }
-        else if (child.nodeType === 1) {
+        else if (child.nodeType === window.Node.ELEMENT_NODE) {
             const elem = child;
-            const childPath = [...path, i];
+            const childPath = [...path, index];
             for (const attr of elem.getAttributeNames()) {
-                const value = elem.getAttribute(attr);
+                const value = elem.getAttribute(attr) ?? "";
                 if (value.includes("__hydro")) {
                     parts.push({
-                        kind: 1,
+                        kind: "attribute",
                         path: childPath,
                         attr,
                         markers: findMarkerIndexes(value),
@@ -448,131 +494,57 @@ function walkHTMLParts(node, path, parts) {
     }
 }
 function findMarkerIndexes(value) {
-    const result = [];
-    const regex = /__hydro(\d+)__/g;
+    const indexes = [];
+    const marker = /__hydro(\d+)__/g;
     let match;
-    while ((match = regex.exec(value)))
-        result.push(Number(match[1]));
+    while ((match = marker.exec(value)))
+        indexes.push(Number(match[1]));
+    return indexes;
+}
+function replaceCompiledMarkers(template, markers, variables, values) {
+    let result = template;
+    for (const index of markers) {
+        values[index] ??= String(variables[index]);
+        result = result.split(`__hydro${index}__`).join(values[index]);
+    }
     return result;
 }
-function applyCompiledParts(root, parts, variables, values) {
-    for (let p = 0; p < parts.length; p++) {
-        const part = parts[p];
+function applyCompiledParts(root, parts, variables) {
+    const values = new Array(variables.length);
+    for (const part of parts) {
         let node = root;
-        const path = part.path;
-        for (let i = 0; i < path.length; i++)
-            node = node.childNodes[path[i]];
-        if (part.kind === 0) {
-            const value = replaceCompiledMarkers(part.template, part.markers, variables, values);
+        for (const index of part.path)
+            node = node.childNodes[index];
+        const value = replaceCompiledMarkers(part.template, part.markers, variables, values);
+        if (part.kind === "text") {
             node.nodeValue = value;
-            // A reactive marker stringifies to "{{key.chain}}" (see chainKeys'
-            // Symbol.toPrimitive), so resolve + register it the same way the
-            // uncached path does, but targeted at this one known node instead of a
-            // NodeIterator scan over the whole subtree.
-            if (part.markers.some((m) => isReactiveValue(variables[m]))) {
+            if (part.markers.some((index) => isReactiveValue(variables[index]))) {
                 setReactivitySingle(node);
             }
+            continue;
+        }
+        const elem = node;
+        if (part.markers.length === 1 && part.attr.startsWith("on")) {
+            const variable = variables[part.markers[0]];
+            if (!isReactiveValue(variable) &&
+                (isFunction(variable) || isEventObject(variable))) {
+                elem.removeAttribute(part.attr);
+                addEventListener(elem, part.attr.replace(onEventRegex, ""), variable);
+                continue;
+            }
+        }
+        if (part.markers.some((index) => isReactiveValue(variables[index]))) {
+            setReactivitySingle(elem, part.attr, value);
         }
         else {
-            const elem = node;
-            const attr = part.attr;
-            if (part.markers.length === 1 && attr.startsWith("on")) {
-                const variable = variables[part.markers[0]];
-                // A reactive value can itself be a chainKeys Proxy wrapping a
-                // (callable) setter, so it passes isFunction() too — exclude it here
-                // and let it fall through to setReactivitySingle below, which
-                // resolves the chain first and only then checks isFunction/isEventObject
-                // on the *resolved* value.
-                if (!isReactiveValue(variable) &&
-                    (isFunction(variable) || isEventObject(variable))) {
-                    elem.removeAttribute(attr);
-                    addEventListener(elem, attr.replace(onEventRegex, ""), variable);
-                    continue;
-                }
-            }
-            const value = replaceCompiledMarkers(part.template, part.markers, variables, values);
-            if (part.markers.some((m) => isReactiveValue(variables[m]))) {
-                setReactivitySingle(elem, attr, value);
-            }
-            else {
-                setAttribute(elem, attr, value);
-            }
+            setAttribute(elem, part.attr, value);
         }
     }
-}
-function canCacheHTMLVariables(htmlArray, variables) {
-    if (!isTemplateCacheable(htmlArray))
-        return false;
-    for (let i = 0; i < variables.length; i++) {
-        const variable = variables[i];
-        if (isNode(variable) || Array.isArray(variable))
-            return false;
-        // A reactive value used directly (not nested in an object/array) is still
-        // cacheable: applyCompiledParts resolves + registers it via
-        // setReactivitySingle instead of leaving a dangling {{placeholder}}, so the
-        // template's static structure can still be reused/cloned. Nested reactive
-        // values (inside an object/array variable) fall through to
-        // containsReactiveValue and still bail, since that shape isn't compiled.
-        if (isReactiveValue(variable))
-            continue;
-        if (containsReactiveValue(variable))
-            return false;
-        if (typeof variable === STRING_TYPE && containsParsedHTML(variable)) {
-            return false;
-        }
-        if (primitiveTypes.has(typeof variable) ||
-            isFunction(variable) ||
-            isEventObject(variable)) {
-            continue;
-        }
-        return false;
-    }
-    return true;
-}
-// Structural cacheability depends only on the static template strings, so memoize
-// it per template site instead of recomputing (Array.from + regex) every call.
-function isTemplateCacheable(htmlArray) {
-    const cached = htmlTemplateCacheable.get(htmlArray);
-    if (cached !== undefined)
-        return cached;
-    let ok = true;
-    for (let i = 0; i < htmlArray.length; i++) {
-        if (containsReactiveMarker(htmlArray[i])) {
-            ok = false;
-            break;
-        }
-    }
-    if (ok) {
-        for (let i = 0; i < htmlArray.length - 1; i++) {
-            if (!canCacheHTMLPosition(htmlArray, i)) {
-                ok = false;
-                break;
-            }
-        }
-    }
-    htmlTemplateCacheable.set(htmlArray, ok);
-    return ok;
-}
-function canCacheHTMLPosition(htmlArray, index) {
-    const before = htmlArray[index];
-    const after = htmlArray[index + 1];
-    if (/<\/?$/.test(before))
-        return false;
-    if (/<[^>]*\s$/.test(before) && /^\s*>/.test(after))
-        return false;
-    return true;
-}
-function containsReactiveMarker(value) {
-    return (value.includes("{{") ||
-        (isServerSideCached && value.includes(REACTIVE_KEY_PREFIX)));
-}
-function containsParsedHTML(value) {
-    return value.includes("<") || containsReactiveMarker(value);
 }
 function fillDOM(elem, insertNodes, eventFunctions) {
     const root = document.createNodeIterator(elem, window.NodeFilter.SHOW_ELEMENT, {
         acceptNode(element) {
-            return element.localName.endsWith(DUMMY_SUFFIX)
+            return element.localName.endsWith("-dummy" /* Placeholder.dummy */)
                 ? window.NodeFilter.FILTER_ACCEPT
                 : window.NodeFilter.FILTER_REJECT;
         },
@@ -583,7 +555,7 @@ function fillDOM(elem, insertNodes, eventFunctions) {
         nodes.push(currentNode);
     }
     for (const node of nodes) {
-        const tag = node.localName.replace(DUMMY_SUFFIX, "");
+        const tag = node.localName.replace("-dummy" /* Placeholder.dummy */, "");
         const replacement = document.createElement(tag);
         /* c8 ignore next 3 */
         for (const key of node.getAttributeNames()) {
@@ -600,27 +572,11 @@ function fillDOM(elem, insertNodes, eventFunctions) {
     if (shouldSetReactivity)
         setReactivity(elem, eventFunctions);
 }
-function isReactiveValue(v) {
-    return (isObject(v) || isFunction(v)) && Reflect.has(v, reactiveSymbol);
-}
-function isHWired(node) {
-    // @ts-ignore
-    return !!node[hWiredSymbol];
-}
-function markHWired(node) {
-    // @ts-ignore
-    node[hWiredSymbol] = true;
-}
-// Direct-wire a whole-value reactive prop (or `bind`) at element-creation time,
-// so the `h`/JSX path never emits a `{{placeholder}}` that setReactivity has to
-// re-parse (regex + resolve + a second setAttribute + a full NodeIterator pass).
-// Only the unambiguous scalar/bind cases are handled; anything exotic (two-way,
-// bool attrs, node/object/function results) returns false and takes the old path.
-function hWireProp(elem, key, value) {
+function wireViewHProp(elem, key, value) {
     if (key === "bind") {
         if (!isReactiveValue(value))
             return false;
-        const keys = value[keysSymbolKey];
+        const keys = Reflect.get(value, keysSymbol.description);
         const [resolvedValue, resolvedObj] = resolveObject(keys);
         const proxy = isObject(resolvedValue) && isProxy(resolvedValue)
             ? resolvedValue
@@ -628,111 +584,103 @@ function hWireProp(elem, key, value) {
         trackBoundElement(proxy, elem);
         return true;
     }
-    if (!isReactiveValue(value))
-        return false;
-    if (key === TWO_WAY || key in elem || boolAttrSet.has(key)) {
+    if (key === "two-way" /* Placeholder.twoWay */ || key in elem || boolAttrSet.has(key)) {
         return false;
     }
-    const keys = value[keysSymbolKey];
+    const keys = Reflect.get(value, keysSymbol.description);
     const [resolvedValue, resolvedObj] = resolveObject(keys);
-    if (isNode(resolvedValue) ||
+    if (resolvedValue == null ||
+        isNode(resolvedValue) ||
         isFunction(resolvedValue) ||
         isEventObject(resolvedValue) ||
         isObject(resolvedValue)) {
-        return false; // exotic result -> let the placeholder path handle it
-    }
-    if (resolvedValue == null)
         return false;
-    const lastProp = keys[keys.length - 1];
-    const applied = setAttribute(elem, key, resolvedValue ?? "");
-    setTraces(0, applied ? String(resolvedValue ?? "").length : 0, elem, lastProp, resolvedObj, key);
+    }
+    const applied = setAttribute(elem, key, resolvedValue);
+    setTraces(0, applied ? String(resolvedValue).length : 0, elem, String(keys[keys.length - 1]), resolvedObj, key);
     return true;
 }
-// Direct-wire a single reactive text child (the common `{data[i].label}` case).
-function hWireChild(elem, child) {
-    if (!isReactiveValue(child))
-        return false;
-    const keys = child[keysSymbolKey];
+function wireViewHChild(elem, child) {
+    const keys = Reflect.get(child, keysSymbol.description);
     const [resolvedValue, resolvedObj] = resolveObject(keys);
     if (isNode(resolvedValue))
-        return false; // reactive node child -> placeholder path
-    const lastProp = keys[keys.length - 1];
-    const textContent = stringifyIfObject(resolvedValue);
+        return false;
+    const textContent = isObject(resolvedValue)
+        ? window.JSON.stringify(resolvedValue)
+        : (resolvedValue ?? "");
     const textNode = document.createTextNode(String(textContent));
     elem.appendChild(textNode);
-    setTraces(0, String(textContent).length, textNode, lastProp, resolvedObj);
+    setTraces(0, String(textContent).length, textNode, String(keys[keys.length - 1]), resolvedObj);
     return true;
-}
-// Shared by hWireChild/setReactivitySingle: reactive text stringifies objects
-// as JSON, everything else falls back to "" for null/undefined.
-function stringifyIfObject(value) {
-    return isObject(value) ? window.JSON.stringify(value) : (value ?? "");
 }
 function h(name, props, ...children) {
     if (isFunction(name))
         return name({ ...props, children });
-    const elem = typeof name === STRING_TYPE
+    const elem = typeof name === "string" /* Placeholder.string */
         ? document.createElement(name, props?.hasOwnProperty("is") ? { is: props["is"] } : undefined)
         : document.createDocumentFragment();
-    const isFrag = isDocumentFragment(elem);
+    let viewPrewired = viewElements;
     let needsScan = false;
     for (const i in props) {
-        const value = props[i];
-        if (!isFrag && hWireProp(elem, i, value))
-            continue;
-        if (!needsScan &&
-            (i === "bind" || i === TWO_WAY || containsReactiveValue(value))) {
+        if (viewElements && (i === "bind" || isReactiveValue(props[i]))) {
+            if (wireViewHProp(elem, i, props[i]))
+                continue;
+            viewPrewired = false;
+        }
+        else if (!viewElements &&
+            !needsScan &&
+            (i === "bind" ||
+                i === "two-way" /* Placeholder.twoWay */ ||
+                containsReactiveValue(props[i]))) {
             needsScan = true;
         }
         i in elem && !boolAttrSet.has(i)
             ? //@ts-ignore
-                (elem[i] = value)
-            : setAttribute(elem, i, value);
+                (elem[i] = props[i])
+            : setAttribute(elem, i, props[i]);
     }
-    if (isFrag) {
+    if (isDocumentFragment(elem)) {
         children = name.children;
     }
     const flatChildren = children.some((i) => Array.isArray(i))
         ? children.map(getChildren).flat()
         : children;
     for (const child of flatChildren) {
-        if (hWireChild(elem, child))
-            continue;
-        if (!needsScan) {
-            if (isNode(child)) {
-                needsScan = !isHWired(child);
-            }
-            else if (containsReactiveValue(child)) {
-                needsScan = true;
-            }
-        }
-        elem.append(child);
-    }
-    if (needsScan) {
+        let childIsNode = false;
         if (viewElements) {
-            return elem;
+            childIsNode = isNode(child);
+            if (childIsNode) {
+                if (!isViewPrewired(child))
+                    viewPrewired = false;
+            }
+            else if (isReactiveValue(child)) {
+                if (wireViewHChild(elem, child))
+                    continue;
+                viewPrewired = false;
+            }
         }
-        setReactivity(elem);
+        else if (!needsScan) {
+            childIsNode = isNode(child);
+            needsScan = childIsNode
+                ? !isViewPrewired(child)
+                : containsReactiveValue(child);
+        }
+        childIsNode ? elem.appendChild(child) : elem.append(child);
     }
-    markHWired(elem);
+    if (!viewElements) {
+        if (needsScan)
+            setReactivity(elem);
+        Reflect.set(elem, prewiredSymbol, true);
+    }
+    else if (viewPrewired) {
+        Reflect.set(elem, prewiredSymbol, true);
+    }
     return elem;
 }
 function getChildren(child) {
     return isObject(child) && !isNode(child)
         ? Object.values(child)
         : child;
-}
-function containsReactiveValue(value) {
-    if (isReactiveValue(value))
-        return true;
-    if (typeof value === STRING_TYPE)
-        return containsReactiveMarker(value);
-    if (Array.isArray(value))
-        return value.some(containsReactiveValue);
-    if (isObject(value) && !isNode(value)) {
-        return Object.values(value).some(containsReactiveValue);
-    }
-    return false;
 }
 /* c8 ignore end */
 function setReactivity(DOM, eventFunctions) {
@@ -766,7 +714,9 @@ function setReactivity(DOM, eventFunctions) {
         let childNode = elem.firstChild;
         while (childNode) {
             if (isTextNode(childNode) &&
-                containsReactiveMarker(childNode.nodeValue ?? "")) {
+                (childNode.nodeValue?.includes("{{") ||
+                    (isServerSideCached &&
+                        childNode.nodeValue?.includes("hydro-reactive-" /* Placeholder.reactiveKey */)))) {
                 setReactivitySingle(childNode);
             }
             childNode = childNode.nextSibling;
@@ -784,12 +734,14 @@ function setReactivitySingle(node, key, val) {
             // e.g. checked attribute or two-way attribute
             attr_OR_text = key;
             if (attr_OR_text.startsWith("{{") ||
-                (isServerSideCached && attr_OR_text.startsWith(REACTIVE_KEY_PREFIX))) {
+                (isServerSideCached && attr_OR_text.startsWith("hydro-reactive-" /* Placeholder.reactiveKey */))) {
                 node.removeAttribute(attr_OR_text);
             }
         }
     }
-    if (!containsReactiveMarker(attr_OR_text)) {
+    const hasCurlyBraces = attr_OR_text.includes("{{");
+    const hasReactiveKey = isServerSideCached && attr_OR_text.includes("hydro-reactive-" /* Placeholder.reactiveKey */);
+    if (!hasCurlyBraces && !hasReactiveKey) {
         return;
     }
     while ((match = attr_OR_text.match(reactivityRegex))) {
@@ -812,7 +764,9 @@ function setReactivitySingle(node, key, val) {
         }
         // Set Text or set Attribute
         if (isTextNode(node)) {
-            const textContent = stringifyIfObject(resolvedValue);
+            const textContent = isObject(resolvedValue)
+                ? window.JSON.stringify(resolvedValue)
+                : (resolvedValue ?? "");
             attr_OR_text = attr_OR_text.replace(hydroMatch, textContent);
             if (attr_OR_text != null) {
                 node.nodeValue = attr_OR_text;
@@ -828,20 +782,20 @@ function setReactivitySingle(node, key, val) {
                 trackBoundElement(proxy, node);
                 continue;
             }
-            else if (key === TWO_WAY) {
+            else if (key === "two-way" /* Placeholder.twoWay */) {
                 if (node instanceof window.HTMLSelectElement) {
                     node.value = resolvedValue;
-                    changeAttrVal(CHANGE_EVENT, node, resolvedObj, lastProp);
+                    changeAttrVal("change" /* Placeholder.change */, node, resolvedObj, lastProp);
                 }
                 else if (node instanceof window.HTMLInputElement &&
-                    node.type === RADIO_TYPE) {
+                    node.type === "radio" /* Placeholder.radio */) {
                     node.checked = node.value === resolvedValue;
-                    changeAttrVal(CHANGE_EVENT, node, resolvedObj, lastProp);
+                    changeAttrVal("change" /* Placeholder.change */, node, resolvedObj, lastProp);
                 }
                 else if (node instanceof window.HTMLInputElement &&
-                    node.type === CHECKBOX_TYPE) {
+                    node.type === "checkbox" /* Placeholder.checkbox */) {
                     node.checked = resolvedValue;
-                    changeAttrVal(CHANGE_EVENT, node, resolvedObj, lastProp, true);
+                    changeAttrVal("change" /* Placeholder.change */, node, resolvedObj, lastProp, true);
                 }
                 else if (node instanceof window.HTMLTextAreaElement ||
                     node instanceof window.HTMLInputElement) {
@@ -849,7 +803,7 @@ function setReactivitySingle(node, key, val) {
                     changeAttrVal("input", node, resolvedObj, lastProp);
                 }
                 attr_OR_text = attr_OR_text.replace(hydroMatch, "");
-                node.toggleAttribute(TWO_WAY);
+                node.toggleAttribute("two-way" /* Placeholder.twoWay */);
             }
             else if (isFunction(resolvedValue) || isEventObject(resolvedValue)) {
                 attr_OR_text = attr_OR_text.replace(hydroMatch, "");
@@ -898,15 +852,6 @@ function changeAttrVal(eventName, node, resolvedObj, lastProp, isChecked = false
             : target.value);
     }
 }
-// Shared by setTraces' two "first change for this key" branches: a Map that
-// resolves both directions (change-array -> node, node -> change-array).
-function pairMap(a, b) {
-    //@ts-ignore
-    return new Map([
-        [a, b],
-        [b, a],
-    ]);
-}
 function setTraces(start, end, node, hydroKey, resolvedObj, key) {
     // Set WeakMaps, that will be used to track a change for a Node but also to check if a Node has any other changes.
     const change = [start, end, key, resolvedObj, hydroKey];
@@ -930,11 +875,22 @@ function setTraces(start, end, node, hydroKey, resolvedObj, key) {
             }
         }
         else {
-            keyToNodeMap.set(hydroKey, pairMap(changeArr, node));
+            keyToNodeMap.set(hydroKey, new Map([
+                [changeArr, node],
+                [node, changeArr],
+            ]));
         }
     }
     else {
-        reactivityMap.set(resolvedObj, new Map([[hydroKey, pairMap(changeArr, node)]]));
+        reactivityMap.set(resolvedObj, new Map([
+            [
+                hydroKey,
+                new Map([
+                    [changeArr, node],
+                    [node, changeArr],
+                ]),
+            ],
+        ]));
     }
 }
 // Helper function to return a value and hydro obj from a chain of properties
@@ -992,14 +948,16 @@ function compareEvents(elem, where, onlyTextChildren) {
     }
     return true;
 }
-function pushLifecycleFunctions(functions, lifecyleMap, node) {
-    const fns = lifecyleMap.get(node);
-    if (!fns)
+function pushLifecycleFunctions(functions, lifecycleMap, node) {
+    const handlers = lifecycleMap.get(node);
+    if (!handlers)
         return;
-    if (Array.isArray(fns))
-        functions.push(...fns);
-    else
-        functions.push(fns);
+    if (Array.isArray(handlers)) {
+        functions.push(...handlers);
+    }
+    else {
+        functions.push(handlers);
+    }
 }
 function compare(elem, where, onlyTextChildren) {
     if (isDocumentFragment(elem) || isDocumentFragment(where))
@@ -1026,7 +984,7 @@ function render(elem, where = "", shouldSchedule = globalSchedule) {
         document.body.append(elem);
     }
     else {
-        if (typeof where === STRING_TYPE) {
+        if (typeof where === "string" /* Placeholder.string */) {
             const resolveStringToElement = $(where);
             if (resolveStringToElement) {
                 where = resolveStringToElement;
@@ -1038,7 +996,7 @@ function render(elem, where = "", shouldSchedule = globalSchedule) {
         if (!reuseElements) {
             const previous = where;
             replaceElement(elem, previous);
-            purgeDetached(previous); // old tree is fully discarded when not reusing
+            purgeDetached(previous);
         }
         else {
             if (isTextNode(elem)) {
@@ -1060,17 +1018,21 @@ function render(elem, where = "", shouldSchedule = globalSchedule) {
 function noop() { }
 function executeLifecycle(node, lifecyleMap) {
     if (lifecyleMap.has(node)) {
-        const fns = lifecyleMap.get(node);
+        const handlers = lifecyleMap.get(node);
         const execute = () => {
-            if (Array.isArray(fns))
-                fns.forEach((fn) => fn());
-            else
-                fns();
+            if (Array.isArray(handlers)) {
+                handlers.forEach((handler) => handler());
+            }
+            else {
+                handlers();
+            }
         };
-        if (globalSchedule)
+        if (globalSchedule) {
             schedule(execute);
-        else
+        }
+        else {
             execute();
+        }
         lifecyleMap.delete(node);
     }
 }
@@ -1185,9 +1147,6 @@ function treeDiff(elem, where) {
     else {
         replaceElement(elem, where);
     }
-    // Release reactivity bookkeeping for any candidate Node that ended up detached
-    // (discarded new Elements + non-reused old Elements). Reused Elements remain
-    // connected and are skipped. Disabled when isConnected is untrustworthy.
     if (!ignoreIsConnected) {
         for (const subElem of elemElements) {
             if (!subElem.isConnected)
@@ -1259,24 +1218,22 @@ function removeElement(elem) {
         purgeSubtree(elem);
     }
 }
-// Remove every trace of a single Node from the reactivity bookkeeping so that,
-// once it leaves the DOM, nothing in the library keeps it alive. reactivityMap
-// is keyed by long-lived Proxies (hydro never dies), so without this a removed
-// Node would be retained forever via its nodeToChangeMap entry.
 function purgeReactivity(node) {
-    if (!isTextNode(node))
+    if (isDocumentFragment(node))
+        return;
+    if (!isTextNode(node)) {
         purgeTrackedEventListeners(node);
-    // Drop bind references (bindMap holds Elements strongly).
-    const proxies = boundElemProxies.get(node);
-    if (proxies) {
-        if (Array.isArray(proxies)) {
-            for (const proxy of proxies)
-                untrackBoundElement(proxy, node);
+        const proxies = boundElemProxies.get(node);
+        if (proxies) {
+            if (Array.isArray(proxies)) {
+                for (const proxy of proxies)
+                    untrackBoundElement(proxy, node);
+            }
+            else {
+                untrackBoundElement(proxies, node);
+            }
+            boundElemProxies.delete(node);
         }
-        else {
-            untrackBoundElement(proxies, node);
-        }
-        boundElemProxies.delete(node);
     }
     const changes = allNodeChanges.get(node);
     if (!changes)
@@ -1288,10 +1245,10 @@ function purgeReactivity(node) {
         if (!keyToNodeMap)
             continue;
         const nodeToChangeMap = keyToNodeMap.get(hydroKey);
-        if (nodeToChangeMap && nodeToChangeMap.has(node)) {
-            const arr = nodeToChangeMap.get(node);
+        if (nodeToChangeMap?.has(node)) {
+            const pairedChanges = nodeToChangeMap.get(node);
             nodeToChangeMap.delete(node);
-            nodeToChangeMap.delete(arr);
+            nodeToChangeMap.delete(pairedChanges);
             if (nodeToChangeMap.size === 0)
                 keyToNodeMap.delete(hydroKey);
         }
@@ -1300,14 +1257,12 @@ function purgeReactivity(node) {
     }
     allNodeChanges.delete(node);
 }
-// Purge a Node and its whole subtree (elements + their Text children), mirroring
-// the traversal used by runLifecyle / setReactivity.
 function purgeSubtree(root) {
     if (isTextNode(root)) {
         purgeReactivity(root);
         return;
     }
-    purgeReactivity(root); // no-op for DocumentFragment
+    purgeReactivity(root);
     const elements = document.createNodeIterator(root, window.NodeFilter.SHOW_ELEMENT);
     let elem;
     while ((elem = elements.nextNode())) {
@@ -1319,8 +1274,6 @@ function purgeSubtree(root) {
             child = child.nextSibling;
         }
     }
-    // Text nodes that are direct children of a DocumentFragment have no element
-    // parent visited above, so handle them explicitly.
     if (isDocumentFragment(root)) {
         let child = root.firstChild;
         while (child) {
@@ -1330,17 +1283,16 @@ function purgeSubtree(root) {
         }
     }
 }
-// Purge a node / fragment only if it ended up detached from the document after a
-// diff or replace. Reused nodes stay connected and keep their reactivity.
 function purgeDetached(node) {
     if (ignoreIsConnected)
         return;
     if (isDocumentFragment(node)) {
-        const kids = fragmentToElements.get(node);
-        if (kids) {
-            for (const kid of kids) {
-                if (!kid.isConnected)
-                    purgeSubtree(kid);
+        const children = fragmentToElements.get(node);
+        if (children) {
+            for (const child of children) {
+                if (!child.isConnected) {
+                    purgeSubtree(child);
+                }
             }
         }
     }
@@ -1359,35 +1311,12 @@ async function schedule(fn, ...args) {
         window.requestIdleCallback(() => fn(...args));
     }
 }
-// Shared tail of reactive()'s slot creation: given an already-chosen unique
-// key, install `initial` on hydro and wrap it in a chainKeys proxy. Split out
-// so ternary()'s pooled slots (see ternarySlotPool below) can reuse the exact
-// same setter/hydroToReactive logic while only differing in how the key is
-// chosen and whether the property is enumerable.
-function installReactiveSlot(key, initial, enumerable) {
-    if (enumerable) {
-        // reactive()'s original behavior, unchanged: always go through the set
-        // trap so object/array initial values get recursively wrapped into
-        // reactive proxies.
-        Reflect.set(hydro, key, initial);
-    }
-    else if (Reflect.has(hydro, key)) {
-        // ternary()'s pooled slot, reused - value-only overwrite, no shape churn.
-        Reflect.set(hydro, key, initial);
-    }
-    else {
-        // ternary()'s pooled slot, minted for the first time - bypasses the set
-        // trap. Only reached for primitive initial values (see ternary()), so
-        // there is nothing that needs recursive proxy-wrapping here; this also
-        // makes the slot non-enumerable, so it stays as invisible to
-        // JSON.stringify(hydro)/Object.keys(hydro)/for-in as an absent property.
-        Reflect.defineProperty(hydro, key, {
-            value: initial,
-            writable: true,
-            enumerable: false,
-            configurable: true,
-        });
-    }
+function reactive(initial) {
+    let key;
+    do
+        key = `hydror${reactiveKeyCounter++}`;
+    while (Reflect.has(hydro, key));
+    Reflect.set(hydro, key, initial);
     Reflect.set(setter, reactiveSymbol, true);
     const chainKeysProxy = chainKeys(setter, [key]);
     if (isObject(initial)) {
@@ -1411,18 +1340,6 @@ function installReactiveSlot(key, initial, enumerable) {
         }
     }
 }
-function reactive(initial) {
-    let key;
-    // Monotonic counter instead of randomText() in a collision loop: reactive() is
-    // hot (one per row via ternary in list rendering). Keep the key all-lowercase –
-    // reactive keys can land in attribute *names* (`<p ${obj}>` -> `{{key}}`) which
-    // the HTML parser lowercases, so an uppercase char would break resolution. The
-    // guard still advances on the rare collision with a user-set hydro property.
-    do
-        key = `hydror${reactiveKeyCounter++}`;
-    while (Reflect.has(hydro, key));
-    return installReactiveSlot(key, initial, true);
-}
 function chainKeys(initial, keys) {
     return new Proxy(initial, {
         get(target, subKey, _receiver) {
@@ -1433,7 +1350,7 @@ function chainKeys(initial, keys) {
             }
             if (subKey === Symbol.toPrimitive) {
                 return () => isServerSideCached
-                    ? `${REACTIVE_KEY_PREFIX}${keys.join(".")}`
+                    ? `${"hydro-reactive-" /* Placeholder.reactiveKey */}${keys.join(".")}`
                     : `{{${keys.join(".")}}}`;
             }
             return chainKeys(target, [...keys, subKey]);
@@ -1446,28 +1363,19 @@ function getReactiveKeys(reactiveHydro) {
     return [lastProp, keys.length === 1];
 }
 function unset(reactiveHydro) {
-    const ternaryTeardown = ternaryDisposers.get(reactiveHydro);
-    if (ternaryTeardown) {
-        if (ternaryTeardown.done)
-            return; // already fully torn down, see comment above
-        ternaryTeardown.stop();
-        ternaryTeardown.done = true;
-        if (ternaryTeardown.poolKey !== undefined) {
-            // Pooled slot: the reactivityMap/bindMap entries tied to whatever node
-            // this was bound to are already handled by purgeReactivity (called on
-            // that node directly by resetViewRows/purgeSubtree), and this slot was
-            // never enumerable/object-valued, so there is nothing else to release -
-            // just return the name for reuse. Skips the delete-the-hydro-property
-            // path entirely (see ternarySlotPool for why that matters).
-            ternarySlotPool.push(ternaryTeardown.poolKey);
+    const ternaryDisposer = ternaryDisposers.get(reactiveHydro);
+    if (ternaryDisposer) {
+        if (ternaryDisposer.done)
             return;
-        }
+        ternaryDisposer.stop();
+        ternaryDisposer.done = true;
     }
     const [lastProp, oneKey] = getReactiveKeys(reactiveHydro);
     if (oneKey) {
+        const previousValue = Reflect.get(hydro, lastProp);
         Reflect.set(hydro, lastProp, null);
-        if (hydroToReactive.has(hydro[lastProp])) {
-            hydroToReactive.delete(hydro[lastProp]);
+        if (hydroToReactive.has(previousValue)) {
+            hydroToReactive.delete(previousValue);
         }
     }
     else {
@@ -1508,45 +1416,28 @@ function unobserve(reactiveHydro) {
     }
 }
 function ternary(condition, trueVal, falseVal, reactiveHydro = condition) {
-    const isReactiveCondition = Reflect.has(condition, reactiveSymbol);
-    const isTrueFn = isFunction(trueVal);
-    const isFalseFn = isFunction(falseVal);
-    const checkCondition = (cond) => (!isReactiveCondition && isFunction(condition)
+    const checkCondition = (cond) => (!Reflect.has(condition, reactiveSymbol) && isFunction(condition)
         ? condition(cond)
         : isPromise(cond)
             ? false
             : cond)
-        ? isTrueFn
+        ? isFunction(trueVal)
             ? trueVal()
             : trueVal
-        : isFalseFn
+        : isFunction(falseVal)
             ? falseVal()
             : falseVal;
-    const initial = checkCondition(getValue(reactiveHydro));
-    // Primitive results (the realistic case - a className string etc.) use the
-    // bounded, never-deleted slot pool (see ternarySlotPool). Object-valued
-    // results fall back to plain reactive(): installReactiveSlot's pooled path
-    // installs via defineProperty (bypassing the set trap, so it wouldn't get
-    // recursively proxied the way reactive()'s normal Reflect.set path does),
-    // and object results are rare/unrealistic for ternary() anyway.
-    const usePool = primitiveTypes.has(typeof initial);
-    const poolKey = usePool
-        ? (ternarySlotPool.pop() ?? `hydrot${ternarySlotCounter++}`)
-        : undefined;
-    const ternaryValue = usePool
-        ? installReactiveSlot(poolKey, initial, false)
-        : reactive(initial);
-    // Store the disposer so unset(ternaryValue) (the documented per-instance
-    // cleanup call, e.g. onCleanup(unset, tr, className)) can also stop this
-    // subscription on the (possibly shared/long-lived) condition - see
-    // ternaryDisposers above.
+    const ternaryValue = reactive(checkCondition(getValue(reactiveHydro)));
     const stopObserving = observe(reactiveHydro, (newVal) => {
         newVal === null
             ? unset(ternaryValue)
             : ternaryValue(checkCondition(newVal));
     });
     if (stopObserving) {
-        ternaryDisposers.set(ternaryValue, { stop: stopObserving, poolKey });
+        ternaryDisposers.set(ternaryValue, {
+            stop: stopObserving,
+            done: false,
+        });
     }
     return ternaryValue;
 }
@@ -1602,16 +1493,16 @@ function getValue(reactiveHydro) {
     return resolvedValue;
 }
 let calledOnRender = false;
-function addLifecycle(lifecyleMap, elem, fn) {
-    const current = lifecyleMap.get(elem);
+function addLifecycle(lifecycleMap, elem, fn) {
+    const current = lifecycleMap.get(elem);
     if (!current) {
-        lifecyleMap.set(elem, fn);
+        lifecycleMap.set(elem, fn);
     }
     else if (Array.isArray(current)) {
         current.push(fn);
     }
     else {
-        lifecyleMap.set(elem, [current, fn]);
+        lifecycleMap.set(elem, [current, fn]);
     }
 }
 function onRender(fn, elem, ...args) {
@@ -1624,10 +1515,6 @@ function onCleanup(fn, elem, ...args) {
     addLifecycle(onCleanupMap, elem, args.length ? fn.bind(fn, ...args) : fn);
 }
 // Core of the library
-// A single shared symbol keys every proxy's observer Map, so the observe/
-// getObservers/unobserve methods can be defined once and reused across every
-// proxy instead of allocating three closures (plus a fresh Symbol) per proxy.
-// This matters when many proxies are created at once (e.g. one per list row).
 const sharedHandlers = Symbol("handlers");
 function observeMethod(key, handler) {
     const map = Reflect.get(this, sharedHandlers);
@@ -1642,9 +1529,8 @@ function observeMethod(key, handler) {
         if (!handlersForKey)
             return;
         handlersForKey.delete(handler);
-        if (handlersForKey.size === 0) {
+        if (handlersForKey.size === 0)
             map.delete(key);
-        }
     };
 }
 function getObserversMethod() {
@@ -1653,25 +1539,26 @@ function getObserversMethod() {
 function unobserveMethod(key, handler) {
     const map = Reflect.get(this, sharedHandlers);
     if (key) {
-        if (map.has(key)) {
-            if (handler == null) {
-                map.delete(key);
-            }
-            else {
-                const set = map.get(key);
-                if (set?.has(handler)) {
-                    set.delete(handler);
-                }
+        if (!map.has(key))
+            return;
+        if (handler == null) {
+            map.delete(key);
+        }
+        else {
+            const handlersForKey = map.get(key);
+            if (handlersForKey?.has(handler)) {
+                handlersForKey.delete(handler);
+                if (handlersForKey.size === 0)
+                    map.delete(key);
             }
         }
-        /* c8 ignore next 3 */
     }
     else {
         map.clear();
     }
 }
 function generateProxy(obj) {
-    const boundFunctions = new WeakMap();
+    let boundFunctions;
     const proxy = new Proxy(obj ?? {}, {
         // If receiver is a getter, then it is the object on which the search first started for the property|key -> Proxy
         set(target, key, val, receiver) {
@@ -1713,18 +1600,16 @@ function generateProxy(obj) {
                     oldVal.unobserve();
                     reactivityMap.delete(oldVal);
                     if (bindMap.has(oldVal)) {
-                        // Snapshot + delete before removing, because removeElement now
-                        // purges the Element out of bindMap too (mutation during forEach).
-                        const elems = bindMap.get(oldVal);
+                        const elements = bindMap.get(oldVal);
                         bindMap.delete(oldVal);
-                        elems.forEach(removeElement);
+                        elements.forEach(removeElement);
                     }
                 }
                 else {
                     if (bindMap.has(receiver)) {
-                        const elems = bindMap.get(receiver);
+                        const elements = bindMap.get(receiver);
                         bindMap.delete(receiver);
-                        elems.forEach(removeElement);
+                        elements.forEach(removeElement);
                     }
                 }
                 // Remove item from array
@@ -1837,16 +1722,18 @@ function generateProxy(obj) {
             if (!isFunction(value)) {
                 return value;
             }
-            if (!boundFunctions.has(value)) {
-                boundFunctions.set(value, value.bind(target));
-            }
-            return boundFunctions.get(value);
+            const cachedFunction = boundFunctions?.get(value);
+            if (cachedFunction)
+                return cachedFunction;
+            const boundFunction = value.bind(target);
+            (boundFunctions ??= new WeakMap()).set(value, boundFunction);
+            return boundFunction;
         },
     });
-    Reflect.defineProperty(proxy, IS_PROXY, {
+    Reflect.defineProperty(proxy, "isProxy" /* Placeholder.isProxy */, {
         value: true,
     });
-    Reflect.defineProperty(proxy, ASYNC_UPDATE, {
+    Reflect.defineProperty(proxy, "asyncUpdate" /* Placeholder.asyncUpdate */, {
         value: globalSchedule,
         writable: true,
     });
@@ -1865,10 +1752,6 @@ function generateProxy(obj) {
         value: unobserveMethod,
         configurable: true,
     });
-    if (!obj)
-        Reflect.defineProperty(proxy, _boundFunctions, {
-            value: boundFunctions,
-        });
     return proxy;
 }
 function cleanProxy(proxy) {
@@ -1877,9 +1760,9 @@ function cleanProxy(proxy) {
         reactivityMap.delete(proxy);
         /* c8 ignore next 5 */
         if (bindMap.has(proxy)) {
-            const elems = bindMap.get(proxy);
+            const elements = bindMap.get(proxy);
             bindMap.delete(proxy);
-            elems.forEach(removeElement);
+            elements.forEach(removeElement);
         }
     }
 }
@@ -1888,7 +1771,7 @@ function checkReactivityMap(obj, key, val, oldVal) {
     const nodeToChangeMap = keyToNodeMap.get(String(key));
     if (nodeToChangeMap) {
         /* c8 ignore next 5 */
-        if (Reflect.get(obj, ASYNC_UPDATE)) {
+        if (Reflect.get(obj, "asyncUpdate" /* Placeholder.asyncUpdate */)) {
             schedule(updateDOM, nodeToChangeMap, val, oldVal);
         }
         else {
@@ -1902,7 +1785,7 @@ function checkReactivityMap(obj, key, val, oldVal) {
             const nodeToChangeMap = keyToNodeMap.get(subKey);
             if (nodeToChangeMap) {
                 /* c8 ignore next 5 */
-                if (Reflect.get(obj, ASYNC_UPDATE)) {
+                if (Reflect.get(obj, "asyncUpdate" /* Placeholder.asyncUpdate */)) {
                     schedule(updateDOM, nodeToChangeMap, subVal, subOldVal);
                 }
                 else {
@@ -1950,15 +1833,15 @@ function updateDOM(nodeToChangeMap, val, oldVal) {
                     text.substring(0, start) + String(val) + text.substring(end);
             }
             else {
-                if (key === TWO_WAY) {
+                if (key === "two-way" /* Placeholder.twoWay */) {
                     if (node instanceof window.HTMLInputElement &&
-                        node.type === RADIO_TYPE) {
+                        node.type === "radio" /* Placeholder.radio */) {
                         node.checked = Array.isArray(val)
                             ? val.includes(node.name)
                             : String(val) === node.value;
                     }
                     else if (node instanceof window.HTMLInputElement &&
-                        node.type === CHECKBOX_TYPE) {
+                        node.type === "checkbox" /* Placeholder.checkbox */) {
                         node.checked = val;
                     }
                     else if (node instanceof window.HTMLTextAreaElement ||
@@ -2024,45 +1907,6 @@ function updateDOM(nodeToChangeMap, val, oldVal) {
         }
     });
 }
-// Mount freshly rendered view rows. The reactive wiring happens in a SINGLE
-// setReactivity pass. For the common case (each row is one Node) it runs over a
-// detached fragment holding only the new rows – one NodeIterator, and no
-// re-scanning of already-mounted rows – then the fragment is attached. This is
-// what keeps "append rows to large table" cheap: the previous per-row
-// setReactivity spun up one NodeIterator per row (very costly in Chrome).
-// view()'s "Reset or re-use" / same-length-replace paths wipe rootElem via
-// textContent = "" instead of going through render()/removeElement() (that's
-// what keeps them cheap - no per-row diffing). But that means the rows being
-// discarded never get runLifecyle(onCleanupMap) (e.g. onCleanup(unset, tr, ...))
-// nor purgeSubtree (allNodeChanges/reactivityMap/bindMap/elemEventFunctions),
-// so anything a row's cleanup would have torn down - notably a ternary()
-// subscription on a shared condition, which pins the row's Proxy (and hence
-// its bound Element, via bindMap) forever - leaks for the lifetime of the app.
-//
-// The visual clear stays exactly as cheap as plain textContent = "" always
-// was - snapshotting the (soon-to-be-former) children into a plain array is
-// just reading a live NodeList once, then the same single native
-// textContent = "" wipe as before. The actual cleanup walk (onCleanup +
-// purgeReactivity per row) is real, unavoidable work, but nothing downstream
-// needs it to have already happened by the time this function returns - the
-// rows are already detached and invisible either way - so it's queued and
-// only actually walked via schedule() instead of running inline on the
-// synchronous "clear" path. updateDOM's existing isConnected check already
-// makes a stale, not-yet-purged binding harmless if something reacts in the
-// meantime; unset()'s `done` guard (see ternaryDisposers) makes a ternary
-// row's teardown safe to run twice (once here, once if its shared condition
-// happens to go through a null transition first, e.g. selected(null) in the
-// js-framework-benchmark app) without double-releasing a pooled slot.
-//
-// schedule() only ever actually runs once the host yields (idle callback /
-// postTask) - callers that never yield between operations (e.g. a tight
-// synchronous loop with no `await`, like a microbenchmark harness driving
-// hundreds of trials back to back) would otherwise let the queue grow
-// without bound until something finally yields, if ever. pendingCleanupRows
-// / PENDING_CLEANUP_LIMIT is a hard backstop: past that many queued rows,
-// flush synchronously right now instead of waiting for an idle moment,
-// bounding worst-case backlog to one flush's worth regardless of whether the
-// host ever yields.
 const pendingCleanupRows = [];
 let pendingCleanupCount = 0;
 let cleanupFlushScheduled = false;
@@ -2070,7 +1914,7 @@ const PENDING_CLEANUP_LIMIT = 2000;
 function resetViewRows(rootElem) {
     const rows = Array.from(rootElem.childNodes);
     rootElem.textContent = "";
-    if (!rows.length)
+    if (rows.length === 0)
         return;
     pendingCleanupRows.push(rows);
     pendingCleanupCount += rows.length;
@@ -2091,9 +1935,8 @@ function flushCleanupQueue() {
 }
 function cleanupDetachedRows(rows) {
     const hasCleanup = calledOnCleanup;
-    for (const row of rows) {
+    for (const row of rows)
         cleanupDetachedNode(row, hasCleanup);
-    }
 }
 function cleanupDetachedNode(node, hasCleanup) {
     if (isTextNode(node)) {
@@ -2111,46 +1954,32 @@ function cleanupDetachedNode(node, hasCleanup) {
         child = child.nextSibling;
     }
 }
-function addViewRows(rootElem, elements) {
-    const hasFragmentItems = elements.some(isDocumentFragment);
-    const fragment = document.createDocumentFragment();
-    for (const elem of elements)
-        fragment.appendChild(elem);
-    if (!hasFragmentItems) {
-        if (viewElementsEventFunctions.size !== 0 ||
-            !elements.every((elem) => isHWired(elem))) {
-            setReactivity(fragment, viewElementsEventFunctions);
-            viewElementsEventFunctions.clear();
-        }
-        rootElem.appendChild(fragment);
-        for (const elem of elements)
-            runLifecyle(elem, onRenderMap);
-    }
-    else {
-        // A row rendered to a DocumentFragment loses its identity once attached, so
-        // fall back to attaching first and wiring the whole root in one pass.
-        rootElem.appendChild(fragment);
-        for (const elem of elements)
-            runLifecyle(elem, onRenderMap);
-        if (rootElem.hasChildNodes()) {
-            setReactivity(rootElem, viewElementsEventFunctions);
-            viewElementsEventFunctions.clear();
-        }
-    }
-}
 function view(root, data, renderFunction) {
     viewElements = true;
     const rootElem = $(root);
     const elements = getValue(data).map(renderFunction);
-    addViewRows(rootElem, elements);
+    const initialRowsAreWired = viewElementsEventFunctions.size === 0 && elements.every(isViewPrewired);
+    rootElem.append(...elements);
+    for (const elem of elements)
+        runLifecyle(elem, onRenderMap);
+    if (rootElem.hasChildNodes() && !initialRowsAreWired) {
+        setReactivity(rootElem, viewElementsEventFunctions);
+        viewElementsEventFunctions.clear();
+    }
+    onCleanup(unset, rootElem, data);
     viewElements = false;
     const stopViewObserver = observe(data, (newData, oldData) => {
         /* c8 ignore start */
         viewElements = true;
+        let newRowsAreWired = false;
         // Reset or re-use
         if (!newData?.length ||
             (!reuseElements && newData?.length === oldData?.length)) {
             resetViewRows(rootElem);
+            if (newData === null) {
+                viewElements = false;
+                return;
+            }
         }
         else if (reuseElements) {
             for (let i = 0; i < oldData?.length && newData?.length; i++) {
@@ -2166,7 +1995,12 @@ function view(root, data, renderFunction) {
             const length = oldData.length;
             const slicedData = newData.slice(length);
             const newElements = slicedData.map((item, i) => renderFunction(item, i + length));
-            addViewRows(rootElem, newElements);
+            const appendedRowsAreWired = viewElementsEventFunctions.size === 0 &&
+                newElements.every(isViewPrewired);
+            newRowsAreWired = appendedRowsAreWired;
+            rootElem.append(...newElements);
+            for (const elem of newElements)
+                runLifecyle(elem, onRenderMap);
         }
         // Add new
         else if (oldData?.length === 0 || (!reuseElements && newData?.length)) {
@@ -2174,13 +2008,21 @@ function view(root, data, renderFunction) {
                 resetViewRows(rootElem);
             }
             const elements = newData.map(renderFunction);
-            addViewRows(rootElem, elements);
+            const replacementRowsAreWired = viewElementsEventFunctions.size === 0 &&
+                elements.every(isViewPrewired);
+            newRowsAreWired = replacementRowsAreWired;
+            rootElem.append(...elements);
+            for (const elem of elements)
+                runLifecyle(elem, onRenderMap);
+        }
+        if (rootElem.hasChildNodes() && !newRowsAreWired) {
+            setReactivity(rootElem, viewElementsEventFunctions);
+            viewElementsEventFunctions.clear();
         }
         viewElements = false;
         /* c8 ignore end */
     });
     onCleanup(stopViewObserver, rootElem);
-    onCleanup(unset, rootElem, data);
 }
 const hydro = generateProxy();
 const $ = document.querySelector.bind(document);

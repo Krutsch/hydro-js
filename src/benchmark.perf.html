@@ -17,8 +17,8 @@
               await import("../dist/benchmark.perf.js");
 
             const report = await runPerfScenarios({
-              rows: 200,
-              manyRows: 1000,
+              rows: 1000,
+              manyRows: 10000,
               now: () => performance.now(),
             });
             console.log(formatPerfReport(report));

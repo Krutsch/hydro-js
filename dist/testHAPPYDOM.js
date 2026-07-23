@@ -47,6 +47,21 @@ let condition = true;
 describe("library", () => {
     describe("functions", () => {
         describe("h", () => {
+            it("does not scan static nested elements for reactivity", () => {
+                const createNodeIterator = document.createNodeIterator;
+                let scans = 0;
+                document.createNodeIterator = ((root, whatToShow, filter) => {
+                    scans++;
+                    return createNodeIterator.call(document, root, whatToShow, filter);
+                });
+                try {
+                    h("div", null, h("span", null, h("b", null, "static")));
+                }
+                finally {
+                    document.createNodeIterator = createNodeIterator;
+                }
+                return scans === 0;
+            });
             it("handles functions correctly", () => {
                 return (h(() => h("p", null, ["Hello World"]), null, []).textContent ===
                     "Hello World");
@@ -200,6 +215,55 @@ describe("library", () => {
             });
         });
         describe("html", () => {
+            it("parses table cells and sections without wrappers", () => {
+                const cell = html `<td data-cell="first">
+          cell
+        </td>`;
+                const section = html `<thead>
+          <tr>
+            <th>heading</th>
+          </tr>
+        </thead>`;
+                return (cell.localName === "td" &&
+                    cell.dataset.cell === "first" &&
+                    section.localName === "thead" &&
+                    section.querySelector("th")?.textContent === "heading");
+            });
+            it("reuses compiled templates with independent values and events", () => {
+                let firstCalls = 0;
+                let secondCalls = 0;
+                const makeButton = (label, handler) => html `<button data-label=${label} onclick=${handler}>
+            ${label}
+          </button>`;
+                const first = makeButton("one", () => firstCalls++);
+                const second = makeButton("two", () => secondCalls++);
+                first.click();
+                second.click();
+                return (first !== second &&
+                    first.dataset.label === "one" &&
+                    second.dataset.label === "two" &&
+                    first.textContent?.trim() === "one" &&
+                    second.textContent?.trim() === "two" &&
+                    firstCalls === 1 &&
+                    secondCalls === 1);
+            });
+            it("keeps cached template reactive values wired", () => {
+                const value = reactive("one");
+                const makeElement = () => html `<p class=${value}>${value}</p>`;
+                const first = makeElement();
+                const second = makeElement();
+                const unmountFirst = render(first);
+                const unmountSecond = render(second);
+                value("two");
+                const condition = first.className === "two" &&
+                    first.textContent === "two" &&
+                    second.className === "two" &&
+                    second.textContent === "two";
+                unmountFirst();
+                unmountSecond();
+                unset(value);
+                return condition;
+            });
             // https://html.spec.whatwg.org/
             [
                 "a",
@@ -939,6 +1003,29 @@ describe("library", () => {
                 elem.dispatchEvent(new window.Event("mouseover"));
                 return firedBeforeUnmount && clicked === 1 && hovered === 1;
             });
+            it("releases reactive traces when unmounting and replacing nodes", () => {
+                const value = reactive("mounted");
+                const elem = html `<p>${value}</p>`;
+                const text = elem.firstChild;
+                const unmount = render(elem);
+                const trackedWhileMounted = internals.allNodeChanges.has(text);
+                unmount();
+                const releasedOnUnmount = !internals.allNodeChanges.has(text);
+                setReuseElements(false);
+                const replacementValue = reactive("replaced");
+                const replacement = html `<p>
+          ${replacementValue}
+        </p>`;
+                const replacementText = replacement.firstChild;
+                render(replacement);
+                const replacementUnmount = render(html `<p>next</p>`, replacement);
+                const releasedOnReplace = !internals.allNodeChanges.has(replacementText);
+                replacementUnmount();
+                unset(value);
+                unset(replacementValue);
+                setReuseElements(true);
+                return trackedWhileMounted && releasedOnUnmount && releasedOnReplace;
+            });
             it("replacing elements will not stop their state", async () => {
                 await sleep(300);
                 setInsertDiffing(true);
@@ -1263,6 +1350,24 @@ describe("library", () => {
                     hydro.d === undefined,
                     getValue(e) === 44);
             });
+            it("releases object reactive mapping on unset", () => {
+                const value = reactive({ label: "mapped" });
+                const proxy = getValue(value);
+                const wasMapped = internals.hydroToReactive.has(proxy);
+                unset(value);
+                return wasMapped && !internals.hydroToReactive.has(proxy);
+            });
+            it("shares observer methods between generated proxies", () => {
+                const firstReactive = reactive({ value: 1 });
+                const secondReactive = reactive({ value: 2 });
+                const first = getValue(firstReactive);
+                const second = getValue(secondReactive);
+                const firstObserve = Object.getOwnPropertyDescriptor(first, "observe").value;
+                const secondObserve = Object.getOwnPropertyDescriptor(second, "observe").value;
+                unset(firstReactive);
+                unset(secondReactive);
+                return firstObserve === secondObserve;
+            });
         });
         describe("watchEffect", () => {
             it("tracks and dependencies and re-runs the function (setter)", async () => {
@@ -1314,6 +1419,19 @@ describe("library", () => {
                 });
                 return watchCounter === 1;
             });
+            it("releases observers and tolerates stopping twice", () => {
+                const count = reactive(0);
+                let calls = 0;
+                const stop = watchEffect(() => {
+                    getValue(count);
+                    calls++;
+                });
+                stop();
+                stop();
+                count(1);
+                unset(count);
+                return calls === 1;
+            });
         });
         describe("observe", () => {
             it("observe hydro", () => {
@@ -1327,6 +1445,15 @@ describe("library", () => {
                     hydro.test = null;
                 });
                 return test === 1;
+            });
+            it("removes empty observer entries for a handler", () => {
+                const handler = () => undefined;
+                hydro.observerCleanup = 0;
+                hydro.observe("observerCleanup", handler);
+                hydro.unobserve("observerCleanup", handler);
+                const released = !hydro.getObservers().has("observerCleanup");
+                hydro.observerCleanup = null;
+                return released;
             });
             it("observe reactive", () => {
                 let result = 0;
@@ -1539,6 +1666,17 @@ describe("library", () => {
                 });
                 return count === 1;
             });
+            it("runs every lifecycle callback registered on a node", () => {
+                const elem = html `<p>lifecycle</p>`;
+                let rendered = 0;
+                let cleaned = 0;
+                onRender(() => rendered++, elem);
+                onRender(() => rendered++, elem);
+                onCleanup(() => cleaned++, elem);
+                onCleanup(() => cleaned++, elem);
+                render(elem)();
+                return rendered === 2 && cleaned === 2;
+            });
         });
         describe("onCleanup", () => {
             it("onCleanup", () => {
@@ -1722,6 +1860,41 @@ describe("library", () => {
                 setReuseElements(true);
                 return condition;
             });
+            it("runs row cleanup after resetting view data", async () => {
+                let cleaned = 0;
+                const data = reactive([{ id: 1 }]);
+                const list = html `<ul id="viewResetCleanup"></ul>`;
+                const unmount = render(list);
+                view("#viewResetCleanup", data, (_item, index) => {
+                    const row = html `<li>${data[index].id}</li>`;
+                    onCleanup(() => cleaned++, row);
+                    return row;
+                });
+                data([]);
+                await sleep(10);
+                const condition = cleaned === 1 && list.childElementCount === 0;
+                unmount();
+                unset(data);
+                return condition;
+            });
+            it("prewires JSX-shaped view rows", () => {
+                let selected = -1;
+                const data = reactive([{ id: 1, label: "first" }]);
+                const list = html `<ul id="viewHPrewire"></ul>`;
+                const unmount = render(list);
+                view("#viewHPrewire", data, (item, index) => h("li", { class: data[index].id, bind: data[index] }, h("a", { onclick: () => (selected = item.id) }, data[index].label)));
+                list.querySelector("a").click();
+                data[0].setter((row) => {
+                    row.id = 2;
+                    row.label = "second";
+                });
+                const condition = selected === 1 &&
+                    list.firstElementChild?.className === "2" &&
+                    list.textContent === "second";
+                unmount();
+                unset(data);
+                return condition;
+            });
             it("creates a view that will handle add, delete and swap", async () => {
                 let condition;
                 let triggeredEvent = false;
@@ -1883,6 +2056,25 @@ describe("library", () => {
                 unmount();
             });
             return cond && $("#testEvent").textContent.includes("47");
+        });
+        it("replaces capture phase eventObject handlers", () => {
+            let calls = 0;
+            const event = reactive({
+                event: () => (calls += 1),
+                options: { capture: true },
+            });
+            const button = html `<button onclick=${event}>
+        replace
+      </button>`;
+            const unmount = render(button);
+            event({
+                event: () => (calls += 10),
+                options: { capture: true },
+            });
+            button.click();
+            unmount();
+            unset(event);
+            return calls === 10;
         });
         it("eventObject can be replaced by normal fn", () => {
             const testEvent2 = reactive({

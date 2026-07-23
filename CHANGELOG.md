@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.9.1 2026-07-23
+
+- refactor: keep old code style but keep performance, improve file size and first paint
+
 ## 1.9.1 2026-07-08
 
 - performance improvements: cached html() output now marked wired, improved boundElemProxies and resetViewRows cleanup

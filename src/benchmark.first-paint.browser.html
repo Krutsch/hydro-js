@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>hydro-js navigation first paint</title>
+    <script type="module">
+      const params = new URLSearchParams(location.search);
+      const implementation = params.get("impl");
+      const cacheKey = params.get("cacheKey") ?? "0";
+      const scriptStartMs = performance.now();
+      let importEndMs = scriptStartMs;
+      let mountEndMs = scriptStartMs;
+
+      const finish = (result) => {
+        window.__firstPaintReport = result;
+        window.__firstPaintDone = true;
+      };
+
+      const observer = new PerformanceObserver((entries) => {
+        const fcp = entries
+          .getEntries()
+          .find((entry) => entry.name === "first-contentful-paint");
+        if (!fcp || !window.__firstPaintMounted) return;
+
+        observer.disconnect();
+        finish({
+          fcpMs: fcp.startTime,
+          importMs: importEndMs - scriptStartMs,
+          mountMs: mountEndMs - importEndMs,
+          paintDelayMs: Math.max(0, fcp.startTime - mountEndMs),
+          mounted: true,
+        });
+      });
+
+      observer.observe({ type: "paint", buffered: true });
+
+      try {
+        const { h, html, reactive, render, setGlobalSchedule, view } =
+          await import(`../dist/library.js?firstPaint=${cacheKey}`);
+        importEndMs = performance.now();
+
+        setGlobalSchedule(false);
+        const rows = Array.from({ length: 100 }, (_, index) => ({
+          id: index + 1,
+          label: `paint row ${index + 1}`,
+        }));
+
+        if (implementation === "html") {
+          render(
+            html`<main id="paint-app">
+              <h1>Hydro first paint</h1>
+              <ul>
+                ${rows.map(
+                  (row) => html`<li data-id=${row.id}>${row.label}</li>`,
+                )}
+              </ul>
+            </main>`,
+          );
+        } else if (implementation === "h") {
+          render(
+            h(
+              "main",
+              { id: "paint-app" },
+              h("h1", null, "Hydro first paint"),
+              h(
+                "ul",
+                null,
+                rows.map((row) => h("li", { "data-id": row.id }, row.label)),
+              ),
+            ),
+          );
+        } else if (
+          implementation === "view" ||
+          implementation === "view-html"
+        ) {
+          render(
+            html`<main id="paint-app">
+              <h1>Hydro first paint</h1>
+              <ul id="paint-list"></ul>
+            </main>`,
+          );
+          const data = reactive(rows);
+          view("#paint-list", data, (row, index) =>
+            implementation === "view"
+              ? h("li", { "data-id": row.id }, data[index].label)
+              : html`<li data-id=${row.id}>${data[index].label}</li>`,
+          );
+        } else {
+          throw new Error(
+            `Unknown first-paint implementation: ${implementation}`,
+          );
+        }
+
+        const app = document.querySelector("#paint-app");
+        window.__firstPaintMounted =
+          app?.querySelectorAll("li").length === rows.length;
+        mountEndMs = performance.now();
+        if (!window.__firstPaintMounted) {
+          throw new Error("First-paint fixture did not mount visible rows");
+        }
+      } catch (error) {
+        observer.disconnect();
+        window.__firstPaintError = error?.stack || String(error);
+        window.__firstPaintDone = true;
+      }
+    </script>
+  </head>
+  <body></body>
+</html>

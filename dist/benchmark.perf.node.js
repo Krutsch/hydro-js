@@ -24,10 +24,10 @@ globalThis.MouseEvent = window.MouseEvent;
 await window.happyDOM.waitUntilComplete();
 const { runPerfScenarios, formatPerfReport, toPerfBaseline, diffPerf } = await import("./benchmark.perf.js");
 const report = await runPerfScenarios({
-    rows: process.env.PERF_ROWS ? Number(process.env.PERF_ROWS) : 200,
+    rows: process.env.PERF_ROWS ? Number(process.env.PERF_ROWS) : 1000,
     manyRows: process.env.PERF_MANY_ROWS
         ? Number(process.env.PERF_MANY_ROWS)
-        : 1000,
+        : 10000,
     ...(process.env.PERF_REPEATS
         ? { repeats: Number(process.env.PERF_REPEATS) }
         : {}),
