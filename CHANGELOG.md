@@ -1,6 +1,10 @@
 # Changelog
 
-## 1.9.1 2026-07-23
+## 1.9.3 2026-07-25
+
+- fix bug where conditional attr was not set
+
+## 1.9.2 2026-07-23
 
 - refactor: keep old code style but keep performance, improve file size and first paint
 

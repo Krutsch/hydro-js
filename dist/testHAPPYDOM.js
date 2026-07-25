@@ -80,6 +80,13 @@ describe("library", () => {
             it("returns a valid element when it has children", () => {
                 return h("div", null, [h("p", null, ["test"])]).childNodes.length === 1;
             });
+            it("sets conditional data attributes", () => {
+                const image = h("img", {
+                    src: "/images/005-preview.avif",
+                    ...(true ? { "data-src": "/images/005.avif" } : {}),
+                });
+                return image.getAttribute("data-src") === "/images/005.avif";
+            });
         });
         describe("documentFragment", () => {
             it("render elem in fragment", () => {
@@ -263,6 +270,22 @@ describe("library", () => {
                 unmountSecond();
                 unset(value);
                 return condition;
+            });
+            it("sets conditional data attributes", () => {
+                const image = {
+                    src: "/images/005-preview.avif",
+                    "data-src": "/images/005.avif",
+                };
+                const withPreview = true;
+                const picture = html `<picture>
+          <img
+            src="${withPreview ? image.src : image["data-src"]}"
+            ${withPreview ? `data-src="${image["data-src"]}"` : ""}
+          />
+        </picture>`;
+                const imageElement = picture.querySelector("img");
+                return (imageElement.getAttribute("data-src") === image["data-src"] &&
+                    !imageElement.hasAttribute("__hydro1__"));
             });
             // https://html.spec.whatwg.org/
             [

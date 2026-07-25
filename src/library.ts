@@ -513,10 +513,9 @@ function containsParsedHTML(value: string) {
   return value.includes("<") || containsReactiveMarker(value);
 }
 function canCacheHTMLPosition(htmlArray: TemplateStringsArray, index: number) {
-  const before = htmlArray[index];
-  const after = htmlArray[index + 1];
+  const before = htmlArray.slice(0, index + 1).join("");
   if (/<\/?$/.test(before)) return false;
-  return !/<[^>]*\s$/.test(before) || !/^\s*>/.test(after);
+  return !/<[^>]*\s$/.test(before);
 }
 function isTemplateCacheable(htmlArray: TemplateStringsArray) {
   const cached = htmlTemplateCacheable.get(htmlArray);
