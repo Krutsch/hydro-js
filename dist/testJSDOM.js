@@ -9,7 +9,8 @@ const { window } = new JSDOM(`<!doctype html>
 // @ts-expect-error
 globalThis.window = window;
 globalThis.document = window.document;
-const { html, h, hydro, render, setGlobalSchedule, setReuseElements, reactive, unset, emit, watchEffect, observe, getValue, onRender, onCleanup, internals, ternary, setInsertDiffing, $, unobserve, setAsyncUpdate, setReactivity, view, } = await import("./library.js");
+const { html, h, hydro, render, setGlobalSchedule, setReuseElements, reactive, unset, emit, watchEffect, observe, getValue, onRender, onCleanup, internals, ternary, setInsertDiffing, $, unobserve, setAsyncUpdate, setReactivity, setIgnoreIsConnected, view, } = await import("./library.js");
+const { registerAdditionalTests } = await import("./testAdditional.js");
 // Local debugging
 //@ts-ignore
 window.html = html;
@@ -36,6 +37,24 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   }
 </style>`);
 const results = [];
+setTimeout(() => registerAdditionalTests({
+    describe,
+    it,
+    html,
+    h,
+    render,
+    reactive,
+    unset,
+    getValue,
+    setReuseElements,
+    setIgnoreIsConnected,
+    setAsyncUpdate,
+    watchEffect,
+    onRender,
+    onCleanup,
+    view,
+    internals,
+}, sleep), 1600);
 // --------- TESTS START ------------
 let condition = true;
 describe("library", () => {

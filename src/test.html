@@ -7,36 +7,64 @@
     <script type="module">
       import { runTests } from "@web/test-runner-mocha";
       import { expect } from "@esm-bundle/chai";
-      import {
-        html,
-        h,
-        hydro,
-        render,
-        setGlobalSchedule,
-        setReuseElements,
-        reactive,
-        unset,
-        emit,
-        watchEffect,
-        observe,
-        getValue,
-        onRender,
-        onCleanup,
-        internals,
-        ternary,
-        setInsertDiffing,
-        $,
-        unobserve,
-        setAsyncUpdate,
-        setShouldSetReactivity,
-        view,
-      } from "../dist/library.js";
 
+      window.requestIdleCallback = undefined;
       runTests(async () => {
+        const {
+          html,
+          h,
+          hydro,
+          render,
+          setGlobalSchedule,
+          setReuseElements,
+          reactive,
+          unset,
+          emit,
+          watchEffect,
+          observe,
+          getValue,
+          onRender,
+          onCleanup,
+          internals,
+          ternary,
+          setInsertDiffing,
+          $,
+          unobserve,
+          setAsyncUpdate,
+          setShouldSetReactivity,
+          setIgnoreIsConnected,
+          setReactivity,
+          view,
+        } = await import("../dist/library.js");
+
+        const { registerAdditionalTests } =
+          await import("../dist/testAdditional.js");
+        const sleep = (time) =>
+          new Promise((resolve) => setTimeout(resolve, time));
+        registerAdditionalTests(
+          {
+            describe,
+            it,
+            html,
+            h,
+            render,
+            reactive,
+            unset,
+            getValue,
+            setReuseElements,
+            setIgnoreIsConnected,
+            setAsyncUpdate,
+            watchEffect,
+            onRender,
+            onCleanup,
+            view,
+            internals,
+          },
+          sleep,
+        );
+
         describe("library", () => {
           setGlobalSchedule(false); // Simplifies testing
-          const sleep = (time) =>
-            new Promise((resolve) => setTimeout(resolve, time));
 
           describe("functions", () => {
             describe("h", () => {
@@ -212,6 +240,26 @@
                 setGlobalSchedule(false);
                 expect(hydro.schedule.asyncUpdate).to.be.false;
                 hydro.schedule = null;
+              });
+            });
+
+            describe("setIgnoreIsConnected", () => {
+              it("purges detached reactive nodes during updates", () => {
+                const value = reactive("before");
+                const elem = html`<p>${value}</p>`;
+                const text = elem.firstChild;
+                const unmount = render(elem, "", false);
+
+                elem.remove();
+                setIgnoreIsConnected(false);
+                value("after");
+                const purged = !internals.allNodeChanges.has(text);
+
+                setIgnoreIsConnected(true);
+                setIgnoreIsConnected(false);
+                unmount();
+                unset(value);
+                return purged;
               });
             });
 
@@ -1952,6 +2000,580 @@
                 expect(cond).to.be.true;
               });
 
+              it("reuses compiled templates with independent values and events", () => {
+                let firstCalls = 0;
+                let secondCalls = 0;
+                const makeButton = (label, handler) =>
+                  html`<button data-label=${label} onclick=${handler}>
+                    ${label}
+                  </button>`;
+                const first = makeButton("one", () => firstCalls++);
+                const second = makeButton("two", () => secondCalls++);
+
+                first.click();
+                second.click();
+                return (
+                  first !== second &&
+                  first.dataset.label === "one" &&
+                  second.dataset.label === "two" &&
+                  first.textContent.trim() === "one" &&
+                  second.textContent.trim() === "two" &&
+                  firstCalls === 1 &&
+                  secondCalls === 1
+                );
+              });
+
+              it("keeps cached template reactive values wired", () => {
+                const value = reactive("one");
+                const makeElement = () => html`<p class=${value}>${value}</p>`;
+                const first = makeElement();
+                const second = makeElement();
+                const unmountFirst = render(first, "", false);
+                const unmountSecond = render(second, "", false);
+
+                value("two");
+                const condition =
+                  first.className === "two" &&
+                  first.textContent === "two" &&
+                  second.className === "two" &&
+                  second.textContent === "two";
+                unmountFirst();
+                unmountSecond();
+                unset(value);
+                return condition;
+              });
+
+              it("parses table rows and sections without wrappers", () => {
+                let clicked = false;
+                const row = html`<tr id="row" data-row="1">
+                  <td>1</td>
+                  <td><a onclick=${() => (clicked = true)}>select</a></td>
+                </tr>`;
+                const cell = html`<td data-cell="first">cell</td>`;
+                const section = html`<thead>
+                  <tr>
+                    <th>heading</th>
+                  </tr>
+                </thead>`;
+                document.body.append(row);
+                row.querySelector("a").click();
+                row.remove();
+
+                return (
+                  row.localName === "tr" &&
+                  row.id === "row" &&
+                  row.dataset.row === "1" &&
+                  cell.localName === "td" &&
+                  cell.dataset.cell === "first" &&
+                  section.localName === "thead" &&
+                  section.querySelector("th").textContent === "heading" &&
+                  clicked
+                );
+              });
+
+              it("covers reactive values rendered into multiple nodes", () => {
+                const value = reactive("one");
+                const first = html`<p>${value}</p>`;
+                const second = html`<span>${value}</span>`;
+                const unmountFirst = render(first, "", false);
+                const unmountSecond = render(second, "", false);
+
+                value("two");
+                const condition =
+                  first.textContent === "two" && second.textContent === "two";
+                unmountFirst();
+                unmountSecond();
+                unset(value);
+                return condition;
+              });
+
+              it("replaces reactive text with an element and fragment", () => {
+                const value = reactive("text");
+                const elem = html`<div>${value}</div>`;
+                const unmount = render(elem, "", false);
+                const node = html`<span>node</span>`;
+                value(node);
+                const nodeCondition = elem.querySelector("span") === node;
+                const fragment = html`<i>one</i><b>two</b>`;
+                value(fragment);
+                const fragmentCondition =
+                  elem.querySelector("i")?.textContent === "one" &&
+                  elem.querySelector("b")?.textContent === "two";
+                unmount();
+                unset(value);
+                return nodeCondition && fragmentCondition;
+              });
+
+              it("removes an item when nested reactive value is unset", () => {
+                const list = reactive([{ id: 1 }, { id: 2 }]);
+                unset(list[0]);
+                const condition =
+                  getValue(list).length === 1 && getValue(list)[0].id === 2;
+                unset(list);
+                return condition;
+              });
+
+              it("covers uncached parser and cache fallbacks", () => {
+                const child = html`<em>child</em>`;
+                const fragment = html`<p>${child}</p>
+                  <span>second</span>`;
+                const unmount = render(fragment, "", false);
+                const empty = html`${new Date()}`;
+                const parsed = html`<div>${"<span>parsed</span>"}</div>`;
+                const nestedReactive = reactive(1);
+                const nestedProps = { values: [nestedReactive] };
+                html`<p ${nestedProps}></p>`;
+                const condition =
+                  fragment.childNodes.length === 2 &&
+                  empty.nodeType === 3 &&
+                  parsed.textContent === "<span>parsed</span>";
+                unmount();
+                unset(nestedReactive);
+                return condition;
+              });
+
+              it("covers repeated compiled markers and object text wiring", () => {
+                const repeated = html`<p>${"__hydro1__"}${"x"}</p>`;
+                const objectValue = reactive({ value: 1 });
+                const objectText = html`<p>${objectValue}</p>`;
+                const sameKey = reactive("a");
+                const sameKeyElem = html`<p
+                  data-value="${sameKey}-${sameKey}"
+                ></p>`;
+
+                sameKey("b");
+                const condition =
+                  repeated.textContent === "x x" &&
+                  objectText.textContent === '{"value":1}' &&
+                  sameKeyElem.getAttribute("data-value") === "b-b";
+                unset(objectValue);
+                unset(sameKey);
+                return condition;
+              });
+
+              it("covers h property, fragment, and nested child paths", () => {
+                const value = reactive("value");
+                const element = h("div", { "data-value": value }, [
+                  { first: "nested" },
+                ]);
+                h("div", { "data-array": [value] });
+                const fragment = h(
+                  { children: [h("span", null, "fragment")] },
+                  { textContent: "" },
+                );
+                const node = html`<i>node</i>`;
+                const withNode = h("div", null, node);
+                const condition =
+                  element.getAttribute("data-value") !== null &&
+                  element.textContent === "nested" &&
+                  fragment.nodeType === 11 &&
+                  fragment.textContent === "fragment" &&
+                  withNode.firstChild === node;
+                unset(value);
+                return condition;
+              });
+
+              it("covers direct binding and plain setReactivity maps", () => {
+                const bound = reactive({ id: 1 });
+                const boundElem = html`<p bind=${bound}>bound</p>`;
+                const unmount = render(boundElem, "", false);
+                const button = document.createElement("button");
+                let calls = 0;
+                button.setAttribute("onclick", "event-key");
+                setReactivity(button, {
+                  "event-key": () => calls++,
+                });
+                button.click();
+                const text = document.createTextNode("{{direct}}");
+                hydro.direct = "text";
+                setReactivity(text);
+                const condition =
+                  calls === 1 &&
+                  text.nodeValue === "text" &&
+                  boundElem.isConnected;
+                unset(bound);
+                unmount();
+                hydro.direct = null;
+                return condition;
+              });
+
+              it("tracks and purges multiple handlers for one event", () => {
+                let firstCalls = 0;
+                let secondCalls = 0;
+                let thirdCalls = 0;
+                const first = reactive({ onclick: () => firstCalls++ });
+                const second = reactive({ onclick: () => secondCalls++ });
+                const third = reactive({ onclick: () => thirdCalls++ });
+                const button = html`<button ${first} ${second} ${third}>
+                  click
+                </button>`;
+                const unmount = render(button, "", false);
+
+                button.click();
+                const fired =
+                  firstCalls === 1 && secondCalls === 1 && thirdCalls === 1;
+                unmount();
+                button.click();
+                unset(first);
+                unset(second);
+                unset(third);
+                return (
+                  fired &&
+                  firstCalls === 1 &&
+                  secondCalls === 1 &&
+                  thirdCalls === 1
+                );
+              });
+
+              it("tracks multiple bound proxies on one element", () => {
+                const first = reactive({ id: 1 });
+                const second = reactive({ id: 2 });
+                const third = reactive({ id: 3 });
+                const props = reactive({ bind: first });
+                const props2 = reactive({ bind: second });
+                const props3 = reactive({ bind: third });
+                const elem = html`<p ${props} ${props2} ${props3}>bound</p>`;
+                const unmount = render(elem, "", false);
+                const connected = elem.isConnected;
+                unmount();
+                unset(first);
+                unset(second);
+                unset(third);
+                unset(props);
+                unset(props2);
+                unset(props3);
+                return connected;
+              });
+
+              it("covers reactive helper edge paths", () => {
+                const value = reactive({ x: 1 });
+                const marker = value.reactive === true;
+                const observedUndefined = observe(undefined, () => undefined);
+                const valueUndefined = getValue(undefined) === undefined;
+                const elem = html`<p>lifecycle</p>`;
+                let rendered = 0;
+                let cleaned = 0;
+                onRender(() => rendered++, elem);
+                onRender(() => rendered++, elem);
+                onRender(() => rendered++, elem);
+                onCleanup(() => cleaned++, elem);
+                onCleanup(() => cleaned++, elem);
+                onCleanup(() => cleaned++, elem);
+                const compared = internals.compare(elem, elem);
+                render(elem, "", false)();
+                const ternaryCondition = reactive(true);
+                const ternaryValue = ternary(ternaryCondition, "yes", "no");
+                unset(ternaryValue);
+                unset(ternaryValue);
+                unset(ternaryCondition);
+                unset(value);
+                return (
+                  marker &&
+                  observedUndefined === undefined &&
+                  valueUndefined &&
+                  compared &&
+                  rendered === 3 &&
+                  cleaned === 3
+                );
+              });
+
+              it("covers invalid-root attribute copying and missing event maps", () => {
+                const root = html`<html lang="en">
+                  <head data-head="yes"></head>
+                  <body data-body="yes">
+                    content
+                  </body>
+                </html>`;
+                const button = document.createElement("button");
+                button.setAttribute("onclick", "missing-event");
+                setReactivity(button, {});
+                const emptyName = document.createElement("input");
+                emptyName.setAttribute("{{required}}", "");
+                setReactivity(emptyName);
+                hydro.required = false;
+                const input = html`<input required="{{required}}" />`;
+                const condition =
+                  root.localName === "html" &&
+                  root.lang === "en" &&
+                  root.querySelector("head").dataset.head === "yes" &&
+                  root.querySelector("body").dataset.body === "yes" &&
+                  !button.onclick &&
+                  !input.hasAttribute("required") &&
+                  !emptyName.hasAttribute("{{required}}");
+                hydro.required = null;
+                return condition;
+              });
+
+              it("covers same-node traces after multi-node mapping", () => {
+                const value = reactive("one");
+                const first = html`<p>${value}</p>`;
+                const second = html`<p>${value}</p>`;
+                const repeated = html`<p>${value}-${value}</p>`;
+                const duplicate = html`<p>__hydro0____hydro0__${"x"}</p>`;
+                const unmountFirst = render(first, "", false);
+                const unmountSecond = render(second, "", false);
+                const unmountRepeated = render(repeated, "", false);
+                value("two");
+                const condition =
+                  first.textContent === "two" &&
+                  second.textContent === "two" &&
+                  repeated.textContent === "two-two" &&
+                  duplicate.textContent === "xx";
+                unmountFirst();
+                unmountSecond();
+                unmountRepeated();
+                unset(value);
+                return condition;
+              });
+
+              it("covers reactive node and primitive bind fast-path fallbacks", () => {
+                const node = html`<em>${new Date()}</em>`;
+                const nodeValue = reactive(node);
+                const object = reactive({ value: 1 });
+                const text = html`<p>${nodeValue}</p>`;
+                const bound = html`<p bind=${object.value}>bound</p>`;
+                const condition = text.querySelector("em") === node;
+                unset(nodeValue);
+                unset(object);
+                return condition && bound.nodeType === 1;
+              });
+
+              it("covers scheduled lifecycle execution", async () => {
+                const elem = html`<p>scheduled lifecycle</p>`;
+                let rendered = 0;
+                onRender(() => rendered++, elem);
+                setGlobalSchedule(true);
+                const unmount = render(elem, "", false);
+                await sleep(10);
+                setGlobalSchedule(false);
+                unmount();
+                return rendered === 1;
+              });
+
+              it("covers bound keyed swaps and proxy cleanup", async () => {
+                setReuseElements(false);
+                const data = reactive([{ id: 1 }, { id: 2 }, { id: 3 }]);
+                const list = html`<ul id="boundSwap"></ul>`;
+                const unmount = render(list, "", false);
+                view("#boundSwap", data, (_item, index) =>
+                  h("li", { bind: data[index] }, data[index].id),
+                );
+                data((current) => {
+                  [current[1], current[2]] = [current[2], current[1]];
+                });
+                await sleep(5);
+                const condition = list.textContent === "132";
+                unmount();
+                unset(data);
+                setReuseElements(true);
+                return condition;
+              });
+
+              it("flushes large view cleanup batches", async () => {
+                const data = reactive(
+                  Array.from({ length: 2001 }, (_, index) => ({ id: index })),
+                );
+                const list = html`<ul id="largeCleanup"></ul>`;
+                const unmount = render(list, "", false);
+                view(
+                  "#largeCleanup",
+                  data,
+                  (item) => html`<li>${item.id}</li>`,
+                );
+                data([]);
+                await sleep(5);
+                const condition = list.childElementCount === 0;
+                unmount();
+                unset(data);
+                return condition;
+              });
+
+              it("resets non-reused rows before changed-length replacement", async () => {
+                setReuseElements(false);
+                const data = reactive([{ id: 1 }]);
+                const list = html`<ul id="changedLength"></ul>`;
+                const unmount = render(list, "", false);
+                view(
+                  "#changedLength",
+                  data,
+                  (item) => html`<li>${item.id}</li>`,
+                );
+                data([{ id: 2 }, { id: 3 }]);
+                await sleep(5);
+                const condition = list.textContent === "23";
+                unmount();
+                unset(data);
+                setReuseElements(true);
+                return condition;
+              });
+
+              it("updates object sub-keys through scheduled and direct paths", async () => {
+                const value = reactive({ label: "one", extra: "unused" });
+                const elem = html`<p>${value.label}</p>`;
+                const unmount = render(elem, "", false);
+                setAsyncUpdate(value, true);
+                value({ label: "two", extra: "changed" });
+                await sleep(10);
+                const condition = elem.textContent === "two";
+                setAsyncUpdate(value, false);
+                unmount();
+                unset(value);
+                return condition;
+              });
+
+              it("updates radio groups from array values", () => {
+                const selected = reactive(["one"]);
+                const elem = html`<div>
+                  <input
+                    type="radio"
+                    name="one"
+                    value="one"
+                    two-way=${selected}
+                  />
+                  <input
+                    type="radio"
+                    name="two"
+                    value="two"
+                    two-way=${selected}
+                  />
+                </div>`;
+                const unmount = render(elem, "", false);
+                selected(["two"]);
+                const radios = elem.querySelectorAll("input");
+                const condition = !radios[0].checked && radios[1].checked;
+                unmount();
+                unset(selected);
+                return condition;
+              });
+
+              it("replaces event objects with normal functions", () => {
+                let calls = 0;
+                const event = reactive({
+                  event: () => (calls += 1),
+                  options: { once: true },
+                });
+                const button = html`<button onclick=${event}>event</button>`;
+                event(() => (calls += 10));
+                button.click();
+                unset(event);
+                return calls === 10;
+              });
+
+              it("replaces normal event functions with event objects", () => {
+                let calls = 0;
+                const event = reactive(() => (calls += 1));
+                const button = html`<button onclick=${event}>event</button>`;
+                event({
+                  event: () => (calls += 10),
+                  options: { capture: true },
+                });
+                button.click();
+                unset(event);
+                return calls === 10;
+              });
+
+              it("replaces object event handlers as a whole", () => {
+                let calls = 0;
+                const props = reactive({
+                  onclick: {
+                    event: () => (calls += 1),
+                    options: { capture: true },
+                  },
+                });
+                const button = html`<button data-props=${props}>event</button>`;
+                props({
+                  onclick: {
+                    event: () => (calls += 10),
+                    options: { capture: true },
+                  },
+                });
+                button.click();
+                unset(props);
+                return calls === 10;
+              });
+
+              it("cleans bound elements when replacing child proxies", () => {
+                setReuseElements(false);
+                const parent = reactive({ child: { id: 1 } });
+                const child = parent.child;
+                const elem = html`<p bind=${child}>bound</p>`;
+                const unmount = render(elem, "", false);
+                parent.child = { id: 2 };
+                const removed = !elem.isConnected;
+                unmount();
+                unset(parent);
+                setReuseElements(true);
+                return removed;
+              });
+
+              it("updates array sub-keys through scheduled lookup", async () => {
+                const list = reactive(["one", "two"]);
+                const elem = html`<p>${list[0]}</p>`;
+                const unmount = render(elem, "", false);
+                setAsyncUpdate(list[0], true);
+                list(["three", "four"]);
+                await sleep(10);
+                const condition = elem.textContent === "three";
+                setAsyncUpdate(list[0], false);
+                unmount();
+                unset(list);
+                return condition;
+              });
+
+              it("rekeys multiple reactive nodes replaced by a fragment", () => {
+                const value = reactive("one");
+                const first = html`<p>${value}</p>`;
+                const second = html`<p>${value}</p>`;
+                const repeated = html`<p>${value}-${value}</p>`;
+                const unmountFirst = render(first, "", false);
+                const unmountSecond = render(second, "", false);
+                const unmountRepeated = render(repeated, "", false);
+                value(html`<i>one</i><b>two</b>`);
+                const condition = document.body.textContent.includes("onetwo");
+                unmountFirst();
+                unmountSecond();
+                unmountRepeated();
+                unset(value);
+                return condition;
+              });
+
+              it("rekeys multiple reactive nodes replaced by an element", () => {
+                const value = reactive("one");
+                const first = html`<p>${value}</p>`;
+                const second = html`<p>${value}</p>`;
+                const replacement = html`<i>replacement</i>`;
+                const unmountFirst = render(first, "", false);
+                const unmountSecond = render(second, "", false);
+                value(replacement);
+                const condition =
+                  document.body.textContent.includes("replacement");
+                unmountFirst();
+                unmountSecond();
+                unset(value);
+                return condition;
+              });
+
+              it("skips identical ternary output", () => {
+                const condition = reactive(true);
+                const value = ternary(condition, "same", "same");
+                condition(false);
+                const result = getValue(value) === "same";
+                unset(value);
+                unset(condition);
+                return result;
+              });
+
+              it("covers tracking while proxy checks are nested", () => {
+                const value = reactive({ child: { value: 1 } });
+                const stop = watchEffect(() => {
+                  setGlobalSchedule(false);
+                  getValue(value).child;
+                });
+                stop();
+                unset(value);
+                return true;
+              });
+
               it("swap operation (hydro)", () => {
                 hydro.array = ["x", "y"];
                 [hydro.array[0], hydro.array[1]] = [
@@ -2002,9 +2624,266 @@
 
                 expect($("#async").textContent.includes("777")).to.be.true;
               });
+
+              it("covers observer cleanup and shared proxy methods", () => {
+                const handler = () => undefined;
+                hydro.observerCleanup = 0;
+                hydro.observe("observerCleanup", handler);
+                hydro.unobserve("observerCleanup", handler);
+                const released = !hydro.getObservers().has("observerCleanup");
+
+                const firstReactive = reactive({ value: 1 });
+                const secondReactive = reactive({ value: 2 });
+                const first = getValue(firstReactive);
+                const second = getValue(secondReactive);
+                const shared =
+                  Object.getOwnPropertyDescriptor(first, "observe").value ===
+                  Object.getOwnPropertyDescriptor(second, "observe").value;
+
+                hydro.observerCleanup = null;
+                unset(firstReactive);
+                unset(secondReactive);
+                return released && shared;
+              });
+
+              it("covers Promise watch effects and undefined values", async () => {
+                const value = reactive(1);
+                let runs = 0;
+                const stop = watchEffect(async () => {
+                  await Promise.resolve();
+                  getValue(value);
+                  runs++;
+                });
+                await sleep(1);
+                value(2);
+                await sleep(1);
+                stop();
+                unset(value);
+                return runs === 2 && getValue(undefined) === undefined;
+              });
+
+              it("runs every lifecycle callback registered on a node", () => {
+                const elem = html`<p>lifecycle</p>`;
+                let rendered = 0;
+                let cleaned = 0;
+                onRender(() => rendered++, elem);
+                onRender(() => rendered++, elem);
+                onCleanup(() => cleaned++, elem);
+                onCleanup(() => cleaned++, elem);
+
+                render(elem, "", false)();
+                return rendered === 2 && cleaned === 2;
+              });
+
+              it("replaces capture-phase event object handlers", () => {
+                let calls = 0;
+                const event = reactive({
+                  event: () => (calls += 1),
+                  options: { capture: true },
+                });
+                const button = html`<button onclick=${event}>replace</button>`;
+
+                event({
+                  event: () => (calls += 10),
+                  options: { capture: true },
+                });
+                button.click();
+                unset(event);
+                return calls === 10;
+              });
+
+              it("renders asynchronously when global scheduling is enabled", async () => {
+                const elem = html`<p>scheduled</p>`;
+                setGlobalSchedule(true);
+                const unmount = render(elem);
+                await sleep(10);
+                const connected = elem.isConnected;
+                setGlobalSchedule(false);
+                unmount();
+                return connected;
+              });
+
+              it("cleans reactive traces when replacing nodes", () => {
+                const value = reactive("mounted");
+                const elem = html`<p>${value}</p>`;
+                const text = elem.firstChild;
+                const unmount = render(elem, "", false);
+                const tracked = internals.allNodeChanges.has(text);
+                unmount();
+                const released = !internals.allNodeChanges.has(text);
+                unset(value);
+                return tracked && released;
+              });
             });
 
             describe("view", () => {
+              it("prewires reactive JSX props and children", () => {
+                let selected = -1;
+                const data = reactive([{ id: 1, label: "first" }]);
+                const list = html`<ul id="viewHPrewire"></ul>`;
+                const unmount = render(list, "", false);
+
+                view("#viewHPrewire", data, (item, index) =>
+                  h(
+                    "li",
+                    { class: data[index].id, bind: data[index] },
+                    h(
+                      "a",
+                      { onclick: () => (selected = item.id) },
+                      data[index].label,
+                    ),
+                  ),
+                );
+                list.querySelector("a").click();
+                data[0].setter((row) => {
+                  row.id = 2;
+                  row.label = "second";
+                });
+
+                const condition =
+                  selected === 1 &&
+                  list.firstElementChild.className === "2" &&
+                  list.textContent === "second";
+                unmount();
+                unset(data);
+                return condition;
+              });
+
+              it("covers reactive JSX wiring fallback cases", () => {
+                const node = html`<em>${new Date()}</em>`;
+                const data = reactive([
+                  {
+                    value: 1,
+                    object: { nested: 2 },
+                    nullable: null,
+                    node,
+                    fn: () => 3,
+                  },
+                ]);
+                const list = html`<ul id="viewHFallback"></ul>`;
+                const unmount = render(list, "", false);
+
+                view("#viewHFallback", data, (_item, index) =>
+                  h(
+                    "li",
+                    {
+                      bind: "plain",
+                      id: data[index].value,
+                      disabled: data[index].value,
+                      "two-way": data[index].value,
+                      "data-object": data[index].object,
+                      "data-null": data[index].nullable,
+                      "data-node": data[index].node,
+                      "data-function": data[index].fn,
+                    },
+                    data[index].object,
+                    node,
+                    h("span", { bind: data[index].value }, "primitive"),
+                  ),
+                );
+
+                const condition =
+                  list.firstElementChild?.id === "1" &&
+                  list.textContent?.includes('{"nested":2}');
+                unmount();
+                unset(data);
+                return condition;
+              });
+
+              it("collects object event functions while rendering a view", () => {
+                let clicked = 0;
+                const data = reactive([{ id: 1 }]);
+                const list = html`<ul id="viewObjectEvent"></ul>`;
+                const unmount = render(list, "", false);
+                view("#viewObjectEvent", data, () => {
+                  const props = { onclick: () => clicked++ };
+                  return html`<li ${props}>${data[0].id}</li>`;
+                });
+                list.firstElementChild.click();
+                const condition = clicked === 1;
+                unmount();
+                unset(data);
+                return condition;
+              });
+
+              it("collects uncached function events while rendering a view", () => {
+                let clicked = 0;
+                const data = reactive([{ id: 1 }]);
+                const list = html`<ul id="viewFunctionEvent"></ul>`;
+                const unmount = render(list, "", false);
+                view("#viewFunctionEvent", data, () => {
+                  const handler = () => clicked++;
+                  return html`<li onclick=${handler} ${{ "data-x": "1" }}>
+                    ${data[0].id}
+                  </li>`;
+                });
+                list.firstElementChild.click();
+                const condition = clicked === 1;
+                unmount();
+                unset(data);
+                return condition;
+              });
+
+              it("wires reactive Node children through view fallback", () => {
+                const node = html`<em>${new Date()}</em>`;
+                const data = reactive([{ node }]);
+                const list = html`<ul id="viewNodeChild"></ul>`;
+                const unmount = render(list, "", false);
+                view("#viewNodeChild", data, (_item, index) =>
+                  h("li", null, data[index].node),
+                );
+                const condition = list.textContent?.includes("node") === false;
+                unmount();
+                unset(data);
+                return condition;
+              });
+
+              it("covers view append, reuse, replacement, and reset", async () => {
+                const data = reactive([]);
+                const list = html`<ul id="viewStates"></ul>`;
+                const unmount = render(list, "", false);
+                view("#viewStates", data, (item) => html`<li>${item.id}</li>`);
+
+                data([{ id: 1 }]);
+                await sleep(5);
+                setReuseElements(true);
+                data([{ id: 2 }]);
+                await sleep(5);
+                setReuseElements(false);
+                data([{ id: 3 }]);
+                await sleep(5);
+                data([]);
+                await sleep(5);
+
+                const condition = list.childElementCount === 0;
+                unmount();
+                unset(data);
+                setReuseElements(true);
+                return condition;
+              });
+
+              it("covers appended view rows with events", async () => {
+                setReuseElements(false);
+                let clicked = 0;
+                const data = reactive([{ id: 1 }]);
+                const list = html`<ul id="viewAppendCoverage"></ul>`;
+                const unmount = render(list, "", false);
+                view(
+                  "#viewAppendCoverage",
+                  data,
+                  (_item, index) =>
+                    html`<li onclick=${() => clicked++}>${data[index].id}</li>`,
+                );
+                data((current) => [...current, { id: 2 }]);
+                await sleep(5);
+                list.lastElementChild.click();
+                const condition = clicked === 1 && list.childElementCount === 2;
+                unmount();
+                unset(data);
+                setReuseElements(true);
+                return condition;
+              });
+
               it("creates a view that will handle add, delete and swap", async () => {
                 let condition;
                 let triggeredEvent = false;

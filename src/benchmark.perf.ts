@@ -80,6 +80,11 @@ export interface PerfDeps extends PerfConfig {
   cleanup?: () => void;
 }
 
+export interface ScaledInteractionDeps extends ScaledInteractionConfig {
+  now?: () => number;
+  cleanup?: () => void;
+}
+
 export interface PerfResult {
   impl: ImplName;
   operation: OperationName;
@@ -97,7 +102,44 @@ export interface PerfReport {
   config: Required<PerfConfig>;
   results: PerfResult[];
   keyed: KeyedResult[];
+  interactions?: ScaledInteractionReport;
   firstPaint?: FirstPaintReport;
+  pass: boolean;
+}
+
+export type ScaledInteractionName =
+  | "update every 10th row (scaled)"
+  | "select row (scaled)"
+  | "swap rows (scaled)"
+  | "remove row (scaled)";
+
+export type ScaledInteractionConfig = {
+  rows?: number;
+  repeats?: number;
+  warmups?: number;
+  updateRepeats?: number;
+  selectRepeats?: number;
+  swapRepeats?: number;
+  removeRepeats?: number;
+};
+
+export interface ScaledInteractionResult {
+  impl: ImplName;
+  operation: ScaledInteractionName;
+  rows: number;
+  repetitions: number;
+  samples: number[];
+  medianMs: number;
+  minMs: number;
+  perOperationMedianMs: number;
+  perOperationMinMs: number;
+  spreadPct: number;
+  ok: boolean;
+}
+
+export interface ScaledInteractionReport {
+  config: Required<ScaledInteractionConfig>;
+  results: ScaledInteractionResult[];
   pass: boolean;
 }
 
@@ -249,6 +291,16 @@ const configDefaults: Required<PerfConfig> = {
   // and a large repeat count OOMs the "create many rows" op.
   repeats: 10,
   warmups: 5,
+};
+
+const scaledInteractionDefaults: Required<ScaledInteractionConfig> = {
+  rows: 1000,
+  repeats: 5,
+  warmups: 2,
+  updateRepeats: 100,
+  selectRepeats: 100,
+  swapRepeats: 100,
+  removeRepeats: 100,
 };
 
 const operations: Operation[] = [
@@ -423,6 +475,156 @@ export async function runPerfScenarios(
       results.every((result) => result.ok) &&
       keyed.every((result) => result.ok),
   };
+}
+
+type ScaledInteractionOperation = {
+  name: ScaledInteractionName;
+  repetitions: (config: Required<ScaledInteractionConfig>) => number;
+  run: (app: PerfApp, rows: number, repetition: number) => void;
+  verify: (app: PerfApp, rows: number, repetitions: number) => boolean;
+};
+
+const scaledInteractionOperations: ScaledInteractionOperation[] = [
+  {
+    name: "update every 10th row (scaled)",
+    repetitions: (config) => config.updateRepeats,
+    run: (app) => app.updateEvery10th(),
+    verify: (app, rows) => app.rowCount() === rows,
+  },
+  {
+    name: "select row (scaled)",
+    repetitions: (config) => config.selectRepeats,
+    // Alternate rows: repeatedly selecting same row would exercise only
+    // first signal transition, not subscriber fanout.
+    run: (app, _rows, repetition) => app.select(repetition % 2 ? 1 : 2),
+    verify: (app) => app.selectedCount() === 1,
+  },
+  {
+    name: "swap rows (scaled)",
+    repetitions: (config) => config.swapRepeats,
+    run: (app, rows) => app.swap(1, rows - 2),
+    verify: (app, rows, repetitions) =>
+      app.rowCount() === rows &&
+      app.firstId() === "1" &&
+      app.idAt(1) === String(repetitions % 2 ? rows - 1 : 2),
+  },
+  {
+    name: "remove row (scaled)",
+    repetitions: (config) => config.removeRepeats,
+    run: (app) => app.removeAt(4),
+    verify: (app, rows) => app.rowCount() > 0 && app.rowCount() < rows,
+  },
+];
+
+export async function runScaledInteractionScenarios(
+  deps: ScaledInteractionDeps = {},
+): Promise<ScaledInteractionReport> {
+  const config: Required<ScaledInteractionConfig> = {
+    ...scaledInteractionDefaults,
+    ...deps,
+  };
+  const now = deps.now ?? (() => performance.now());
+  const cleanup = deps.cleanup ?? (() => undefined);
+  const results: ScaledInteractionResult[] = [];
+
+  setGlobalSchedule(false);
+  setReuseElements(false);
+
+  const impls: Array<[ImplName, () => PerfApp]> = [
+    ["html", createHtmlApp],
+    ["h", createHApp],
+    ["view", createViewApp],
+    ["view-html", createViewHtmlApp],
+  ];
+
+  for (const [impl, createApp] of impls) {
+    for (const operation of scaledInteractionOperations) {
+      const repetitions = operation.repetitions(config);
+      const samples: number[] = [];
+      let ok = true;
+
+      for (
+        let iteration = 0;
+        iteration < config.warmups + config.repeats;
+        iteration++
+      ) {
+        const app = createApp();
+        const rows = createDataBuilder(iteration + 1)(config.rows);
+        app.run(rows);
+        cleanup();
+
+        const start = now();
+        for (let repeat = 0; repeat < repetitions; repeat++) {
+          operation.run(app, rows.length, repeat);
+        }
+        const elapsed = now() - start;
+
+        ok = operation.verify(app, config.rows, repetitions) && ok;
+        app.dispose();
+        cleanup();
+        await yieldToScheduler();
+
+        if (iteration >= config.warmups) samples.push(elapsed);
+      }
+
+      const medianMs = median(samples);
+      const minMs = Math.min(...samples);
+      results.push({
+        impl,
+        operation: operation.name,
+        rows: config.rows,
+        repetitions,
+        samples,
+        medianMs,
+        minMs,
+        perOperationMedianMs: medianMs / repetitions,
+        perOperationMinMs: minMs / repetitions,
+        spreadPct: spread(samples),
+        ok,
+      });
+    }
+  }
+
+  return { config, results, pass: results.every((result) => result.ok) };
+}
+
+export function formatScaledInteractionReport(
+  report: ScaledInteractionReport,
+): string {
+  const lines = [
+    "",
+    "hydro-js scaled interaction benchmark",
+    "=".repeat(112),
+    `${"impl".padEnd(9)} ${"operation".padEnd(32)} ${"rows".padStart(
+      7,
+    )} ${"reps".padStart(6)} ${"total median".padStart(
+      13,
+    )} ${"total min".padStart(11)} ${"per-op median".padStart(
+      14,
+    )} ${"per-op min".padStart(12)} ${"spread".padStart(8)}  status`,
+    "-".repeat(112),
+  ];
+
+  for (const result of report.results) {
+    lines.push(
+      `${result.impl.padEnd(9)} ${result.operation.padEnd(32)} ${String(
+        result.rows,
+      ).padStart(7)} ${String(result.repetitions).padStart(6)} ${formatMs(
+        result.medianMs,
+      ).padStart(13)} ${formatMs(result.minMs).padStart(11)} ${formatMs(
+        result.perOperationMedianMs,
+      ).padStart(14)} ${formatMs(result.perOperationMinMs).padStart(
+        12,
+      )} ${`${result.spreadPct.toFixed(0)}%`.padStart(8)}  ${
+        result.ok ? "ok" : "FAIL"
+      }`,
+    );
+  }
+
+  lines.push("=".repeat(112));
+  lines.push(report.pass ? "RESULT: PASS" : "RESULT: FAIL");
+  lines.push("");
+  return lines.join("\n");
 }
 
 // Proves the framework is keyed: drive a swap and a remove through the reactive

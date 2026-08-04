@@ -1,0 +1,20 @@
+type AdditionalTestApi = {
+    describe: (name: string, fn: () => void) => void;
+    it: (name: string, fn: () => boolean | Promise<boolean>) => void;
+    html: any;
+    h: any;
+    render: any;
+    reactive: any;
+    unset: any;
+    getValue: any;
+    setReuseElements: any;
+    setIgnoreIsConnected: any;
+    setAsyncUpdate: any;
+    watchEffect: any;
+    onRender: any;
+    onCleanup: any;
+    view: any;
+    internals: any;
+};
+export declare function registerAdditionalTests(api: AdditionalTestApi, sleep: (time: number) => Promise<unknown>): void;
+export {};

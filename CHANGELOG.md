@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.9.4 2026-08-04
+
+- performance and memory refactor
+
 ## 1.9.3 2026-07-25
 
 - fix bug where conditional attr was not set

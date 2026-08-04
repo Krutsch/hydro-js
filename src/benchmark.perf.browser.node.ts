@@ -26,6 +26,7 @@ const flag = (name: string) => {
 };
 const writeBaselinePath = flag("--write-baseline");
 const baselinePath = flag("--baseline");
+const interactions = args.includes("--interactions");
 const maxRegressionPercent = flag("--max-regression-percent");
 const maxFirstPaintRegressionPercent = flag(
   "--max-first-paint-regression-percent",
@@ -59,8 +60,13 @@ globalThis.document = shimWindow.document;
 globalThis.MouseEvent = shimWindow.MouseEvent;
 await shimWindow.happyDOM.waitUntilComplete();
 
-const { toPerfBaseline, diffPerf, formatPerfReport, summarizeFirstPaint } =
-  await import("./benchmark.perf.js");
+const {
+  toPerfBaseline,
+  diffPerf,
+  formatPerfReport,
+  formatScaledInteractionReport,
+  summarizeFirstPaint,
+} = await import("./benchmark.perf.js");
 type PerfReport = Awaited<
   ReturnType<typeof import("./benchmark.perf.js").runPerfScenarios>
 >;
@@ -197,11 +203,14 @@ const browser = await chromium.launch();
 try {
   const page = await browser.newPage();
   let reportJson: string | undefined;
+  let interactionsJson: string | undefined;
   let pageError: string | undefined;
   page.on("console", (msg) => {
     const text = msg.text();
     if (text.startsWith("PERF_REPORT_JSON:")) {
       reportJson = text.slice("PERF_REPORT_JSON:".length);
+    } else if (text.startsWith("PERF_INTERACTIONS_JSON:")) {
+      interactionsJson = text.slice("PERF_INTERACTIONS_JSON:".length);
     } else if (text.startsWith("PERF_REPORT_ERROR:")) {
       pageError = text.slice("PERF_REPORT_ERROR:".length);
     } else {
@@ -219,6 +228,26 @@ try {
       : {}),
     ...(process.env.PERF_REPEATS ? { repeats: process.env.PERF_REPEATS } : {}),
     ...(process.env.PERF_WARMUPS ? { warmups: process.env.PERF_WARMUPS } : {}),
+    ...(interactions ? { interactions: "1" } : {}),
+    ...(flag("--interaction-rows")
+      ? { interactionRows: flag("--interaction-rows")! }
+      : {}),
+    ...(flag("--interaction-repeats")
+      ? { interactionRepeats: flag("--interaction-repeats")! }
+      : {}),
+    ...(flag("--interaction-warmups")
+      ? { interactionWarmups: flag("--interaction-warmups")! }
+      : {}),
+    ...(flag("--update-repeats")
+      ? { updateRepeats: flag("--update-repeats")! }
+      : {}),
+    ...(flag("--select-repeats")
+      ? { selectRepeats: flag("--select-repeats")! }
+      : {}),
+    ...(flag("--swap-repeats") ? { swapRepeats: flag("--swap-repeats")! } : {}),
+    ...(flag("--remove-repeats")
+      ? { removeRepeats: flag("--remove-repeats")! }
+      : {}),
   });
   await page.goto(
     `http://127.0.0.1:${port}/src/benchmark.perf.browser.html?${query}`,
@@ -229,78 +258,92 @@ try {
   });
 
   if (pageError) throw new Error("Browser perf run failed: " + pageError);
-  if (!reportJson) throw new Error("Browser perf run produced no report");
-  const interactionReport = JSON.parse(reportJson) as PerfReport;
-  const firstPaint = await runFirstPaintScenarios(browser, port);
-  const report: PerfReport = {
-    ...interactionReport,
-    firstPaint,
-    pass: interactionReport.pass && firstPaint.pass,
-  };
 
-  if (writeBaselinePath) {
-    const target = resolve(rootDir, writeBaselinePath);
-    await mkdir(dirname(target), { recursive: true });
-    await writeFile(
-      target,
-      JSON.stringify(toPerfBaseline(report), null, 2) + "\n",
-    );
-  }
-
-  let baseline: PerfBaseline | undefined;
-  if (baselinePath) {
-    baseline = JSON.parse(
-      await readFile(resolve(rootDir, baselinePath), "utf8"),
-    ) as PerfBaseline;
-  }
-
-  // Real-browser DOM/GC noise is far higher than happy-dom's. The percentage
-  // tolerance catches large regressions, while the absolute floor prevents
-  // a small best-sample baseline from flagging ordinary scheduler variance.
-  const tolerance =
-    maxRegressionPercent !== undefined ? Number(maxRegressionPercent) : 100;
-  const firstPaintTolerance =
-    maxFirstPaintRegressionPercent !== undefined
-      ? Number(maxFirstPaintRegressionPercent)
-      : 25;
-  const diff = baseline
-    ? diffPerf(
-        report,
-        baseline,
-        tolerance,
-        firstPaintTolerance,
-        minAbsoluteRegressionMs,
-      )
-    : undefined;
-  const failures = diff?.failures ?? [];
-
-  if (asJson) {
+  if (interactions) {
+    if (!interactionsJson) {
+      throw new Error("Browser interaction benchmark produced no report");
+    }
+    const interactionReport = JSON.parse(interactionsJson);
     console.log(
-      JSON.stringify(
-        {
-          report,
-          deltas: diff?.deltas,
-          firstPaintDeltas: diff?.firstPaintDeltas,
-          failures,
-        },
-        null,
-        2,
-      ),
+      asJson
+        ? JSON.stringify(interactionReport, null, 2)
+        : formatScaledInteractionReport(interactionReport),
     );
+    process.exitCode = interactionReport.pass ? 0 : 1;
   } else {
-    console.log(
-      formatPerfReport(
-        report,
-        baseline,
-        failures,
-        tolerance,
-        firstPaintTolerance,
-        minAbsoluteRegressionMs,
-      ),
-    );
-  }
+    if (!reportJson) throw new Error("Browser perf run produced no report");
+    const interactionReport = JSON.parse(reportJson) as PerfReport;
+    const firstPaint = await runFirstPaintScenarios(browser, port);
+    const report: PerfReport = {
+      ...interactionReport,
+      firstPaint,
+      pass: interactionReport.pass && firstPaint.pass,
+    };
 
-  process.exitCode = report.pass && !failures.length ? 0 : 1;
+    if (writeBaselinePath) {
+      const target = resolve(rootDir, writeBaselinePath);
+      await mkdir(dirname(target), { recursive: true });
+      await writeFile(
+        target,
+        JSON.stringify(toPerfBaseline(report), null, 2) + "\n",
+      );
+    }
+
+    let baseline: PerfBaseline | undefined;
+    if (baselinePath) {
+      baseline = JSON.parse(
+        await readFile(resolve(rootDir, baselinePath), "utf8"),
+      ) as PerfBaseline;
+    }
+
+    // Real-browser DOM/GC noise is far higher than happy-dom's. The percentage
+    // tolerance catches large regressions, while the absolute floor prevents
+    // a small best-sample baseline from flagging ordinary scheduler variance.
+    const tolerance =
+      maxRegressionPercent !== undefined ? Number(maxRegressionPercent) : 100;
+    const firstPaintTolerance =
+      maxFirstPaintRegressionPercent !== undefined
+        ? Number(maxFirstPaintRegressionPercent)
+        : 25;
+    const diff = baseline
+      ? diffPerf(
+          report,
+          baseline,
+          tolerance,
+          firstPaintTolerance,
+          minAbsoluteRegressionMs,
+        )
+      : undefined;
+    const failures = diff?.failures ?? [];
+
+    if (asJson) {
+      console.log(
+        JSON.stringify(
+          {
+            report,
+            deltas: diff?.deltas,
+            firstPaintDeltas: diff?.firstPaintDeltas,
+            failures,
+          },
+          null,
+          2,
+        ),
+      );
+    } else {
+      console.log(
+        formatPerfReport(
+          report,
+          baseline,
+          failures,
+          tolerance,
+          firstPaintTolerance,
+          minAbsoluteRegressionMs,
+        ),
+      );
+    }
+
+    process.exitCode = report.pass && !failures.length ? 0 : 1;
+  }
 } finally {
   await browser.close();
   await close();

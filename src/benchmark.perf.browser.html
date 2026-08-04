@@ -4,7 +4,9 @@
   @web/test-runner/mocha dependency, unlike benchmark.perf.html). Reads
   rows/manyRows/repeats/warmups from the query string so the Node driver can
   control config the same way the happy-dom harness uses PERF_* env vars, then
-  prints the full report as one JSON line for the driver to capture.
+  prints the full report as one JSON line for the driver to capture. With
+  interactions=1, runs scaled select/swap/update/remove loops instead of the
+  standard js-framework-benchmark-shaped operation suite.
 
   Deliberately does NOT force a GC before each sample here (unlike the
   happy-dom node harness, which calls `cleanup: () => gc()` to avoid OOMs) -
@@ -21,8 +23,28 @@
       const params = new URLSearchParams(location.search);
       const num = (name, fallback) =>
         params.has(name) ? Number(params.get(name)) : fallback;
+      const interactionNum = (name, fallback) =>
+        params.has(name) ? Number(params.get(name)) : fallback;
 
       (async () => {
+        if (params.get("interactions") === "1") {
+          const { runScaledInteractionScenarios } =
+            await import("../dist/benchmark.perf.js");
+          const report = await runScaledInteractionScenarios({
+            rows: interactionNum("interactionRows", 1000),
+            repeats: interactionNum("interactionRepeats", 5),
+            warmups: interactionNum("interactionWarmups", 2),
+            updateRepeats: interactionNum("updateRepeats", 100),
+            selectRepeats: interactionNum("selectRepeats", 100),
+            swapRepeats: interactionNum("swapRepeats", 100),
+            removeRepeats: interactionNum("removeRepeats", 100),
+            now: () => performance.now(),
+          });
+          console.log("PERF_INTERACTIONS_JSON:" + JSON.stringify(report));
+          window.__perfDone = true;
+          return;
+        }
+
         const report = await runPerfScenarios({
           rows: num("rows", 1000),
           manyRows: num("manyRows", 10000),

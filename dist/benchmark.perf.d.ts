@@ -10,6 +10,10 @@ export interface PerfDeps extends PerfConfig {
     now?: () => number;
     cleanup?: () => void;
 }
+export interface ScaledInteractionDeps extends ScaledInteractionConfig {
+    now?: () => number;
+    cleanup?: () => void;
+}
 export interface PerfResult {
     impl: ImplName;
     operation: OperationName;
@@ -24,7 +28,36 @@ export interface PerfReport {
     config: Required<PerfConfig>;
     results: PerfResult[];
     keyed: KeyedResult[];
+    interactions?: ScaledInteractionReport;
     firstPaint?: FirstPaintReport;
+    pass: boolean;
+}
+export type ScaledInteractionName = "update every 10th row (scaled)" | "select row (scaled)" | "swap rows (scaled)" | "remove row (scaled)";
+export type ScaledInteractionConfig = {
+    rows?: number;
+    repeats?: number;
+    warmups?: number;
+    updateRepeats?: number;
+    selectRepeats?: number;
+    swapRepeats?: number;
+    removeRepeats?: number;
+};
+export interface ScaledInteractionResult {
+    impl: ImplName;
+    operation: ScaledInteractionName;
+    rows: number;
+    repetitions: number;
+    samples: number[];
+    medianMs: number;
+    minMs: number;
+    perOperationMedianMs: number;
+    perOperationMinMs: number;
+    spreadPct: number;
+    ok: boolean;
+}
+export interface ScaledInteractionReport {
+    config: Required<ScaledInteractionConfig>;
+    results: ScaledInteractionResult[];
     pass: boolean;
 }
 export interface PerfBaselineEntry {
@@ -97,6 +130,8 @@ export interface KeyedResult {
     ok: boolean;
 }
 export declare function runPerfScenarios(deps?: PerfDeps): Promise<PerfReport>;
+export declare function runScaledInteractionScenarios(deps?: ScaledInteractionDeps): Promise<ScaledInteractionReport>;
+export declare function formatScaledInteractionReport(report: ScaledInteractionReport): string;
 export declare function formatPerfReport(report: PerfReport, baseline?: PerfBaseline, failures?: string[], tolerancePct?: number, firstPaintTolerancePct?: number, minAbsoluteRegressionMs?: number): string;
 export declare function toPerfBaseline(report: PerfReport): PerfBaseline;
 export declare function diffPerf(report: PerfReport, baseline: PerfBaseline, tolerancePct?: number, firstPaintTolerancePct?: number, minAbsoluteRegressionMs?: number): {

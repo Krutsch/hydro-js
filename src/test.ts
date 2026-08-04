@@ -20,8 +20,10 @@ import {
   unobserve,
   setAsyncUpdate,
   setReactivity,
+  setIgnoreIsConnected,
   view,
 } from "./library.js";
+import { registerAdditionalTests } from "./testAdditional.js";
 
 // Local debugging
 //@ts-ignore
@@ -56,6 +58,32 @@ document.head.insertAdjacentHTML(
 </style>`,
 );
 const results: Array<{ name: string; success: boolean }> = [];
+
+setTimeout(
+  () =>
+    registerAdditionalTests(
+      {
+        describe,
+        it,
+        html,
+        h,
+        render,
+        reactive,
+        unset,
+        getValue,
+        setReuseElements,
+        setIgnoreIsConnected,
+        setAsyncUpdate,
+        watchEffect,
+        onRender,
+        onCleanup,
+        view,
+        internals,
+      },
+      sleep,
+    ),
+  1600,
+);
 
 // --------- TESTS START ------------
 
