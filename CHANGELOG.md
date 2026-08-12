@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.9.5 2026-08-12
+
+- use guard for multiple instances
+
 ## 1.9.4 2026-08-04
 
 - performance and memory refactor

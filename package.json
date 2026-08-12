@@ -1,6 +1,6 @@
 {
   "name": "hydro-js",
-  "version": "1.9.4",
+  "version": "1.9.5",
   "description": "A lightweight reactive library",
   "type": "module",
   "main": "./dist/library.js",
@@ -46,14 +46,14 @@
   "license": "MIT",
   "devDependencies": {
     "@esm-bundle/chai": "^4.3.4",
-    "@types/jsdom": "^28.0.3",
+    "@types/jsdom": "^30.0.0",
     "@web/test-runner": "^1.0.0",
     "@web/test-runner-playwright": "^1.0.0",
-    "concurrently": "^10.0.3",
-    "esbuild": "^0.28.1",
-    "happy-dom": "^20.11.1",
-    "jsdom": "^30.0.0",
-    "playwright-core": "^1.61.1",
+    "concurrently": "^10.0.4",
+    "esbuild": "^0.28.2",
+    "happy-dom": "^20.11.2",
+    "jsdom": "^30.0.1",
+    "playwright-core": "^1.62.1",
     "serve": "^14.2.6",
     "typescript": "^7.0.2"
   },
@@ -63,6 +63,6 @@
   },
   "bugs": "https://github.com/Krutsch/hydro-js/issues",
   "allowScripts": {
-    "esbuild@0.28.1": true
+    "esbuild": true
   }
 }

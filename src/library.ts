@@ -144,6 +144,33 @@ const prewiredSymbol = Symbol("prewired");
 const viewElementsEventFunctions = new Map() as eventFunctions;
 const isServerSideCached = isServerSide();
 
+// Every map and flag above lives in module scope, so two copies of hydro-js in
+// one page each get their own reactivity registry: elements rendered by one
+// instance are invisible to the other's updates. That failure is silent, so
+// leave a marker on globalThis and warn when a second instance boots.
+// Skipped on the server: SSR toolchains (Vite's ssr/client graphs, Vitest)
+// legitimately evaluate the module more than once per realm.
+// Keep VERSION in sync with package.json — the build is a plain `tsc`, so
+// there is no define step to inject it.
+const VERSION = "1.9.5";
+/* c8 ignore start */
+if (!isServerSideCached) {
+  const instanceKey = Symbol.for("hydro-js.instance");
+  const registry = globalThis as Record<symbol, string>;
+  const previousVersion = registry[instanceKey];
+
+  if (previousVersion === undefined) {
+    registry[instanceKey] = VERSION;
+  } else {
+    console.warn(
+      `[hydro-js] Duplicate instances (${previousVersion}, ${VERSION}); ` +
+        `separate reactivity state. Deduplicate with \`npm ls hydro-js\`, ` +
+        `aligned ranges, or an "overrides" entry.`,
+    );
+  }
+}
+/* c8 ignore stop */
+
 let globalSchedule = true; // Decides whether to schedule rendering and updating (async)
 let reuseElements = true; // Reuses Elements when rendering
 let insertBeforeDiffing = false; // Makes sense in Chrome only
