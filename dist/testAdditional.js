@@ -1,6 +1,117 @@
+import { createOwnership } from "./ownership.js";
+import { createRecordingUpdateAdapter, createUpdateEngine, } from "./updates.js";
+import { createView, createViewState } from "./view.js";
 export function registerAdditionalTests(api, sleep) {
     const { html, describe, it, h, render, reactive, unset, getValue, setReuseElements, setIgnoreIsConnected, setAsyncUpdate, watchEffect, onRender, onCleanup, view, internals, } = api;
     describe("shared coverage additions", () => {
+        it("owns rendered node teardown records", () => {
+            const fragmentToElements = new WeakMap();
+            const owner = createOwnership({
+                showElement: window.NodeFilter.SHOW_ELEMENT,
+                fragmentToElements,
+                isTextNode: (node) => node.nodeType === 3,
+                schedule: (fn) => fn(),
+                shouldSchedule: () => false,
+                shouldIgnoreIsConnected: () => false,
+            });
+            const root = document.createElement("div");
+            const button = document.createElement("button");
+            const text = document.createTextNode("before");
+            button.append(text);
+            root.append(button);
+            const proxy = {};
+            let clicks = 0;
+            let cleanups = 0;
+            let traceWasPresent = false;
+            owner.addEventListener(button, "click", () => clicks++);
+            owner.trackBoundElement(proxy, button);
+            owner.recordTrace(0, 6, text, "value", proxy);
+            owner.addLifecycle("cleanup", button, () => {
+                cleanups++;
+                traceWasPresent = owner.allNodeChanges.has(text);
+            });
+            button.click();
+            owner.runLifecycle(button, "cleanup");
+            owner.purgeSubtree(root);
+            return (clicks === 1 &&
+                cleanups === 1 &&
+                traceWasPresent &&
+                !owner.allNodeChanges.has(text) &&
+                !owner.bindMap.has(proxy));
+        });
+        it("records update effects behind adapter seam", () => {
+            const text = document.createTextNode("before");
+            const changes = [[0, 6, undefined, {}, "value"]];
+            const effects = [];
+            const adapter = createRecordingUpdateAdapter(effects);
+            const engine = createUpdateEngine({
+                adapter,
+                allNodeChanges: new WeakMap([[text, changes]]),
+                reactivityMap: new WeakMap([[changes[0][3], new Map([[
+                                "value",
+                                { node: text, changes },
+                            ]])]]),
+                schedule: (fn, ...args) => fn(...args),
+                isAsync: () => false,
+                isServerSideCached: false,
+                shouldIgnoreIsConnected: () => true,
+                onEvent: (key) => key.replace(/^on/, ""),
+                twoWayKey: "two-way",
+            });
+            engine.checkReactivityMap(changes[0][3], "value", "after", "before");
+            return effects.length === 1 && effects[0].kind === "text";
+        });
+        it("resets view mode after row rendering fails", () => {
+            const state = createViewState();
+            const root = document.createElement("ul");
+            const view = createView({
+                state,
+                select: () => root,
+                getValue: () => [{}],
+                observe: () => undefined,
+                unset: () => undefined,
+                onCleanup: () => undefined,
+                runLifecycle: () => undefined,
+                setReactivity: () => undefined,
+                isPrewired: () => false,
+                resetRows: () => undefined,
+                reuseElements: () => true,
+            });
+            let threw = false;
+            try {
+                view("#root", {}, () => {
+                    throw new Error("row failed");
+                });
+            }
+            catch {
+                threw = true;
+            }
+            return threw && !state.rendering && state.eventFunctions.size === 0;
+        });
+        it("rejects missing view root without entering view mode", () => {
+            const state = createViewState();
+            const view = createView({
+                state,
+                select: () => null,
+                getValue: () => [],
+                observe: () => undefined,
+                unset: () => undefined,
+                onCleanup: () => undefined,
+                runLifecycle: () => undefined,
+                setReactivity: () => undefined,
+                isPrewired: () => true,
+                resetRows: () => undefined,
+                reuseElements: () => true,
+            });
+            let threw = false;
+            try {
+                view("#missing", {}, () => document.createElement("li"));
+            }
+            catch {
+                threw = true;
+            }
+            return threw && !state.rendering && state.eventFunctions.size === 0;
+        });
         it("keeps compiled template instances independent", () => {
             let firstCalls = 0;
             let secondCalls = 0;
@@ -90,6 +201,36 @@ export function registerAdditionalTests(api, sleep) {
             unmount();
             unset(value);
             return purged;
+        });
+        it("runs cleanup before purging rendered node traces", () => {
+            const value = reactive("before");
+            const elem = html `<p>${value}</p>`;
+            const text = elem.firstChild;
+            let traceWasPresent = false;
+            let cleanupCalls = 0;
+            onCleanup(() => {
+                cleanupCalls++;
+                traceWasPresent = internals.allNodeChanges.has(text);
+            }, elem);
+            const unmount = render(elem, "", false);
+            unmount();
+            const purged = !internals.allNodeChanges.has(text);
+            unset(value);
+            return traceWasPresent && purged && cleanupCalls === 1;
+        });
+        it("drops scheduled updates after rendered node release", async () => {
+            const value = reactive("before");
+            const elem = html `<p>${value}</p>`;
+            const text = elem.firstChild;
+            const unmount = render(elem, "", false);
+            setAsyncUpdate(value, true);
+            value("after");
+            unmount();
+            await sleep(5);
+            const released = !internals.allNodeChanges.has(text);
+            const unchanged = elem.textContent === "before";
+            unset(value);
+            return released && unchanged;
         });
         it("covers view reset, append, and replacement", async () => {
             const data = reactive([]);

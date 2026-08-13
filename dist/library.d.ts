@@ -1,3 +1,4 @@
+import { type EventObject } from "./ownership.js";
 declare global {
     interface Window {
         $: Document["querySelector"];
@@ -36,17 +37,6 @@ export interface hydroObject extends Record<PropertyKey, any> {
     observe: (key: PropertyKey, fn: Function) => (() => void) | undefined;
     getObservers: () => Map<string, Set<Function>>;
     unobserve: (key?: PropertyKey, handler?: Function) => undefined;
-}
-type nodeChanges = Array<[
-    number,
-    number,
-    string | undefined,
-    hydroObject,
-    string
-]>;
-interface EventObject {
-    event: EventListener;
-    options: AddEventListenerOptions;
 }
 type reactiveObject<T> = T & hydroObject & ((setter: any) => void);
 type eventType = EventListener | EventObject;
@@ -96,7 +86,7 @@ type MatchEachElement<V, L extends Element | null = null> = V extends [] ? L : V
 type QueryResult<T extends string> = MatchEachElement<GetElementNames<T>>;
 declare const internals: {
     compare: typeof compare;
-    allNodeChanges: WeakMap<Element | Text, nodeChanges>;
+    allNodeChanges: WeakMap<Element | Text, import("./ownership.js").NodeChanges>;
     hydroToReactive: WeakMap<hydroObject, any>;
     boolAttrList: string[];
 };
