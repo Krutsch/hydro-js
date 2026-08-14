@@ -91,6 +91,47 @@ export function registerAdditionalTests(api, sleep) {
             unset(value);
             return purged;
         });
+        it("rejects a missing view root before rendering rows", () => {
+            const data = reactive([{}]);
+            let threw = false;
+            try {
+                view("#view-root-missing", data, () => html `<li>ignored</li>`);
+            }
+            catch {
+                threw = true;
+            }
+            let clicked = 0;
+            const button = html `<button onclick=${() => clicked++}>click</button>`;
+            const unmount = render(button, "", false);
+            button.click();
+            unmount();
+            unset(data);
+            return threw && clicked === 1;
+        });
+        it("keeps nested view event wiring isolated", () => {
+            let outerClicks = 0;
+            let innerClicks = 0;
+            const outerData = reactive([{}]);
+            const innerData = reactive([{}]);
+            const outerList = html `<ul id="nested-view-outer"></ul>`;
+            const innerList = html `<ul id="nested-view-inner"></ul>`;
+            const unmountOuterList = render(outerList, "", false);
+            const unmountInnerList = render(innerList, "", false);
+            view("#nested-view-outer", outerData, () => {
+                const outerButton = html `
+          <button onclick=${() => outerClicks++}>outer</button>
+        `;
+                view("#nested-view-inner", innerData, () => html `<button onclick=${() => innerClicks++}>inner</button>`);
+                return outerButton;
+            });
+            outerList.querySelector("button")?.click();
+            innerList.querySelector("button")?.click();
+            unmountOuterList();
+            unmountInnerList();
+            unset(outerData);
+            unset(innerData);
+            return outerClicks === 1 && innerClicks === 1;
+        });
         it("covers view reset, append, and replacement", async () => {
             const data = reactive([]);
             const list = html `<ul id="shared-view"></ul>`;
