@@ -51,6 +51,8 @@ interface EventObject {
 type reactiveObject<T> = T & hydroObject & ((setter: any) => void);
 type eventType = EventListener | EventObject;
 type eventFunctions = Map<string, eventType>;
+type treeChangeHandler = (parent: Node) => void;
+type attributeChangeHandler = (name: string) => void;
 declare function isServerSide(): boolean;
 declare function setGlobalSchedule(willSchedule: boolean): void;
 declare function setReuseElements(willReuse: boolean): void;
@@ -76,6 +78,8 @@ declare function watchEffect(fn: Function): () => void;
 declare function getValue<T extends object>(reactiveHydro: T): T;
 declare function onRender(fn: Function, elem: ReturnType<typeof html>, ...args: Array<any>): void;
 declare function onCleanup(fn: Function, elem: ReturnType<typeof html>, ...args: Array<any>): void;
+declare function onTreeChange(fn: treeChangeHandler, root: Node): () => void;
+declare function onAttributeChange(fn: attributeChangeHandler, element: Element): () => void;
 declare function view(root: string, data: reactiveObject<Array<any>>, renderFunction: (value: any, index: number) => Node): void;
 declare const hydro: hydroObject;
 declare const $: <T extends string>(query: T) => QueryResult<T>;
@@ -100,4 +104,4 @@ declare const internals: {
     hydroToReactive: WeakMap<hydroObject, any>;
     boolAttrList: string[];
 };
-export { render, html, h, hydro, setGlobalSchedule, setReuseElements, setInsertDiffing, setShouldSetReactivity, setIgnoreIsConnected, reactive, unset, setAsyncUpdate, unobserve, observe, ternary, emit, watchEffect, internals, getValue, onRender, onCleanup, setReactivity, $, $$, view, isServerSide, };
+export { render, html, h, hydro, setGlobalSchedule, setReuseElements, setInsertDiffing, setShouldSetReactivity, setIgnoreIsConnected, reactive, unset, setAsyncUpdate, unobserve, observe, ternary, emit, watchEffect, internals, getValue, onRender, onCleanup, onAttributeChange, onTreeChange, setReactivity, $, $$, view, isServerSide, };

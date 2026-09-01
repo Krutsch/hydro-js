@@ -13,6 +13,8 @@ type AdditionalTestApi = {
   watchEffect: any;
   onRender: any;
   onCleanup: any;
+  onAttributeChange: any;
+  onTreeChange: any;
   view: any;
   internals: any;
 };
@@ -36,6 +38,8 @@ export function registerAdditionalTests(
     watchEffect,
     onRender,
     onCleanup,
+    onAttributeChange,
+    onTreeChange,
     view,
     internals,
   } = api;
@@ -235,6 +239,92 @@ export function registerAdditionalTests(
 
       render(elem, "", false)();
       return rendered === 2 && cleaned === 2;
+    });
+
+    it("reports hydro attribute changes until unsubscribed", () => {
+      const value = reactive("one");
+      const disabled = reactive(true);
+      const root = html`<section>
+        <button data-value=${value} disabled=${disabled}>tracked</button>
+        <button data-value=${value}>other</button>
+      </section>`;
+      const unmount = render(root, "", false);
+      const [elem, other] = root.querySelectorAll("button");
+      const names: string[] = [];
+      const stop = onAttributeChange((name: string) => names.push(name), elem);
+
+      value("two");
+      disabled(false);
+      const hydroChanges =
+        elem.getAttribute("data-value") === "two" &&
+        other.getAttribute("data-value") === "two" &&
+        !elem.hasAttribute("disabled") &&
+        names.join(",") === "data-value,disabled";
+
+      elem.setAttribute("data-native", "ignored");
+      const nativeIgnored = names.length === 2;
+      stop();
+      stop();
+      value("three");
+      unmount();
+      unset(value);
+      unset(disabled);
+
+      return hydroChanges && nativeIgnored && names.length === 2;
+    });
+
+    it("reports rendered tree changes until unsubscribed", () => {
+      const parents: Node[] = [];
+      const stop = onTreeChange(
+        (parent: Node) => parents.push(parent),
+        document.body,
+      );
+      const elem = html`<p>tree change</p>`;
+      const constructedWithoutSignal = parents.length === 0;
+      const unmount = render(elem, "", false);
+      stop();
+      unmount();
+      return (
+        constructedWithoutSignal &&
+        parents.length === 1 &&
+        parents[0] === document.body
+      );
+    });
+
+    it("reports replacement and removal to ancestor subscriptions", () => {
+      const root = html`<section><span>before</span></section>`;
+      const unmountRoot = render(root, "", false);
+      const parents: Node[] = [];
+      const stop = onTreeChange((parent: Node) => parents.push(parent), root);
+      const replacement = html`<strong>after</strong>`;
+      const unmountReplacement = render(replacement, root.firstChild, false);
+      const replaced = parents.includes(root);
+      unmountReplacement();
+      const removed = parents.filter((parent) => parent === root).length >= 2;
+      stop();
+      unmountRoot();
+      return replaced && removed;
+    });
+
+    it("reports view additions and resets", async () => {
+      const data = reactive([]);
+      const list = html`<ul id="tree-change-view"></ul>`;
+      const unmount = render(list, "", false);
+      const parents: Node[] = [];
+      const stop = onTreeChange((parent: Node) => parents.push(parent), list);
+      view("#tree-change-view", data, (item: any) => html`<li>${item.id}</li>`);
+
+      data([{ id: 1 }, { id: 2 }]);
+      await sleep(2);
+      const appended = parents.includes(list);
+      data([]);
+      await sleep(2);
+      const reset = parents.filter((parent) => parent === list).length >= 2;
+
+      stop();
+      unmount();
+      unset(data);
+      return appended && reset;
     });
 
     it("re-runs async watch effects", async () => {

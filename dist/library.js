@@ -21,6 +21,8 @@ const boundElemProxies = new WeakMap(); // Reverse of bindMap: which Proxies an 
 const tmpSwap = new WeakMap(); // Take over keyToNodeMap if the new value is a hydro Proxy. Save old reactivityMap entry here, in case for a swap operation.
 const onRenderMap = new WeakMap(); // Lifecycle Hook that is being called after rendering
 const onCleanupMap = new WeakMap(); // Lifecycle Hook that is being called when unmount function is being called
+const treeChangeHandlers = new WeakMap();
+const attributeChangeHandlers = new WeakMap();
 const fragmentToElements = new WeakMap(); // Used to retreive Elements from DocumentFragment after it has been rendered â€“ for diffing
 const hydroToReactive = new WeakMap(); // Used for internal mapping from hydroKeys to the the Proxy created by the reactive function
 const ternaryDisposers = new WeakMap();
@@ -64,7 +66,7 @@ let viewElements = false;
 let ignoreIsConnected = false;
 /* c8 ignore start */
 const reactivityRegex = new RegExp(isServerSideCached
-    ? `\\{\\{([^]*?)\\}\\}|${"hydro-reactive-" /* Placeholder.reactiveKey */}([a-zA-Z0-9_.-]+)`
+    ? `\\{\\{([^]*?)\\}\\}|${"hydro-reactive-" /* Placeholder.reactiveKey */}([a-zA-Z0-9_.-]+):`
     : `\\{\\{([^]*?)\\}\\}`);
 /* c8 ignore end */
 const HTML_FIND_INVALID = /<(\/?)(html|head|body)(>|\s.*?>)/g;
@@ -194,8 +196,11 @@ function setHydroRecursive(obj) {
 }
 function setAttribute(node, key, val) {
     const isBoolAttr = boolAttrSet.has(key);
-    if (isBoolAttr && !val) {
+    // Nullish means "no value" - stringifying it would write the literal
+    // "null"/"undefined" as the attribute content.
+    if (val == null || (isBoolAttr && !val)) {
         node.removeAttribute(key);
+        notifyAttributeChange(node, key);
         return false;
     }
     node.setAttribute(key, isFunction(val) && Reflect.has(val, reactiveSymbol)
@@ -203,6 +208,7 @@ function setAttribute(node, key, val) {
         : isBoolAttr
             ? ""
             : val);
+    notifyAttributeChange(node, key);
     return true;
 }
 function addEventListener(node, eventName, obj) {
@@ -923,8 +929,11 @@ function setReactivitySingle(node, key, val) {
         const start = match.index;
         let end = start + String(resolvedValue).length;
         if (isNode(resolvedValue)) {
+            const parent = node.parentNode;
             node.nodeValue = attr_OR_text.replace(hydroMatch, "");
             node.after(resolvedValue);
+            if (parent)
+                notifyTreeChange(parent);
             setTraces(start, end, resolvedValue, lastProp, resolvedObj, key);
             return;
         }
@@ -1151,6 +1160,7 @@ function render(elem, where = "", shouldSchedule = globalSchedule) {
     }
     if (!where) {
         document.body.append(elem);
+        notifyTreeChange(document.body);
     }
     else {
         if (typeof where === "string" /* Placeholder.string */) {
@@ -1298,17 +1308,23 @@ function treeDiff(elem, where) {
             : [elem];
         if (isDocumentFragment(where)) {
             const oldElems = fragmentToElements.get(where);
+            const parent = oldElems[0]?.parentNode;
             for (const e of newElems)
                 oldElems[0].before(e);
             for (const e of oldElems)
                 e.remove();
+            if (parent)
+                notifyTreeChange(parent);
         }
         else {
             if (where instanceof window.HTMLHtmlElement) {
                 replaceElement(elem, where);
             }
             else {
+                const parent = where.parentNode;
                 where.replaceWith(...newElems);
+                if (parent)
+                    notifyTreeChange(parent);
             }
         }
         template.remove();
@@ -1330,12 +1346,15 @@ function treeDiff(elem, where) {
     tag2Elements.clear();
 }
 function replaceElement(elem, where) {
+    const changedParents = new Set();
     if (isDocumentFragment(where)) {
         const fragmentChildren = fragmentToElements.get(where);
         if (isDocumentFragment(elem)) {
             const fragmentElements = Array.from(elem.childNodes);
             for (let index = 0; index < fragmentChildren.length; index++) {
                 const fragWhere = fragmentChildren[index];
+                if (fragWhere.parentNode)
+                    changedParents.add(fragWhere.parentNode);
                 if (index < fragmentElements.length) {
                     render(fragmentElements[index], fragWhere);
                 }
@@ -1347,6 +1366,8 @@ function replaceElement(elem, where) {
         else {
             for (let index = 0; index < fragmentChildren.length; index++) {
                 const fragWhere = fragmentChildren[index];
+                if (fragWhere.parentNode)
+                    changedParents.add(fragWhere.parentNode);
                 if (index === 0) {
                     render(elem, fragWhere);
                 }
@@ -1364,15 +1385,22 @@ function replaceElement(elem, where) {
                 setAttribute(where, key, elem.getAttribute(key));
             }
             where.replaceChildren(...elem.childNodes);
+            changedParents.add(where);
         }
         else {
+            if (where.parentNode)
+                changedParents.add(where.parentNode);
             where.replaceWith(elem);
         }
         /* c8 ignore end */
     }
     else {
+        if (where.parentNode)
+            changedParents.add(where.parentNode);
         where.replaceWith(elem);
     }
+    for (const parent of changedParents)
+        notifyTreeChange(parent);
     runLifecyle(where, onCleanupMap);
 }
 function unmount(elem) {
@@ -1385,7 +1413,10 @@ function unmount(elem) {
 }
 function removeElement(elem) {
     if (!ignoreIsConnected && elem.isConnected) {
+        const parent = elem.parentNode;
         elem.remove();
+        if (parent)
+            notifyTreeChange(parent);
         runLifecyle(elem, onCleanupMap);
         purgeSubtree(elem);
     }
@@ -1531,7 +1562,7 @@ function chainKeys(initial, keys) {
             }
             if (subKey === Symbol.toPrimitive) {
                 return (toPrimitive ??= () => isServerSideCached
-                    ? `${"hydro-reactive-" /* Placeholder.reactiveKey */}${keys.join(".")}`
+                    ? `${"hydro-reactive-" /* Placeholder.reactiveKey */}${keys.join(".")}:`
                     : `{{${keys.join(".")}}}`);
             }
             if (subKey === cachedKey)
@@ -1722,6 +1753,58 @@ function onCleanup(fn, elem, ...args) {
     calledOnCleanup = true;
     addLifecycle(onCleanupMap, elem, args.length ? fn.bind(fn, ...args) : fn);
 }
+function onTreeChange(fn, root) {
+    const handlers = treeChangeHandlers.get(root);
+    if (handlers) {
+        handlers.add(fn);
+    }
+    else {
+        treeChangeHandlers.set(root, new Set([fn]));
+    }
+    return () => {
+        const current = treeChangeHandlers.get(root);
+        if (!current)
+            return;
+        current.delete(fn);
+        if (current.size === 0)
+            treeChangeHandlers.delete(root);
+    };
+}
+function onAttributeChange(fn, element) {
+    const handlers = attributeChangeHandlers.get(element);
+    if (handlers) {
+        handlers.add(fn);
+    }
+    else {
+        attributeChangeHandlers.set(element, new Set([fn]));
+    }
+    return () => {
+        const current = attributeChangeHandlers.get(element);
+        if (!current)
+            return;
+        current.delete(fn);
+        if (current.size === 0)
+            attributeChangeHandlers.delete(element);
+    };
+}
+function notifyAttributeChange(element, name) {
+    const handlers = attributeChangeHandlers.get(element);
+    if (handlers) {
+        for (const handler of handlers)
+            handler(name);
+    }
+}
+function notifyTreeChange(parent) {
+    let current = parent;
+    while (current) {
+        const handlers = treeChangeHandlers.get(current);
+        if (handlers) {
+            for (const handler of handlers)
+                handler(parent);
+        }
+        current = current.parentNode;
+    }
+}
 // Core of the library
 const sharedHandlers = Symbol("handlers");
 // The handler Map is created lazily: most Proxies (e.g. every row object of a
@@ -1817,7 +1900,7 @@ const proxyHandler = {
         if (trackDeps)
             trackDependency(receiver, key);
         let returnSet = true;
-        let oldVal = Reflect.get(target, key, receiver);
+        let oldVal = Reflect.get(receiver, key);
         if (oldVal === val)
             return returnSet;
         // Reset Path - mostly GC
@@ -1911,8 +1994,15 @@ const proxyHandler = {
                     // Move it in the array too without triggering the proxy set
                     receiver.splice(Number(key), 1, val);
                     receiver.splice(swapIndex, 1, oldVal);
+                    const changedParents = new Set();
+                    if (prevElem.parentNode)
+                        changedParents.add(prevElem.parentNode);
+                    if (prevOldElem.parentNode)
+                        changedParents.add(prevOldElem.parentNode);
                     prevElem.after(oldElem);
                     prevOldElem.after(elem);
+                    for (const parent of changedParents)
+                        notifyTreeChange(parent);
                     lastSwapElem = null;
                 }
                 return true;
@@ -2173,6 +2263,7 @@ function resetViewRows(rootElem) {
     rootElem.textContent = "";
     if (rows.length === 0)
         return;
+    notifyTreeChange(rootElem);
     pendingCleanupRows.push(rows);
     pendingCleanupCount += rows.length;
     if (pendingCleanupCount >= PENDING_CLEANUP_LIMIT) {
@@ -2218,12 +2309,14 @@ function appendAll(root, nodes) {
         return;
     if (length === 1) {
         root.appendChild(nodes[0]);
+        notifyTreeChange(root);
         return;
     }
     const fragment = document.createDocumentFragment();
     for (let index = 0; index < length; index++)
         fragment.appendChild(nodes[index]);
     root.appendChild(fragment);
+    notifyTreeChange(root);
 }
 function view(root, data, renderFunction) {
     viewElements = true;
@@ -2304,4 +2397,4 @@ const internals = {
     hydroToReactive,
     boolAttrList: Array.from(boolAttrSet),
 };
-export { render, html, h, hydro, setGlobalSchedule, setReuseElements, setInsertDiffing, setShouldSetReactivity, setIgnoreIsConnected, reactive, unset, setAsyncUpdate, unobserve, observe, ternary, emit, watchEffect, internals, getValue, onRender, onCleanup, setReactivity, $, $$, view, isServerSide, };
+export { render, html, h, hydro, setGlobalSchedule, setReuseElements, setInsertDiffing, setShouldSetReactivity, setIgnoreIsConnected, reactive, unset, setAsyncUpdate, unobserve, observe, ternary, emit, watchEffect, internals, getValue, onRender, onCleanup, onAttributeChange, onTreeChange, setReactivity, $, $$, view, isServerSide, };

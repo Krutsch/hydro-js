@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.10.0-rc.0 2026-09-01
+
+- feat: add exact-element `onAttributeChange` subscriptions for attribute writes performed by hydro-js
+- feat: add scoped `onTreeChange` subscriptions for structural DOM writes performed by hydro-js
+- fix: a nullish attribute value removes the attribute instead of writing the literal `"null"` / `"undefined"`
+
 ## 1.9.5 2026-08-12
 
 - use guard for multiple instances

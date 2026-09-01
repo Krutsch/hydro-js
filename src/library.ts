@@ -129,6 +129,13 @@ const boundElemProxies = new WeakMap<
 const tmpSwap = new WeakMap<hydroObject, keyToNodeMap>(); // Take over keyToNodeMap if the new value is a hydro Proxy. Save old reactivityMap entry here, in case for a swap operation.
 const onRenderMap = new WeakMap<ReturnType<typeof html>, lifecycleFn>(); // Lifecycle Hook that is being called after rendering
 const onCleanupMap = new WeakMap<ReturnType<typeof html>, lifecycleFn>(); // Lifecycle Hook that is being called when unmount function is being called
+type treeChangeHandler = (parent: Node) => void;
+const treeChangeHandlers = new WeakMap<Node, Set<treeChangeHandler>>();
+type attributeChangeHandler = (name: string) => void;
+const attributeChangeHandlers = new WeakMap<
+  Element,
+  Set<attributeChangeHandler>
+>();
 const fragmentToElements = new WeakMap<DocumentFragment, Array<ChildNode>>(); // Used to retreive Elements from DocumentFragment after it has been rendered â€“ for diffing
 const hydroToReactive = new WeakMap<hydroObject, reactiveObject<any>>(); // Used for internal mapping from hydroKeys to the the Proxy created by the reactive function
 const ternaryDisposers = new WeakMap<
@@ -181,7 +188,7 @@ let ignoreIsConnected = false;
 /* c8 ignore start */
 const reactivityRegex = new RegExp(
   isServerSideCached
-    ? `\\{\\{([^]*?)\\}\\}|${Placeholder.reactiveKey}([a-zA-Z0-9_.-]+)`
+    ? `\\{\\{([^]*?)\\}\\}|${Placeholder.reactiveKey}([a-zA-Z0-9_.-]+):`
     : `\\{\\{([^]*?)\\}\\}`,
 );
 /* c8 ignore end */
@@ -322,8 +329,11 @@ function setHydroRecursive(obj: hydroObject) {
 
 function setAttribute(node: Element, key: string, val: any): boolean {
   const isBoolAttr = boolAttrSet.has(key);
-  if (isBoolAttr && !val) {
+  // Nullish means "no value" - stringifying it would write the literal
+  // "null"/"undefined" as the attribute content.
+  if (val == null || (isBoolAttr && !val)) {
     node.removeAttribute(key);
+    notifyAttributeChange(node, key);
     return false;
   }
 
@@ -335,6 +345,7 @@ function setAttribute(node: Element, key: string, val: any): boolean {
         ? ""
         : val,
   );
+  notifyAttributeChange(node, key);
   return true;
 }
 function addEventListener(
@@ -1170,8 +1181,10 @@ function setReactivitySingle(
     let end: number = start + String(resolvedValue).length;
 
     if (isNode(resolvedValue)) {
+      const parent = node.parentNode;
       node.nodeValue = attr_OR_text.replace(hydroMatch, "");
       node.after(resolvedValue);
+      if (parent) notifyTreeChange(parent);
       setTraces(
         start,
         end,
@@ -1475,6 +1488,7 @@ function render(
 
   if (!where) {
     document.body.append(elem);
+    notifyTreeChange(document.body);
   } else {
     if (typeof where === Placeholder.string) {
       const resolveStringToElement = $(where as string);
@@ -1646,13 +1660,17 @@ function treeDiff(
       : [elem];
     if (isDocumentFragment(where)) {
       const oldElems = fragmentToElements.get(where)!;
+      const parent = oldElems[0]?.parentNode;
       for (const e of newElems) oldElems[0].before(e);
       for (const e of oldElems) e.remove();
+      if (parent) notifyTreeChange(parent);
     } else {
       if (where instanceof window.HTMLHtmlElement) {
         replaceElement(elem, where);
       } else {
+        const parent = where.parentNode;
         where.replaceWith(...newElems);
+        if (parent) notifyTreeChange(parent);
       }
     }
     template!.remove();
@@ -1675,12 +1693,14 @@ function replaceElement(
   elem: ReturnType<typeof html>,
   where: ReturnType<typeof html>,
 ) {
+  const changedParents = new Set<Node>();
   if (isDocumentFragment(where)) {
     const fragmentChildren = fragmentToElements.get(where)!;
     if (isDocumentFragment(elem)) {
       const fragmentElements = Array.from(elem.childNodes);
       for (let index = 0; index < fragmentChildren.length; index++) {
         const fragWhere = fragmentChildren[index];
+        if (fragWhere.parentNode) changedParents.add(fragWhere.parentNode);
         if (index < fragmentElements.length) {
           render(fragmentElements[index], fragWhere as Element);
         } else {
@@ -1690,6 +1710,7 @@ function replaceElement(
     } else {
       for (let index = 0; index < fragmentChildren.length; index++) {
         const fragWhere = fragmentChildren[index];
+        if (fragWhere.parentNode) changedParents.add(fragWhere.parentNode);
         if (index === 0) {
           render(elem, fragWhere as Element);
         } else {
@@ -1707,13 +1728,17 @@ function replaceElement(
         setAttribute(where, key, elem.getAttribute(key));
       }
       where.replaceChildren(...elem.childNodes);
+      changedParents.add(where);
     } else {
+      if (where.parentNode) changedParents.add(where.parentNode);
       where.replaceWith(elem);
     }
     /* c8 ignore end */
   } else {
+    if (where.parentNode) changedParents.add(where.parentNode);
     where.replaceWith(elem);
   }
+  for (const parent of changedParents) notifyTreeChange(parent);
   runLifecyle(where, onCleanupMap);
 }
 
@@ -1727,7 +1752,9 @@ function unmount<T = ReturnType<typeof html> | Array<ChildNode>>(elem: T) {
 
 function removeElement(elem: Text | Element) {
   if (!ignoreIsConnected && elem.isConnected) {
+    const parent = elem.parentNode;
     elem.remove();
+    if (parent) notifyTreeChange(parent);
     runLifecyle(elem, onCleanupMap);
     purgeSubtree(elem);
   }
@@ -1880,7 +1907,7 @@ function chainKeys(initial: Function | any, keys: Array<PropertyKey>): any {
       if (subKey === Symbol.toPrimitive) {
         return (toPrimitive ??= () =>
           isServerSideCached
-            ? `${Placeholder.reactiveKey}${keys.join(".")}`
+            ? `${Placeholder.reactiveKey}${keys.join(".")}:`
             : `{{${keys.join(".")}}}`);
       }
 
@@ -2123,6 +2150,56 @@ function onCleanup(
   addLifecycle(onCleanupMap, elem, args.length ? fn.bind(fn, ...args) : fn);
 }
 
+function onTreeChange(fn: treeChangeHandler, root: Node) {
+  const handlers = treeChangeHandlers.get(root);
+  if (handlers) {
+    handlers.add(fn);
+  } else {
+    treeChangeHandlers.set(root, new Set([fn]));
+  }
+
+  return () => {
+    const current = treeChangeHandlers.get(root);
+    if (!current) return;
+    current.delete(fn);
+    if (current.size === 0) treeChangeHandlers.delete(root);
+  };
+}
+
+function onAttributeChange(fn: attributeChangeHandler, element: Element) {
+  const handlers = attributeChangeHandlers.get(element);
+  if (handlers) {
+    handlers.add(fn);
+  } else {
+    attributeChangeHandlers.set(element, new Set([fn]));
+  }
+
+  return () => {
+    const current = attributeChangeHandlers.get(element);
+    if (!current) return;
+    current.delete(fn);
+    if (current.size === 0) attributeChangeHandlers.delete(element);
+  };
+}
+
+function notifyAttributeChange(element: Element, name: string) {
+  const handlers = attributeChangeHandlers.get(element);
+  if (handlers) {
+    for (const handler of handlers) handler(name);
+  }
+}
+
+function notifyTreeChange(parent: Node) {
+  let current: Node | null = parent;
+  while (current) {
+    const handlers = treeChangeHandlers.get(current);
+    if (handlers) {
+      for (const handler of handlers) handler(parent);
+    }
+    current = current.parentNode;
+  }
+}
+
 // Core of the library
 const sharedHandlers = Symbol("handlers");
 type handlerMap = Map<PropertyKey, Set<Function>>;
@@ -2221,7 +2298,7 @@ const proxyHandler = {
     if (trackDeps) trackDependency(receiver, key);
 
     let returnSet = true;
-    let oldVal = Reflect.get(target, key, receiver);
+    let oldVal = Reflect.get(receiver, key);
     if (oldVal === val) return returnSet;
 
     // Reset Path - mostly GC
@@ -2324,8 +2401,14 @@ const proxyHandler = {
           receiver.splice(Number(key), 1, val);
           receiver.splice(swapIndex, 1, oldVal);
 
+          const changedParents = new Set<Node>();
+          if (prevElem.parentNode)
+            changedParents.add(prevElem.parentNode as Node);
+          if (prevOldElem.parentNode)
+            changedParents.add(prevOldElem.parentNode as Node);
           prevElem.after(oldElem);
           prevOldElem.after(elem);
+          for (const parent of changedParents) notifyTreeChange(parent);
           lastSwapElem = null;
         }
         return true;
@@ -2622,6 +2705,7 @@ function resetViewRows(rootElem: Element) {
   const rows = Array.from(rootElem.childNodes);
   rootElem.textContent = "";
   if (rows.length === 0) return;
+  notifyTreeChange(rootElem);
 
   pendingCleanupRows.push(rows);
   pendingCleanupCount += rows.length;
@@ -2667,6 +2751,7 @@ function appendAll(root: Element, nodes: Array<Node>) {
   if (length === 0) return;
   if (length === 1) {
     root.appendChild(nodes[0]);
+    notifyTreeChange(root);
     return;
   }
 
@@ -2674,6 +2759,7 @@ function appendAll(root: Element, nodes: Array<Node>) {
   for (let index = 0; index < length; index++)
     fragment.appendChild(nodes[index]);
   root.appendChild(fragment);
+  notifyTreeChange(root);
 }
 function view(
   root: string,
@@ -2854,6 +2940,8 @@ export {
   getValue,
   onRender,
   onCleanup,
+  onAttributeChange,
+  onTreeChange,
   setReactivity,
   $,
   $$,

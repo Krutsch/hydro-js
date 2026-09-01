@@ -163,6 +163,59 @@ const unmount = render(elem);
 unmount();
 ```
 
+### onTreeChange
+
+args:
+
+- `function`, called with the changed node's parent (`Node`)
+- root: `Node`
+
+returns: `function` that unsubscribes the listener
+
+Subscribes to structural DOM changes performed by hydro-js below `root`. The
+callback runs after a node is inserted, replaced, or removed, and receives the
+parent where the change occurred. Changes are reported to subscriptions on
+ancestor nodes as well. Creating HTML alone does not trigger the callback.
+
+#### Example
+
+```js
+const root = html`<main><p>Initial content</p></main>`;
+render(root, "", false);
+const stop = onTreeChange((parent) => {
+  console.log("Tree changed under", parent);
+}, root);
+
+render(html`<p>Updated content</p>`, root.firstChild, false);
+stop(); // Stop listening
+```
+
+### onAttributeChange
+
+args:
+
+- `function`, called with the changed attribute name (`string`)
+- element: `Element`
+
+returns: `function` that unsubscribes the listener
+
+Subscribes to attribute writes performed by hydro-js on exactly `element`.
+Native `setAttribute()` and `removeAttribute()` calls are outside this contract.
+
+#### Example
+
+```js
+const label = reactive("Save");
+const button = html`<button aria-label=${label}>Save</button>`;
+render(button, "", false);
+const stop = onAttributeChange((name) => {
+  console.log("Attribute changed", name);
+}, button);
+
+label("Submit");
+stop(); // Stop listening
+```
+
 ### reactive
 
 args: value: `any`<br>

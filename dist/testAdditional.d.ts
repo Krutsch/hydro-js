@@ -13,6 +13,8 @@ type AdditionalTestApi = {
     watchEffect: any;
     onRender: any;
     onCleanup: any;
+    onAttributeChange: any;
+    onTreeChange: any;
     view: any;
     internals: any;
 };
