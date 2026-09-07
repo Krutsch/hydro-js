@@ -51,6 +51,102 @@ In order to make the DOM reactive, `ES6 Proxy` objects are being used to map dat
 
 Almost all intern maps are using `WeakMap` with DOM Elements or Proxy objects as keys and thus memory is cleared efficiently.
 
+## Browser benchmarks
+
+The existing performance suite runs synthetic `html`, `h`, and `view` workloads
+in Chromium. The supplied `actual.tsx` application can be measured with its
+own real-browser fixture:
+
+```sh
+npm run bench:actual
+```
+
+Create and check a local baseline with:
+
+```sh
+npm run bench:actual:baseline
+npm run bench:actual:check
+npm run bench:actual:memory
+```
+
+The normal fixture uses a minified release bundle; profiling uses an
+unminified bundle for readable call frames. The check compares handler and
+two-frame settling medians separately. It uses
+`ACTUAL_MAX_REGRESSION_PERCENT`/`ACTUAL_MIN_REGRESSION_MS` for handler timing
+and `ACTUAL_MAX_FRAME_REGRESSION_PERCENT`/`ACTUAL_MIN_FRAME_REGRESSION_MS`
+for settling timing. Settling defaults are deliberately coarse at 50% and
+10 ms because two animation frames are only a rendering-settling proxy.
+
+Use `ACTUAL_BENCHMARK_REPEATS` and `ACTUAL_BENCHMARK_WARMUPS` to control the
+sample count, or pass one operation such as `create-many` to focus the run:
+
+```sh
+ACTUAL_BENCHMARK_REPEATS=10 ACTUAL_BENCHMARK_WARMUPS=5 npm run bench:actual -- update
+```
+
+Capture an opt-in Chromium CPU profile, allocation sample, or rendering trace
+for one operation:
+
+```sh
+npm run bench:actual -- --profile cpu --profile-output /tmp/hydro.cpuprofile create-many
+npm run bench:actual -- --profile allocation --profile-output /tmp/hydro.heapprofile create-many
+npm run bench:actual -- --profile timeline --profile-output /tmp/hydro.trace.json create-many
+```
+
+Profile runs first discard `ACTUAL_BENCHMARK_WARMUPS` ordinary fresh-context
+runs (default 3), then capture exactly one new context. This matches the normal
+benchmark's warmup procedure, not same-page JIT warming. Profile mode does not
+use `ACTUAL_BENCHMARK_REPEATS`. Run the command independently three times for
+three captures. Profiling is diagnostic only and cannot be combined with
+baseline or memory modes; use unprofiled runs for timing comparisons.
+
+CPU and allocation captures also write `<output>.trace.json`. Every mode writes
+`<output>.meta.json` with browser, Node, platform, CPU model, Linux CPU affinity,
+warmups, sampling settings, source hashes, and results, plus `<output>.app.js`
+containing the captured bundle for call-frame attribution. Open CPU profiles in Chromium DevTools,
+allocation profiles in its Memory panel, and traces in DevTools or Perfetto.
+All traces contain `hydro-actual-handler-start`, `hydro-actual-handler-end`, and
+`hydro-actual-frame-end` marks. CPU timestamps and companion trace timestamps
+share Chromium's monotonic microsecond clock.
+
+Captures include setup, handler, frames, and verification. Ordinary interaction
+measurements settle the prepared table for two frames before timing the action.
+Clip CPU samples to
+the handler marks and exclude verification stacks; do not sum overlapping
+inclusive frames. Allocation sampling uses a 32 KiB interval and includes
+objects collected by minor and major GC. Filter allocation stacks to descendants
+of the driver's `perform()` call to exclude setup and verification. Sampled
+allocation bytes estimate JavaScript allocation, not retained heap, total native
+DOM memory, or time. Allocation samples have no timestamps; the companion trace
+does not give them temporal precision. The two-frame elapsed time includes the
+handler duration and is a settling proxy, not a direct paint measurement.
+
+Before an optimization comparison, run at least three sequential A/A pairs with
+10 measured samples and 3 discarded fresh-context warmups per run. Keep other
+benchmarks and profilers stopped, compare handler and frame medians separately,
+and retain all raw runs. Use the largest paired A/A difference as the drift
+floor; do not select only quiet runs or refresh baselines to hide variability.
+On Linux, a process-local `taskset --cpu-list <allowed-cpus>` prefix can test
+whether fixed affinity reduces drift. Determine the allowed CPU list on the
+measurement host, keep it identical for both variants and profiles, and do not
+compare absolute timings across different affinity settings as a speedup.
+Validate profiling changes with `npm run test:actual:profile`.
+See the [2026-09-07 profiling findings](docs/actual-profiling-2026-09-07.md)
+for a measured A/A stability comparison and marked CPU/allocation attribution.
+
+This workload validates row creation, replacement, append, update, selection,
+swap, removal, and clear behavior while timing the browser-side event handler.
+It is a local diagnostic workload, not an official js-framework-benchmark score;
+the fixture does not include the upstream benchmark's complete HTML and CSS.
+
+`npm run bench:size` also reports the minified, gzip, and Brotli sizes of the
+bundled `actual.tsx` application as `actual-app`.
+
+`npm run bench:actual:memory` runs repeated 10,000-row create/clear cycles in
+Chromium with exposed GC. It checks row survivors after the page probe returns,
+then releases the probe's WeakRefs before reporting the post-release heap delta
+and DOM/listener counters. Set `ACTUAL_MEMORY_CYCLES` to change the cycle count.
+
 ## Documentation
 
 ### html

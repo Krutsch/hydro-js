@@ -121,6 +121,13 @@ async function createTargets(): Promise<SizeTarget[]> {
     targets.push({ ...entry, type: "bundle", entry: entryPath });
   }
 
+  targets.push({
+    name: "actual-app",
+    type: "bundle",
+    entry: join(rootDir, "actual.tsx"),
+    source: join(rootDir, "actual.tsx"),
+  });
+
   return targets;
 }
 
@@ -147,6 +154,7 @@ async function measureTarget(target: SizeTarget): Promise<SizeResult> {
 }
 
 async function bundleTarget(entry: string, minify: boolean) {
+  const isActualApp = entry.endsWith("actual.tsx");
   const result = await build({
     entryPoints: [entry],
     bundle: true,
@@ -154,6 +162,7 @@ async function bundleTarget(entry: string, minify: boolean) {
     format: "esm",
     platform: "browser",
     target: "esnext",
+    ...(isActualApp ? { jsxFactory: "h", jsxFragment: "Fragment" } : {}),
     minify,
     treeShaking: true,
     legalComments: "none",

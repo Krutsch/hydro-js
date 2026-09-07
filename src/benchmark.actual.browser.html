@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>hydro-js actual benchmark fixture</title>
+    <style>
+      table {
+        border-collapse: collapse;
+      }
+
+      td {
+        padding: 2px 8px;
+      }
+
+      .danger {
+        background: #f5d0d0;
+      }
+    </style>
+  </head>
+  <body>
+    <main id="main">
+      <nav aria-label="Benchmark actions">
+        <button id="run" type="button" onclick="run">Run</button>
+        <button id="runlots" type="button" onclick="runLots">Run lots</button>
+        <button id="add" type="button" onclick="add">Add</button>
+        <button id="update" type="button" onclick="update">Update</button>
+        <button id="clear" type="button" onclick="clear">Clear</button>
+        <button id="swaprows" type="button" onclick="swapRows">
+          Swap rows
+        </button>
+      </nav>
+      <table>
+        <tbody></tbody>
+      </table>
+    </main>
+    <script type="module">
+      import "../dist/benchmark.actual.app.js";
+      import { installActualBenchmark } from "../dist/benchmark.actual.browser.js";
+
+      installActualBenchmark();
+    </script>
+  </body>
+</html>
