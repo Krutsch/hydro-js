@@ -53,6 +53,7 @@
     "esbuild": "^0.28.2",
     "happy-dom": "^20.14.0",
     "jsdom": "^30.0.1",
+    "playwright": "^1.63.0",
     "playwright-core": "^1.63.0",
     "serve": "^14.2.6",
     "typescript": "^7.0.2"
