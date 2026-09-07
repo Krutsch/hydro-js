@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-04T08:04:49.999Z",
+  "generatedAt": "2026-09-07T07:26:03.309Z",
   "config": {
     "rows": 1000,
     "manyRows": 10000,
@@ -10,20 +10,20 @@
     {
       "impl": "html",
       "operation": "create rows",
-      "minMs": 4.200000001117587,
-      "medianMs": 4.349999999627471
+      "minMs": 4.800000000046566,
+      "medianMs": 4.900000000139698
     },
     {
       "impl": "html",
       "operation": "replace all rows",
-      "minMs": 3.699999999254942,
-      "medianMs": 4.0499999998137355
+      "minMs": 4,
+      "medianMs": 4.5
     },
     {
       "impl": "html",
       "operation": "update every 10th row",
-      "minMs": 0,
-      "medianMs": 0.09999999962747097
+      "minMs": 0.09999999986030161,
+      "medianMs": 0.19999999995343387
     },
     {
       "impl": "html",
@@ -46,38 +46,38 @@
     {
       "impl": "html",
       "operation": "create many rows",
-      "minMs": 37.19999999925494,
-      "medianMs": 39.25
+      "minMs": 38.89999999990687,
+      "medianMs": 51.5
     },
     {
       "impl": "html",
       "operation": "append rows to large table",
-      "minMs": 3.5,
-      "medianMs": 3.7000000001862645
+      "minMs": 3.5999999998603016,
+      "medianMs": 3.75
     },
     {
       "impl": "html",
       "operation": "clear rows",
-      "minMs": 0.09999999962747097,
-      "medianMs": 0.19999999925494194
+      "minMs": 0.09999999986030161,
+      "medianMs": 0.19999999995343387
     },
     {
       "impl": "h",
       "operation": "create rows",
-      "minMs": 2.599999999627471,
-      "medianMs": 2.699999999254942
+      "minMs": 3.800000000046566,
+      "medianMs": 4.050000000046566
     },
     {
       "impl": "h",
       "operation": "replace all rows",
-      "minMs": 2.899999998509884,
-      "medianMs": 4.099999999627471
+      "minMs": 4.099999999860302,
+      "medianMs": 4.100000000093132
     },
     {
       "impl": "h",
       "operation": "update every 10th row",
       "minMs": 0,
-      "medianMs": 0.09999999962747097
+      "medianMs": 0.09999999997671694
     },
     {
       "impl": "h",
@@ -100,44 +100,44 @@
     {
       "impl": "h",
       "operation": "create many rows",
-      "minMs": 27.90000000037253,
-      "medianMs": 29.299999999813735
+      "minMs": 27.800000000046566,
+      "medianMs": 30.000000000116415
     },
     {
       "impl": "h",
       "operation": "append rows to large table",
-      "minMs": 2.5,
-      "medianMs": 2.800000000745058
+      "minMs": 2.699999999953434,
+      "medianMs": 2.800000000046566
     },
     {
       "impl": "h",
       "operation": "clear rows",
-      "minMs": 0.09999999962747097,
-      "medianMs": 0.19999999925494194
+      "minMs": 0.10000000009313226,
+      "medianMs": 0.19999999995343387
     },
     {
       "impl": "view",
       "operation": "create rows",
-      "minMs": 6.400000000372529,
-      "medianMs": 6.8500000005587935
+      "minMs": 6.300000000046566,
+      "medianMs": 6.550000000046566
     },
     {
       "impl": "view",
       "operation": "replace all rows",
-      "minMs": 6.599999999627471,
-      "medianMs": 6.8500000005587935
+      "minMs": 7.199999999953434,
+      "medianMs": 7.600000000093132
     },
     {
       "impl": "view",
       "operation": "update every 10th row",
-      "minMs": 0.09999999962747097,
-      "medianMs": 0.14999999944120646
+      "minMs": 0.10000000009313226,
+      "medianMs": 0.19999999995343387
     },
     {
       "impl": "view",
       "operation": "select row",
-      "minMs": 0.09999999962747097,
-      "medianMs": 0.09999999962747097
+      "minMs": 0.09999999986030161,
+      "medianMs": 0.10000000009313226
     },
     {
       "impl": "view",
@@ -154,44 +154,44 @@
     {
       "impl": "view",
       "operation": "create many rows",
-      "minMs": 67.20000000111759,
-      "medianMs": 77.45000000018626
+      "minMs": 72.39999999990687,
+      "medianMs": 80.50000000011642
     },
     {
       "impl": "view",
       "operation": "append rows to large table",
-      "minMs": 6.400000000372529,
-      "medianMs": 6.599999999627471
+      "minMs": 6.300000000046566,
+      "medianMs": 6.699999999953434
     },
     {
       "impl": "view",
       "operation": "clear rows",
-      "minMs": 0.19999999925494194,
-      "medianMs": 0.2999999988824129
+      "minMs": 0.19999999995343387,
+      "medianMs": 0.30000000004656613
     },
     {
       "impl": "view-html",
       "operation": "create rows",
-      "minMs": 7.400000000372529,
-      "medianMs": 7.7000000001862645
+      "minMs": 7.399999999906868,
+      "medianMs": 7.800000000046566
     },
     {
       "impl": "view-html",
       "operation": "replace all rows",
-      "minMs": 7.800000000745058,
-      "medianMs": 8.450000000186265
+      "minMs": 8.099999999860302,
+      "medianMs": 8.70000000006985
     },
     {
       "impl": "view-html",
       "operation": "update every 10th row",
-      "minMs": 0.09999999962747097,
-      "medianMs": 0.19999999925494194
+      "minMs": 0.09999999986030161,
+      "medianMs": 0.19999999995343387
     },
     {
       "impl": "view-html",
       "operation": "select row",
       "minMs": 0,
-      "medianMs": 0.09999999962747097
+      "medianMs": 0.09999999997671694
     },
     {
       "impl": "view-html",
@@ -208,43 +208,43 @@
     {
       "impl": "view-html",
       "operation": "create many rows",
-      "minMs": 88.40000000037253,
-      "medianMs": 95.34999999962747
+      "minMs": 82.80000000004657,
+      "medianMs": 91.49999999988358
     },
     {
       "impl": "view-html",
       "operation": "append rows to large table",
-      "minMs": 7.400000000372529,
-      "medianMs": 7.799999998882413
+      "minMs": 7.300000000046566,
+      "medianMs": 7.599999999860302
     },
     {
       "impl": "view-html",
       "operation": "clear rows",
-      "minMs": 0.2999999988824129,
-      "medianMs": 0.30000000074505806
+      "minMs": 0.19999999995343387,
+      "medianMs": 0.30000000004656613
     }
   ],
   "firstPaint": {
-    "generatedAt": "2026-08-04T08:04:49.999Z",
+    "generatedAt": "2026-09-07T07:26:03.310Z",
     "entries": [
       {
         "impl": "html",
         "minMs": 24,
-        "medianMs": 28
+        "medianMs": 32
       },
       {
         "impl": "h",
-        "minMs": 28,
+        "minMs": 24,
         "medianMs": 28
       },
       {
         "impl": "view",
-        "minMs": 28,
-        "medianMs": 28
+        "minMs": 32,
+        "medianMs": 32
       },
       {
         "impl": "view-html",
-        "minMs": 28,
+        "minMs": 24,
         "medianMs": 28
       }
     ]

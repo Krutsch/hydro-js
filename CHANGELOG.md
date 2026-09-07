@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.10.0-rc.0 2026-09-01
+## 1.10.0 2026-09-01
 
 - feat: add exact-element `onAttributeChange` subscriptions for attribute writes performed by hydro-js
 - feat: add scoped `onTreeChange` subscriptions for structural DOM writes performed by hydro-js
