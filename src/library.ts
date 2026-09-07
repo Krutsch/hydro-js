@@ -150,6 +150,7 @@ const htmlTemplateCacheable = new WeakMap<TemplateStringsArray, boolean>();
 const prewiredSymbol = Symbol("prewired");
 const viewElementsEventFunctions = new Map() as eventFunctions;
 const isServerSideCached = isServerSide();
+const serverRenderUnmounts = new Set<() => void>();
 
 // Every map and flag above lives in module scope, so two copies of hydro-js in
 // one page each get their own reactivity registry: elements rendered by one
@@ -159,7 +160,7 @@ const isServerSideCached = isServerSide();
 // legitimately evaluate the module more than once per realm.
 // Keep VERSION in sync with package.json — the build is a plain `tsc`, so
 // there is no define step to inject it.
-const VERSION = "1.9.5";
+const VERSION = "1.10.1";
 /* c8 ignore start */
 if (!isServerSideCached) {
   const instanceKey = Symbol.for("hydro-js.instance");
@@ -1743,11 +1744,23 @@ function replaceElement(
 }
 
 function unmount<T = ReturnType<typeof html> | Array<ChildNode>>(elem: T) {
-  if (Array.isArray(elem)) {
-    return () => elem.forEach(removeElement);
-  } else {
-    return () => removeElement(elem as unknown as Text | Element);
-  }
+  let mounted = true;
+  const remove = () => {
+    if (!mounted) return;
+    mounted = false;
+    serverRenderUnmounts.delete(remove);
+    if (Array.isArray(elem)) {
+      elem.forEach(removeElement);
+    } else {
+      removeElement(elem as unknown as Text | Element);
+    }
+  };
+  if (isServerSideCached) serverRenderUnmounts.add(remove);
+  return remove;
+}
+
+function disposeServerRenders() {
+  for (const remove of [...serverRenderUnmounts]) remove();
 }
 
 function removeElement(elem: Text | Element) {
@@ -2942,6 +2955,7 @@ export {
   onCleanup,
   onAttributeChange,
   onTreeChange,
+  disposeServerRenders,
   setReactivity,
   $,
   $$,

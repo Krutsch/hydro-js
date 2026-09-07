@@ -67,6 +67,7 @@ declare function h(name: string | ((...args: any[]) => ReturnType<typeof h>) | F
 declare function setReactivity(DOM: ReturnType<typeof html>, eventFunctions?: eventFunctions | Record<string, eventType>): void;
 declare function compare(elem: Element | DocumentFragment, where: Element | DocumentFragment | Text, onlyTextChildren?: boolean): boolean;
 declare function render(elem: ReturnType<typeof html> | reactiveObject<any>, where?: ReturnType<typeof html> | string, shouldSchedule?: boolean): ChildNode["remove"];
+declare function disposeServerRenders(): void;
 declare function reactive<T>(initial: T): reactiveObject<T>;
 declare function unset(reactiveHydro: reactiveObject<any>): void;
 declare function setAsyncUpdate(reactiveHydro: reactiveObject<any>, asyncUpdate: boolean): void;
@@ -104,4 +105,4 @@ declare const internals: {
     hydroToReactive: WeakMap<hydroObject, any>;
     boolAttrList: string[];
 };
-export { render, html, h, hydro, setGlobalSchedule, setReuseElements, setInsertDiffing, setShouldSetReactivity, setIgnoreIsConnected, reactive, unset, setAsyncUpdate, unobserve, observe, ternary, emit, watchEffect, internals, getValue, onRender, onCleanup, onAttributeChange, onTreeChange, setReactivity, $, $$, view, isServerSide, };
+export { render, html, h, hydro, setGlobalSchedule, setReuseElements, setInsertDiffing, setShouldSetReactivity, setIgnoreIsConnected, reactive, unset, setAsyncUpdate, unobserve, observe, ternary, emit, watchEffect, internals, getValue, onRender, onCleanup, onAttributeChange, onTreeChange, disposeServerRenders, setReactivity, $, $$, view, isServerSide, };

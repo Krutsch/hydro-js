@@ -34,6 +34,7 @@ const htmlTemplateCacheable = new WeakMap();
 const prewiredSymbol = Symbol("prewired");
 const viewElementsEventFunctions = new Map();
 const isServerSideCached = isServerSide();
+const serverRenderUnmounts = new Set();
 // Every map and flag above lives in module scope, so two copies of hydro-js in
 // one page each get their own reactivity registry: elements rendered by one
 // instance are invisible to the other's updates. That failure is silent, so
@@ -42,7 +43,7 @@ const isServerSideCached = isServerSide();
 // legitimately evaluate the module more than once per realm.
 // Keep VERSION in sync with package.json — the build is a plain `tsc`, so
 // there is no define step to inject it.
-const VERSION = "1.9.5";
+const VERSION = "1.10.1";
 /* c8 ignore start */
 if (!isServerSideCached) {
     const instanceKey = Symbol.for("hydro-js.instance");
@@ -1404,12 +1405,26 @@ function replaceElement(elem, where) {
     runLifecyle(where, onCleanupMap);
 }
 function unmount(elem) {
-    if (Array.isArray(elem)) {
-        return () => elem.forEach(removeElement);
-    }
-    else {
-        return () => removeElement(elem);
-    }
+    let mounted = true;
+    const remove = () => {
+        if (!mounted)
+            return;
+        mounted = false;
+        serverRenderUnmounts.delete(remove);
+        if (Array.isArray(elem)) {
+            elem.forEach(removeElement);
+        }
+        else {
+            removeElement(elem);
+        }
+    };
+    if (isServerSideCached)
+        serverRenderUnmounts.add(remove);
+    return remove;
+}
+function disposeServerRenders() {
+    for (const remove of [...serverRenderUnmounts])
+        remove();
 }
 function removeElement(elem) {
     if (!ignoreIsConnected && elem.isConnected) {
@@ -2397,4 +2412,4 @@ const internals = {
     hydroToReactive,
     boolAttrList: Array.from(boolAttrSet),
 };
-export { render, html, h, hydro, setGlobalSchedule, setReuseElements, setInsertDiffing, setShouldSetReactivity, setIgnoreIsConnected, reactive, unset, setAsyncUpdate, unobserve, observe, ternary, emit, watchEffect, internals, getValue, onRender, onCleanup, onAttributeChange, onTreeChange, setReactivity, $, $$, view, isServerSide, };
+export { render, html, h, hydro, setGlobalSchedule, setReuseElements, setInsertDiffing, setShouldSetReactivity, setIgnoreIsConnected, reactive, unset, setAsyncUpdate, unobserve, observe, ternary, emit, watchEffect, internals, getValue, onRender, onCleanup, onAttributeChange, onTreeChange, disposeServerRenders, setReactivity, $, $$, view, isServerSide, };
