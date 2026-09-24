@@ -1,5 +1,14 @@
 node_modules
 dist/.size-benchmark/
+dist/.jfb-benchmark/
+dist/benchmark.jfb.node.js
+dist/benchmark.jfb.node.d.ts
 dist/test.d.ts
 dist/test.js
 coverage
+# Historical snapshots (kept locally for reference, not committed).
+# Canonical gates (perf-baseline.browser.json, perf-baseline.jfb.json,
+# size-baseline.json) stay tracked.
+perf-baseline.jfb.phase-c.json
+perf-baseline.jfb.v1.10.1.json
+size-baseline.v1.10.1.json

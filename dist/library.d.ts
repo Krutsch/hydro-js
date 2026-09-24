@@ -37,13 +37,8 @@ export interface hydroObject extends Record<PropertyKey, any> {
     getObservers: () => Map<string, Set<Function>>;
     unobserve: (key?: PropertyKey, handler?: Function) => undefined;
 }
-type nodeChanges = Array<[
-    number,
-    number,
-    string | undefined,
-    hydroObject,
-    string
-]>;
+type nodeChange = [number, number, string | undefined, hydroObject, string];
+type nodeChanges = nodeChange | nodeChange[];
 interface EventObject {
     event: EventListener;
     options: AddEventListenerOptions;
@@ -74,6 +69,10 @@ declare function setAsyncUpdate(reactiveHydro: reactiveObject<any>, asyncUpdate:
 declare function observe(reactiveHydro: reactiveObject<any>, fn: Function): any;
 declare function unobserve(reactiveHydro: reactiveObject<any>): void;
 declare function ternary(condition: Function | reactiveObject<any>, trueVal: any, falseVal: any, reactiveHydro?: reactiveObject<any>): any;
+export type selectorFn = ((key: any) => reactiveObject<boolean>) & {
+    dispose: () => void;
+};
+declare function selector(reactiveHydro: reactiveObject<any>): selectorFn;
 declare function emit(eventName: string, data: any, who: EventTarget, options?: object): void;
 declare function watchEffect(fn: Function): () => void;
 declare function getValue<T extends object>(reactiveHydro: T): T;
@@ -105,4 +104,4 @@ declare const internals: {
     hydroToReactive: WeakMap<hydroObject, any>;
     boolAttrList: string[];
 };
-export { render, html, h, hydro, setGlobalSchedule, setReuseElements, setInsertDiffing, setShouldSetReactivity, setIgnoreIsConnected, reactive, unset, setAsyncUpdate, unobserve, observe, ternary, emit, watchEffect, internals, getValue, onRender, onCleanup, onAttributeChange, onTreeChange, disposeServerRenders, setReactivity, $, $$, view, isServerSide, };
+export { render, html, h, hydro, setGlobalSchedule, setReuseElements, setInsertDiffing, setShouldSetReactivity, setIgnoreIsConnected, reactive, unset, setAsyncUpdate, unobserve, observe, ternary, selector, emit, watchEffect, internals, getValue, onRender, onCleanup, onAttributeChange, onTreeChange, disposeServerRenders, setReactivity, $, $$, view, isServerSide, };

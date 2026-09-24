@@ -1,0 +1,258 @@
+{
+  "generatedAt": "2026-09-23T11:47:31.219Z",
+  "config": {
+    "samples": 10,
+    "viewport": "1024x768",
+    "traceCategories": [
+      "blink.user_timing",
+      "devtools.timeline",
+      "disabled-by-default-devtools.timeline"
+    ]
+  },
+  "results": [
+    {
+      "implementation": "local",
+      "operation": "create rows",
+      "sampleCount": 10,
+      "traceMedianMs": 37.8425,
+      "traceMinMs": 35.937,
+      "fallbackMedianMs": 37.799999999813735,
+      "ratioToVanilla": 1.1204664932869552
+    },
+    {
+      "implementation": "vanilla",
+      "operation": "create rows",
+      "sampleCount": 10,
+      "traceMedianMs": 34.172,
+      "traceMinMs": 32.998,
+      "fallbackMedianMs": 34.04999999888241,
+      "ratioToVanilla": 1
+    },
+    {
+      "implementation": "local",
+      "operation": "replace all rows",
+      "sampleCount": 10,
+      "traceMedianMs": 42.1245,
+      "traceMinMs": 40.739,
+      "fallbackMedianMs": 41.94999999925494,
+      "ratioToVanilla": 1.202286457928703
+    },
+    {
+      "implementation": "vanilla",
+      "operation": "replace all rows",
+      "sampleCount": 10,
+      "traceMedianMs": 35.971000000000004,
+      "traceMinMs": 32.524,
+      "fallbackMedianMs": 35.84999999962747,
+      "ratioToVanilla": 1
+    },
+    {
+      "implementation": "local",
+      "operation": "partial update",
+      "sampleCount": 10,
+      "traceMedianMs": 24.378,
+      "traceMinMs": 22.74,
+      "fallbackMedianMs": 24,
+      "ratioToVanilla": 1.1705506836199064
+    },
+    {
+      "implementation": "vanilla",
+      "operation": "partial update",
+      "sampleCount": 10,
+      "traceMedianMs": 21.181,
+      "traceMinMs": 17.314,
+      "fallbackMedianMs": 20.899999999441206,
+      "ratioToVanilla": 1
+    },
+    {
+      "implementation": "local",
+      "operation": "select row",
+      "sampleCount": 20,
+      "traceMedianMs": 6.59,
+      "traceMinMs": 5.505,
+      "fallbackMedianMs": 6.000000000931323,
+      "ratioToVanilla": 1.0144315061464149
+    },
+    {
+      "implementation": "vanilla",
+      "operation": "select row",
+      "sampleCount": 20,
+      "traceMedianMs": 6.588,
+      "traceMinMs": 5.072,
+      "fallbackMedianMs": 5.8999999994412065,
+      "ratioToVanilla": 1
+    },
+    {
+      "implementation": "local",
+      "operation": "swap rows",
+      "sampleCount": 10,
+      "traceMedianMs": 24.665,
+      "traceMinMs": 22.473,
+      "fallbackMedianMs": 23,
+      "ratioToVanilla": 1.0086168296720093
+    },
+    {
+      "implementation": "vanilla",
+      "operation": "swap rows",
+      "sampleCount": 10,
+      "traceMedianMs": 23.9085,
+      "traceMinMs": 21.153,
+      "fallbackMedianMs": 23.399999999441206,
+      "ratioToVanilla": 1
+    },
+    {
+      "implementation": "local",
+      "operation": "remove row",
+      "sampleCount": 10,
+      "traceMedianMs": 18.1375,
+      "traceMinMs": 16.409,
+      "fallbackMedianMs": 17.850000000558794,
+      "ratioToVanilla": 1.0043964939578975
+    },
+    {
+      "implementation": "vanilla",
+      "operation": "remove row",
+      "sampleCount": 10,
+      "traceMedianMs": 18.3615,
+      "traceMinMs": 17.563,
+      "fallbackMedianMs": 18.15000000037253,
+      "ratioToVanilla": 1
+    },
+    {
+      "implementation": "local",
+      "operation": "create many rows",
+      "sampleCount": 10,
+      "traceMedianMs": 485.7785,
+      "traceMinMs": 457.298,
+      "fallbackMedianMs": 485.59999999962747,
+      "ratioToVanilla": 1.264363728576987
+    },
+    {
+      "implementation": "vanilla",
+      "operation": "create many rows",
+      "sampleCount": 10,
+      "traceMedianMs": 380.5865,
+      "traceMinMs": 346.145,
+      "fallbackMedianMs": 380.45000000018626,
+      "ratioToVanilla": 1
+    },
+    {
+      "implementation": "local",
+      "operation": "append rows to large table",
+      "sampleCount": 10,
+      "traceMedianMs": 41.775,
+      "traceMinMs": 38.803,
+      "fallbackMedianMs": 41.59999999962747,
+      "ratioToVanilla": 1.1683829117684892
+    },
+    {
+      "implementation": "vanilla",
+      "operation": "append rows to large table",
+      "sampleCount": 10,
+      "traceMedianMs": 36.144999999999996,
+      "traceMinMs": 34.263,
+      "fallbackMedianMs": 36.05000000074506,
+      "ratioToVanilla": 1
+    },
+    {
+      "implementation": "local",
+      "operation": "clear rows",
+      "sampleCount": 10,
+      "traceMedianMs": 18.237000000000002,
+      "traceMinMs": 15.998,
+      "fallbackMedianMs": 17.699999999254942,
+      "ratioToVanilla": 1.1592380313771282
+    },
+    {
+      "implementation": "vanilla",
+      "operation": "clear rows",
+      "sampleCount": 10,
+      "traceMedianMs": 15.693000000000001,
+      "traceMinMs": 14.09,
+      "fallbackMedianMs": 15,
+      "ratioToVanilla": 1
+    }
+  ],
+  "memory": [
+    {
+      "implementation": "local",
+      "ready": {
+        "heapMB": 1.7623405456542969,
+        "nodes": 94,
+        "listeners": 32,
+        "hydroKeys": 5
+      },
+      "run1k": {
+        "heapMB": 3.386211395263672,
+        "nodes": 11094,
+        "listeners": 2032,
+        "hydroKeys": 1004
+      },
+      "run10k": {
+        "heapMB": 15.812313079833984,
+        "nodes": 110097,
+        "listeners": 20032,
+        "hydroKeys": 10004
+      },
+      "createClear1": {
+        "heapMB": 2.1005020141601562,
+        "nodes": 97,
+        "listeners": 32,
+        "hydroKeys": 4
+      },
+      "createClear5": {
+        "heapMB": 2.241424560546875,
+        "nodes": 97,
+        "listeners": 32,
+        "hydroKeys": 4
+      },
+      "createClear25": {
+        "heapMB": 2.3584251403808594,
+        "nodes": 97,
+        "listeners": 32,
+        "hydroKeys": 4
+      },
+      "hydroKeysStable": true
+    },
+    {
+      "implementation": "vanilla",
+      "ready": {
+        "heapMB": 1.6731605529785156,
+        "nodes": 105,
+        "listeners": 28,
+        "hydroKeys": null
+      },
+      "run1k": {
+        "heapMB": 1.9579849243164062,
+        "nodes": 11104,
+        "listeners": 28,
+        "hydroKeys": null
+      },
+      "run10k": {
+        "heapMB": 3.329967498779297,
+        "nodes": 110107,
+        "listeners": 28,
+        "hydroKeys": null
+      },
+      "createClear1": {
+        "heapMB": 1.7650260925292969,
+        "nodes": 107,
+        "listeners": 28,
+        "hydroKeys": null
+      },
+      "createClear5": {
+        "heapMB": 1.8493843078613281,
+        "nodes": 107,
+        "listeners": 28,
+        "hydroKeys": null
+      },
+      "createClear25": {
+        "heapMB": 1.8784561157226562,
+        "nodes": 107,
+        "listeners": 28,
+        "hydroKeys": null
+      },
+      "hydroKeysStable": true
+    }
+  ]
+}

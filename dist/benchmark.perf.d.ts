@@ -5,6 +5,7 @@ type PerfConfig = {
     manyRows?: number;
     repeats?: number;
     warmups?: number;
+    sameApp?: boolean;
 };
 export interface PerfDeps extends PerfConfig {
     now?: () => number;
@@ -21,6 +22,8 @@ export interface PerfResult {
     samples: number[];
     medianMs: number;
     minMs: number;
+    deferredMedianMs: number;
+    deferredMinMs: number;
     spreadPct: number;
     ok: boolean;
 }

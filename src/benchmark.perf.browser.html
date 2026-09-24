@@ -1,7 +1,7 @@
 <!doctype html>
 <!--
   Minimal page for `benchmark.perf.browser.node.ts` to drive via CDP (no
-  @web/test-runner/mocha dependency, unlike benchmark.perf.html). Reads
+  @web/test-runner/mocha dependency). Reads
   rows/manyRows/repeats/warmups from the query string so the Node driver can
   control config the same way the happy-dom harness uses PERF_* env vars, then
   prints the full report as one JSON line for the driver to capture. With
@@ -50,6 +50,7 @@
           manyRows: num("manyRows", 10000),
           repeats: num("repeats", 10),
           warmups: num("warmups", 5),
+          sameApp: params.get("sameApp") === "1",
           now: () => performance.now(),
         });
         console.log("PERF_REPORT_JSON:" + JSON.stringify(report));

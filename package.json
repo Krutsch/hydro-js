@@ -1,6 +1,6 @@
 {
   "name": "hydro-js",
-  "version": "1.10.1",
+  "version": "1.10.2",
   "description": "A lightweight reactive library",
   "type": "module",
   "main": "./dist/library.js",
@@ -31,7 +31,13 @@
     "bench:perf:browser:node": "tsc && node dist/benchmark.perf.browser.node.js",
     "bench:perf:browser:baseline": "tsc && node dist/benchmark.perf.browser.node.js --write-baseline perf-baseline.browser.json",
     "bench:perf:browser:check": "tsc && node dist/benchmark.perf.browser.node.js --baseline perf-baseline.browser.json",
-    "bench:size": "tsc && node dist/benchmark.size.node.js"
+    "bench:size": "tsc && node dist/benchmark.size.node.js",
+    "bench:size:check": "tsc && node dist/benchmark.size.node.js --baseline size-baseline.json --max-regression-percent 5",
+    "bench:jfb": "npm run build && node scripts/build-jfb-bench.mjs && node dist/benchmark.jfb.node.js",
+    "bench:jfb:baseline": "npm run bench:jfb -- --write-baseline perf-baseline.jfb.json",
+    "bench:jfb:check": "npm run build && node scripts/build-jfb-bench.mjs && node dist/benchmark.jfb.node.js --baseline perf-baseline.jfb.json",
+    "bench:jfb:profile": "npm run build && node scripts/build-jfb-bench.mjs && node dist/benchmark.jfb.node.js --samples 1 --cpu-profile-dir dist/.jfb-benchmark/profiles",
+    "bench:heap": "npm run build && node scripts/build-jfb-bench.mjs && node dist/benchmark.jfb.node.js --memory-only --heap-snapshots dist/.jfb-benchmark/heap"
   },
   "keywords": [
     "reactive",

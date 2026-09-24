@@ -21,6 +21,8 @@ globalThis.window = window;
 globalThis.document = window.document;
 // @ts-expect-error
 globalThis.MouseEvent = window.MouseEvent;
+// @ts-expect-error
+globalThis.MutationObserver = window.MutationObserver;
 await window.happyDOM.waitUntilComplete();
 const { runPerfScenarios, formatPerfReport, toPerfBaseline, diffPerf } = await import("./benchmark.perf.js");
 const report = await runPerfScenarios({
@@ -33,6 +35,9 @@ const report = await runPerfScenarios({
         : {}),
     ...(process.env.PERF_WARMUPS
         ? { warmups: Number(process.env.PERF_WARMUPS) }
+        : {}),
+    ...(process.env.PERF_SAME_APP
+        ? { sameApp: process.env.PERF_SAME_APP === "1" }
         : {}),
     now: () => performance.now(),
     cleanup: () => globalThis.gc?.(),

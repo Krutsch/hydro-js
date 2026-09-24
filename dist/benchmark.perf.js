@@ -62,6 +62,7 @@ const configDefaults = {
     // and a large repeat count OOMs the "create many rows" op.
     repeats: 10,
     warmups: 5,
+    sameApp: false,
 };
 const scaledInteractionDefaults = {
     rows: 1000,
@@ -159,8 +160,7 @@ function yieldToScheduler() {
             window.scheduler.postTask(() => resolve(), { priority: "user-blocking" });
         }
         else {
-            // @ts-ignore
-            window.requestIdleCallback(() => resolve());
+            globalThis.setTimeout(() => resolve(), 0);
         }
     });
 }
@@ -181,30 +181,51 @@ export async function runPerfScenarios(deps = {}) {
     for (const [impl, createApp] of impls) {
         for (const operation of operations) {
             const samples = [];
+            const deferredSamples = [];
             let ok = true;
             const totalRuns = config.warmups + config.repeats;
-            for (let i = 0; i < totalRuns; i++) {
-                const data = createSampleData(config, i + 1);
-                const app = createApp();
-                operation.setup?.(app, data);
-                // Settle GC *before* the timed region so a collection triggered by the
-                // previous iteration does not land inside this measurement.
-                cleanup();
-                const start = now();
-                operation.run(app, data);
-                const elapsed = now() - start;
-                ok = operation.verify(app, data) && ok;
-                app.dispose();
-                cleanup();
-                // Real usage always has a discrete gap between operations (paint/idle
-                // between clicks) in which the library's own deferred/scheduled work
-                // (e.g. view()'s resetViewRows cleanup) gets a chance to run. Yield
-                // once per trial so this harness reflects that instead of measuring a
-                // tight, never-yielding loop that pathologically starves scheduled
-                // cleanup and trips its own safety-valve mid-benchmark.
-                await yieldToScheduler();
-                if (i >= config.warmups)
-                    samples.push(elapsed);
+            const sharedApp = config.sameApp ? createApp() : undefined;
+            try {
+                for (let i = 0; i < totalRuns; i++) {
+                    const data = createSampleData(config, i + 1);
+                    const app = sharedApp ?? createApp();
+                    operation.setup?.(app, data);
+                    if (sharedApp && i < config.warmups) {
+                        operation.run(app, data);
+                        ok = operation.verify(app, data) && ok;
+                        await yieldToScheduler();
+                        continue;
+                    }
+                    // Settle GC *before* the timed region so a collection triggered by
+                    // the previous iteration does not land inside this measurement.
+                    cleanup();
+                    const start = now();
+                    operation.run(app, data);
+                    const elapsed = now() - start;
+                    // The first number is synchronous JS only; the second includes the
+                    // library's next scheduled cleanup/update task, like a click sample
+                    // that runs until the browser has an opportunity to paint.
+                    await yieldToScheduler();
+                    const elapsedWithDeferred = now() - start;
+                    ok = operation.verify(app, data) && ok;
+                    if (!sharedApp)
+                        app.dispose();
+                    cleanup();
+                    // Teardown can itself enqueue view cleanup. Give it a separate turn
+                    // after both timed values have been captured so it cannot contaminate
+                    // the next trial.
+                    await yieldToScheduler();
+                    if (i >= config.warmups) {
+                        samples.push(elapsed);
+                        deferredSamples.push(elapsedWithDeferred);
+                    }
+                }
+            }
+            finally {
+                if (sharedApp) {
+                    sharedApp.dispose();
+                    await yieldToScheduler();
+                }
             }
             results.push({
                 impl,
@@ -213,6 +234,8 @@ export async function runPerfScenarios(deps = {}) {
                 samples,
                 medianMs: median(samples),
                 minMs: Math.min(...samples),
+                deferredMedianMs: median(deferredSamples),
+                deferredMinMs: Math.min(...deferredSamples),
                 spreadPct: spread(samples),
                 ok,
             });
@@ -399,13 +422,13 @@ export function formatPerfReport(report, baseline, failures = [], tolerancePct =
     lines.push("");
     lines.push("hydro-js performance benchmark");
     lines.push("=".repeat(100));
-    lines.push(`${"impl".padEnd(9)} ${"operation".padEnd(28)} ${"rows".padStart(7)} ${"median".padStart(9)} ${"min".padStart(9)} ${"spread".padStart(7)} ${"Δmin".padStart(9)}  status`);
-    lines.push("-".repeat(100));
+    lines.push(`${"impl".padEnd(9)} ${"operation".padEnd(28)} ${"rows".padStart(7)} ${"median".padStart(9)} ${"min".padStart(9)} ${"incl deferred".padStart(14)} ${"spread".padStart(7)} ${"Δmin".padStart(9)}  status`);
+    lines.push("-".repeat(116));
     for (const result of report.results) {
         const delta = deltaByKey.get(`${result.impl}|${result.operation}`);
         const deltaStr = delta ? formatPct(delta.deltaPct) : "-";
         const status = delta?.regressed ? "REGRESSED" : result.ok ? "ok" : "FAIL";
-        lines.push(`${result.impl.padEnd(9)} ${result.operation.padEnd(28)} ${String(result.rows).padStart(7)} ${formatMs(result.medianMs).padStart(9)} ${formatMs(result.minMs).padStart(9)} ${`${result.spreadPct.toFixed(0)}%`.padStart(7)} ${deltaStr.padStart(9)}  ${status}`);
+        lines.push(`${result.impl.padEnd(9)} ${result.operation.padEnd(28)} ${String(result.rows).padStart(7)} ${formatMs(result.medianMs).padStart(9)} ${formatMs(result.minMs).padStart(9)} ${formatMs(result.deferredMedianMs).padStart(14)} ${`${result.spreadPct.toFixed(0)}%`.padStart(7)} ${deltaStr.padStart(9)}  ${status}`);
     }
     if (report.firstPaint) {
         const firstPaintByImpl = new Map((comparison?.firstPaintDeltas ?? []).map((delta) => [delta.impl, delta]));
@@ -468,7 +491,9 @@ export function diffPerf(report, baseline, tolerancePct = 15, firstPaintToleranc
             ],
         };
     }
-    const configMismatch = ["rows", "manyRows", "repeats", "warmups"].filter((key) => report.config[key] !== baseline.config[key]);
+    const configMismatch = ["rows", "manyRows", "repeats", "warmups", "sameApp"].filter((key) => key === "sameApp"
+        ? report.config.sameApp !== (baseline.config.sameApp ?? false)
+        : report.config[key] !== baseline.config[key]);
     if (configMismatch.length) {
         const values = configMismatch
             .map((key) => `${key}: baseline=${baseline.config[key]}, run=${report.config[key]}`)
@@ -611,6 +636,10 @@ function createHtmlApp() {
         selectedRow = row;
         selectedRow.className = "danger";
     };
+    const removeRow = (id) => {
+        const row = Array.from(tbody.rows).find((candidate) => Number(candidate.cells[0]?.textContent) === id);
+        row?.remove();
+    };
     const createRow = (row) => {
         let tr;
         tr = html `<tr>
@@ -619,7 +648,7 @@ function createHtmlApp() {
         <a onclick=${() => selectRow(tr)}>${row.label}</a>
       </td>
       <td class="col-md-1">
-        <a
+        <a onclick=${() => removeRow(row.id)}
           ><span class="glyphicon glyphicon-remove" aria-hidden="true"></span
         ></a>
       </td>
@@ -640,9 +669,13 @@ function createHApp() {
         selectedRow = row;
         selectedRow.className = "danger";
     };
+    const removeRow = (id) => {
+        const row = Array.from(tbody.rows).find((candidate) => Number(candidate.cells[0]?.textContent) === id);
+        row?.remove();
+    };
     const createRow = (row) => {
         let tr;
-        tr = h("tr", null, h("td", { class: "col-md-1" }, String(row.id)), h("td", { class: "col-md-4" }, h("a", { onclick: () => selectRow(tr) }, row.label)), h("td", { class: "col-md-1" }, h("a", null, h("span", {
+        tr = h("tr", null, h("td", { class: "col-md-1" }, String(row.id)), h("td", { class: "col-md-4" }, h("a", { onclick: () => selectRow(tr) }, row.label)), h("td", { class: "col-md-1" }, h("a", { onclick: () => removeRow(row.id) }, h("span", {
             class: "glyphicon glyphicon-remove",
             "aria-hidden": "true",
         }))), h("td", { class: "col-md-6" }));
@@ -686,7 +719,9 @@ function createDirectApp(table, tbody, createRow, resetSelected) {
             marker.replaceWith(second);
         },
         removeAt(index) {
-            getRow(tbody, index)?.remove();
+            getRow(tbody, index)
+                ?.querySelector("td:nth-child(3) a")
+                ?.dispatchEvent(clickEvent());
         },
         clear,
         rowCount: () => tbody.children.length,
@@ -699,19 +734,20 @@ function createDirectApp(table, tbody, createRow, resetSelected) {
     };
 }
 // Same reactive row, one built with `h`, one with `html`. Both carry reactive
-// slots (class, bind, id, label), so `html` cannot hit the compiled cache and
-// falls back to per-row parsing – exactly the comparison we want to measure.
-const hRowBuilder = ({ row, index, className, data, selected }) => h("tr", { class: className, bind: data[index] }, h("td", { class: "col-md-1" }, data[index].id), h("td", { class: "col-md-4" }, h("a", { onclick: () => selected(row.id) }, data[index].label)), h("td", { class: "col-md-1" }, h("a", null, h("span", {
+// slots (class, bind, label) plus select/remove handlers. The `html` version
+// cannot hit the compiled cache and falls back to per-row parsing – exactly the
+// comparison we want to measure.
+const hRowBuilder = ({ row, index, className, data, selected, remove, }) => h("tr", { class: className, bind: data[index] }, h("td", { class: "col-md-1" }, row.id), h("td", { class: "col-md-4" }, h("a", { onclick: () => selected(row.id) }, data[index].label)), h("td", { class: "col-md-1" }, h("a", { onclick: () => remove(row.id) }, h("span", {
     class: "glyphicon glyphicon-remove",
     "aria-hidden": "true",
 }))), h("td", { class: "col-md-6" }));
-const htmlRowBuilder = ({ row, index, className, data, selected, }) => html `<tr class="${className}" bind="${data[index]}">
-    <td class="col-md-1">${data[index].id}</td>
+const htmlRowBuilder = ({ row, index, className, data, selected, remove, }) => html `<tr class="${className}" bind="${data[index]}">
+    <td class="col-md-1">${row.id}</td>
     <td class="col-md-4">
       <a onclick=${() => selected(row.id)}>${data[index].label}</a>
     </td>
     <td class="col-md-1">
-      <a><span class="glyphicon glyphicon-remove" aria-hidden="true"></span></a>
+      <a onclick=${() => remove(row.id)}><span class="glyphicon glyphicon-remove" aria-hidden="true"></span></a>
     </td>
     <td class="col-md-6"></td>
   </tr>`;
@@ -725,9 +761,17 @@ function createReactiveViewApp(buildRow) {
     const { table, tbody } = createTable();
     const data = reactive([]);
     const selected = reactive(null);
+    const removeRow = (id) => {
+        const index = getValue(data).findIndex((item) => item?.id === id);
+        if (index !== -1) {
+            data((current) => {
+                current[index] = null;
+            });
+        }
+    };
     view(`#${tbody.id}`, data, (row, index) => {
         const className = ternary((value) => value === row.id, "danger", "", selected);
-        const tr = buildRow({ row, index, className, data, selected });
+        const tr = buildRow({ row, index, className, data, selected, remove: removeRow });
         onCleanup(unset, tr, className);
         return tr;
     });
@@ -752,10 +796,13 @@ function createReactiveViewApp(buildRow) {
         swap: (i, j) => data((prev) => {
             [prev[i], prev[j]] = [prev[j], prev[i]];
         }),
-        removeAt: (index) => data((curr) => {
-            curr[index] = null;
-        }),
-        clear: () => data([]),
+        removeAt: (index) => getRow(tbody, index)
+            ?.querySelector("td:nth-child(3) a")
+            ?.dispatchEvent(clickEvent()),
+        clear() {
+            data([]);
+            selected(null);
+        },
         rowCount: () => tbody.children.length,
         selectedCount: () => tbody.querySelectorAll("tr.danger").length,
         rowClass: (index) => getRow(tbody, index)?.className ?? "",
@@ -784,9 +831,9 @@ function createReactiveViewApp(buildRow) {
             swap: (i, j) => data((prev) => {
                 [prev[i], prev[j]] = [prev[j], prev[i]];
             }),
-            removeAt: (index) => data((curr) => {
-                curr[index] = null;
-            }),
+            removeAt: (index) => getRow(tbody, index)
+                ?.querySelector("td:nth-child(3) a")
+                ?.dispatchEvent(clickEvent()),
         },
     };
 }

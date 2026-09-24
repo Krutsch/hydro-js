@@ -31,7 +31,7 @@ export async function runScenarios(deps) {
     const { gc, heap } = deps;
     const N = deps.N ?? 3000;
     const lib = await import("./library.js");
-    const { html, render, reactive, unset, hydro, setGlobalSchedule, view, getValue, onCleanup, ternary, setReuseElements, } = lib;
+    const { html, render, reactive, unset, hydro, setGlobalSchedule, view, getValue, onCleanup, ternary, selector, setReuseElements, } = lib;
     setGlobalSchedule(false); // synchronous render / update — deterministic
     const results = [];
     async function scenario(name, control, run) {
@@ -205,6 +205,97 @@ export async function runScenarios(deps) {
         root.remove();
         setReuseElements(true);
     });
+    // A caller may keep a row proxy after clearing the view. Cleanup must still
+    // untrack the detached Element from bindMap/reactivityMap; it is not safe to
+    // assume that row proxies become unreachable with the discarded data array.
+    let retainedViewRows = [];
+    await scenario("view cleanup with externally retained row proxies", false, (refs) => {
+        setReuseElements(false);
+        const rootId = "bench-view-retained-proxy";
+        const root = html `<ul id=${rootId}></ul>`;
+        render(root);
+        const selected = reactive(-1);
+        const data = reactive([]);
+        view(`#${rootId}`, data, (item, i) => {
+            const className = ternary((value) => value === item.id, "selected", "", selected);
+            const li = html `<li class=${className} bind=${data[i]}>${data[i].id}</li>`;
+            onCleanup(unset, li, className);
+            refs.push(new WeakRef(li));
+            return li;
+        });
+        const count = Math.min(N, 100);
+        data(Array.from({ length: count }, (_, id) => ({ id })));
+        retainedViewRows = Array.from({ length: count }, (_, i) => data[i]);
+        data([]);
+        void retainedViewRows[0];
+        root.remove();
+        unset(data);
+        unset(selected);
+        setReuseElements(true);
+    });
+    retainedViewRows = [];
+    // M4. Direct DOM removal is lazy-cleaned on the next reactive write to the
+    // same key. The caller should prefer render()'s unmount handle for immediate
+    // cleanup; this guard ensures stale traces don't survive a subsequent write.
+    let releaseDetachedText = () => { };
+    await scenario("manual DOM removal purged on next source update", false, (refs) => {
+        const data = reactive({ n: 0 });
+        releaseDetachedText = () => unset(data);
+        for (let i = 0; i < N; i++) {
+            const elem = html `<p>${data.n}</p>`;
+            render(elem, "", false);
+            refs.push(new WeakRef(elem.firstChild));
+            elem.remove();
+        }
+        getValue(data).n++;
+    });
+    releaseDetachedText();
+    // M5. ternary subscriptions are caller-owned; disposing each derived value
+    // must stop its observer on the long-lived shared condition.
+    await scenario("ternary observers released by unset", false, (refs) => {
+        const selected = reactive(-1);
+        for (let i = 0; i < N; i++) {
+            const derived = ternary((value) => value === i, "yes", "no", selected);
+            refs.push(new WeakRef(derived));
+            unset(derived);
+        }
+        unset(selected);
+    });
+    // M14. selector() keeps one subscription on the source plus one derived
+    // signal per requested key. Unsetting each derived value must drop it from
+    // the selector; disposing the selector must stop the source subscription.
+    await scenario("selector derived values released by unset+dispose", false, (refs) => {
+        const selected = reactive(-1);
+        const isSel = selector(selected);
+        for (let i = 0; i < N; i++) {
+            const derived = isSel(i);
+            const className = ternary((value) => value, "yes", "no", derived);
+            refs.push(new WeakRef(derived));
+            refs.push(new WeakRef(className));
+            unset(className);
+            unset(derived);
+        }
+        // A null write drops the shared subscription (library contract); the
+        // next lookup re-arms it. Exercise that cycle under GC scrutiny.
+        selected(null);
+        const revived = isSel(N + 1);
+        refs.push(new WeakRef(revived));
+        unset(revived);
+        selected(N + 1);
+        isSel.dispose();
+        unset(selected);
+    });
+    // M6. chainKeys intentionally memoizes one child per chain node; repeated
+    // changing-property reads must not retain every ephemeral child proxy.
+    let releaseChainRoot = () => { };
+    await scenario("chainKeys retains at most one child proxy", true, (refs) => {
+        const value = reactive({});
+        releaseChainRoot = () => unset(value);
+        for (let i = 0; i < N; i++)
+            refs.push(new WeakRef(value[`field${i}`]));
+        void value.cleanup; // replace the one-slot memo with a non-measured child
+    });
+    releaseChainRoot();
     // 6. CONTROL: non-reactive nodes must always be collectable (~0).
     await scenario("control: non-reactive", true, (refs) => {
         for (let i = 0; i < N; i++) {
@@ -267,6 +358,31 @@ export async function runScenarios(deps) {
         u();
         correctness.push({ name: "event fires before unmount", ok: clicked === 1 });
         correctness.push({ name: "event unmount detaches", ok: !e.isConnected });
+    }
+    // M3. A throwing view row-builder must restore the global html wiring mode.
+    // Keep this last because a regression leaves the module in view mode.
+    {
+        const id = "bench-view-throwing-renderer";
+        const root = html `<ul id=${id}></ul>`;
+        render(root, "", false);
+        const data = reactive([{}]);
+        let threw = false;
+        try {
+            view(`#${id}`, data, () => {
+                throw new Error("expected view builder error");
+            });
+        }
+        catch {
+            threw = true;
+        }
+        const label = reactive({ value: "label" });
+        const button = html `<button onclick=${() => undefined}>${label.value}${document.createTextNode("tail")}</button>`;
+        const wired = button.getAttribute("onclick") === null;
+        root.remove();
+        button.remove();
+        unset(data);
+        unset(label);
+        correctness.push({ name: "view error restores html wiring mode", ok: threw && wired });
     }
     const pass = results.every((r) => !r.leaked) && correctness.every((c) => c.ok);
     return { results, correctness, pass };

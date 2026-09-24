@@ -1,0 +1,47 @@
+{
+  "generatedAt": "2026-09-23T16:35:47.012Z",
+  "results": [
+    {
+      "name": "library-file",
+      "rawBytes": 91497,
+      "minifiedBytes": 26617,
+      "gzipBytes": 9795,
+      "brotliBytes": 9463
+    },
+    {
+      "name": "full",
+      "rawBytes": 70743,
+      "minifiedBytes": 26040,
+      "gzipBytes": 9726,
+      "brotliBytes": 9410
+    },
+    {
+      "name": "html-render",
+      "rawBytes": 53572,
+      "minifiedBytes": 19941,
+      "gzipBytes": 7489,
+      "brotliBytes": 7217
+    },
+    {
+      "name": "reactive-core",
+      "rawBytes": 38564,
+      "minifiedBytes": 14178,
+      "gzipBytes": 5590,
+      "brotliBytes": 5387
+    },
+    {
+      "name": "view",
+      "rawBytes": 46797,
+      "minifiedBytes": 16929,
+      "gzipBytes": 6421,
+      "brotliBytes": 6182
+    },
+    {
+      "name": "jsx-runtime",
+      "rawBytes": 46176,
+      "minifiedBytes": 17002,
+      "gzipBytes": 6454,
+      "brotliBytes": 6229
+    }
+  ]
+}

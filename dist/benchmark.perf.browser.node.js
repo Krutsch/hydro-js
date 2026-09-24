@@ -172,6 +172,7 @@ try {
         ...(process.env.PERF_REPEATS ? { repeats: process.env.PERF_REPEATS } : {}),
         ...(process.env.PERF_WARMUPS ? { warmups: process.env.PERF_WARMUPS } : {}),
         ...(interactions ? { interactions: "1" } : {}),
+        ...(process.argv.includes("--same-app") ? { sameApp: "1" } : {}),
         ...(flag("--interaction-rows")
             ? { interactionRows: flag("--interaction-rows") }
             : {}),

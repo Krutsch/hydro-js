@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+- fix: ignore unknown ids in the js-framework-benchmark remove handler
+- feat: add `selector()` for O(1) per-key derivation off a shared signal (local-only; not published). Wiring it into the JFB app was measured and reverted: select stayed within noise while run heap grew +0.5 KB/row; the API remains opt-in
+
+## 1.10.2 2026-09-23
+
+- fix: preserve scheduled DocumentFragment children in unmount handles
+- fix: restore dependency tracking when `watchEffect` callbacks throw
+- fix: restore view wiring state when a row renderer throws
+- fix: clean detached view rows and dispose owned ternary subscriptions
+- perf: reduce proxy slots and compact the common reactive-trace record
+- perf: wire only newly-added view rows and simplify event marker generation
+- perf: remove the global `requestIdleCallback` polyfill
+- test: add leak, browser performance, size, and js-framework-benchmark gates
+
 ## 1.10.1 2026-09-07
 
 - feat: track and dispose server-side render unmounts for SSR integrations

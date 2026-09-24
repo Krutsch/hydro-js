@@ -1,0 +1,57 @@
+diff --git a/frameworks/keyed/hydro-js/package-lock.json b/frameworks/keyed/hydro-js/package-lock.json
+index f294d08..0427d2e 100644
+--- a/frameworks/keyed/hydro-js/package-lock.json
++++ b/frameworks/keyed/hydro-js/package-lock.json
+@@ -1,15 +1,15 @@
+ {
+   "name": "js-framework-benchmark-hydro-js",
+-  "version": "1.9.4",
++  "version": "1.10.2",
+   "lockfileVersion": 3,
+   "requires": true,
+   "packages": {
+     "": {
+       "name": "js-framework-benchmark-hydro-js",
+-      "version": "1.9.4",
++      "version": "1.10.2",
+       "license": "Apache-2.0",
+       "dependencies": {
+-        "hydro-js": "^1.9.4"
++        "hydro-js": "^1.10.2"
+       },
+       "devDependencies": {
+         "@types/glob": "^9.0.0",
+@@ -2034,9 +2034,9 @@
+       }
+     },
+     "node_modules/hydro-js": {
+-      "version": "1.9.4",
+-      "resolved": "https://registry.npmjs.org/hydro-js/-/hydro-js-1.9.4.tgz",
+-      "integrity": "sha512-4EXJs1ewWPU1ecDuU0abmP1dYJW9UnTppHmGM2qMNK8MEbp1VGAV6PFYmffgTlVAcXTgWiE4GfI8e/7V6KKEkg==",
++      "version": "1.10.2",
++      "resolved": "https://registry.npmjs.org/hydro-js/-/hydro-js-1.10.2.tgz",
++      "integrity": "sha512-FshRQR0LEvD9PRjgtSt3PKISEoUMJvIjWtLlwWkcSAoxFHvUOs97AAaDf+2Mdkakwefaf4OUdU+sPZSBAJkkfA==",
+       "license": "MIT"
+     },
+     "node_modules/iconv-lite": {
+diff --git a/frameworks/keyed/hydro-js/package.json b/frameworks/keyed/hydro-js/package.json
+index 4acfb12..9fcfe8b 100644
+--- a/frameworks/keyed/hydro-js/package.json
++++ b/frameworks/keyed/hydro-js/package.json
+@@ -1,6 +1,6 @@
+ {
+   "name": "js-framework-benchmark-hydro-js",
+-  "version": "1.9.4",
++  "version": "1.10.2",
+   "description": "hydro-js demo",
+   "main": "dist/app.min.js",
+   "js-framework-benchmark": {
+@@ -32,7 +32,7 @@
+     "typescript": "^7.0.2"
+   },
+   "dependencies": {
+-    "hydro-js": "^1.9.4"
++    "hydro-js": "^1.10.2"
+   },
+   "allowScripts": {
+     "esbuild@0.28.1": true

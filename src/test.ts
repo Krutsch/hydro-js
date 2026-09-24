@@ -17,6 +17,7 @@ import {
   onTreeChange,
   internals,
   ternary,
+  selector,
   setInsertDiffing,
   $,
   unobserve,
@@ -2061,6 +2062,136 @@ export function registerTestSuite(
         });
       });
 
+      describe("selector", () => {
+        it("returns per-key booleans tracking the source", () => {
+          const selected = reactive(-1);
+          const isSel = selector(selected);
+          const a = isSel(1);
+          const b = isSel(2);
+
+          const initial =
+            getValue(a) === false && getValue(b) === false;
+          selected(1);
+          const afterSelect =
+            getValue(a) === true && getValue(b) === false;
+          selected(null);
+          const afterNull =
+            getValue(a) === false && getValue(b) === false;
+
+          unset(a);
+          unset(b);
+          isSel.dispose();
+          unset(selected);
+          return initial && afterSelect && afterNull;
+        });
+
+        it("notifies only the keys whose membership flips", () => {
+          const selected = reactive(-1);
+          const isSel = selector(selected);
+          const derived = [1, 2, 3, 4, 5].map((key) => isSel(key));
+          let notifications = 0;
+          const stops = derived.map((d) =>
+            observe(d, () => {
+              notifications++;
+            }),
+          );
+
+          selected(3);
+          const afterSelect = notifications === 1;
+          selected(4);
+          const afterReselect = notifications === 3;
+          selected(null);
+          const afterNull = notifications === 4;
+
+          stops.forEach((stop) => stop?.());
+          derived.forEach(unset);
+          isSel.dispose();
+          unset(selected);
+          return afterSelect && afterReselect && afterNull;
+        });
+
+        it("unset removes the per-key value from the selector", () => {
+          const selected = reactive(-1);
+          const isSel = selector(selected);
+          const a = isSel(1);
+          unset(a);
+          const again = isSel(1);
+
+          const ok = again !== a && getValue(again) === false;
+          unset(again);
+          isSel.dispose();
+          unset(selected);
+          return ok;
+        });
+
+        it("survives a null write between selects", () => {
+          // Writing null drops every source observer (library contract), so
+          // the selector re-arms on lookup: the app writes selected(null) on
+          // every run/clear before rows render again.
+          const selected = reactive(-1);
+          const isSel = selector(selected);
+          const a = isSel(1);
+          selected(1);
+          const wasTrue = getValue(a) === true;
+          selected(null);
+          const wasCleared = getValue(a) === false;
+          selected(2);
+          const reselectWorks =
+            getValue(a) === false && getValue(isSel(2)) === true;
+
+          unset(a);
+          const b = isSel(2);
+          unset(b);
+          isSel.dispose();
+          unset(selected);
+          return wasTrue && wasCleared && reselectWorks;
+        });
+
+        it("dispose stops tracking the source", () => {
+          const selected = reactive(-1);
+          const isSel = selector(selected);
+          const a = isSel(1);
+          isSel.dispose();
+          selected(1);
+
+          const ok = getValue(a) === false;
+          unset(a);
+          unset(selected);
+          return ok;
+        });
+
+        it("drives row classes through ternary", () => {
+          const selected = reactive(-1);
+          const isSel = selector(selected);
+          const selVal = isSel(7);
+          const className = ternary(
+            (val: boolean) => val,
+            "danger",
+            "",
+            selVal,
+          );
+          const unmount = render(
+            html`<p id="selRow" class=${className}>x</p>`,
+          );
+
+          selected(7);
+          const isDanger =
+            document.querySelector("#selRow")?.getAttribute("class") ===
+            "danger";
+          selected(8);
+          const isCleared =
+            (document.querySelector("#selRow")?.getAttribute("class") ?? "") ===
+            "";
+
+          unmount();
+          unset(className);
+          unset(selVal);
+          isSel.dispose();
+          unset(selected);
+          return isDanger && isCleared;
+        });
+      });
+
       describe("onRender", () => {
         it("works with DocumentFragment", () => {
           const elem = html`<p>1</p>
@@ -3594,6 +3725,49 @@ export function registerTestSuite(
       it("body has DOM Elements - unmount", async () => {
         await sleep(900);
         return bodyElementCount() === 0;
+      });
+    });
+
+    describe("regression guards", () => {
+      it("unmounts a scheduled DocumentFragment render", async () => {
+        const initialCount = bodyElementCount();
+        setGlobalSchedule(true);
+        const fragment = html`<p>scheduled one</p><p>scheduled two</p>`;
+        const children = Array.from(fragment.childNodes);
+        const unmount = render(fragment);
+        await new Promise<void>((resolvePromise) => {
+          if ("scheduler" in window) {
+            (window as any).scheduler.postTask(resolvePromise, {
+              priority: "user-blocking",
+            });
+          } else {
+            (window as any).setTimeout(resolvePromise, 0);
+          }
+        });
+        unmount();
+        const detached = children.every((child) => !child.isConnected);
+        for (const child of children) child.parentNode?.removeChild(child);
+        setGlobalSchedule(false);
+        return detached && bodyElementCount() === initialCount;
+      });
+
+      it("restores dependency tracking when watchEffect throws", () => {
+        const value = reactive({ count: 0 });
+        try {
+          watchEffect(() => {
+            throw new Error("expected test error");
+          });
+        } catch {
+          // Expected: the test checks that the failure doesn't poison tracking.
+        }
+
+        getValue(value).count;
+        let runs = 0;
+        const stop = watchEffect(() => runs++);
+        getValue(value).count = 1;
+        stop();
+        unset(value);
+        return runs === 1;
       });
     });
   });

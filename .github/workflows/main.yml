@@ -18,6 +18,10 @@ jobs:
         run: npm run build
       - name: Test w/ Coverage
         run: npm t
+      - name: Memory leak benchmark
+        run: npm run bench:mem
+      - name: Bundle size regression gate
+        run: npm run bench:size:check
       - uses: actions/checkout@v4
       - uses: preactjs/compressed-size-action@v2
         with:

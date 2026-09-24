@@ -117,6 +117,34 @@ export function registerAdditionalTests(
       return nodeCondition && fragmentCondition;
     });
 
+    it("keeps proxy observer methods virtual and non-enumerable", () => {
+      const value = reactive({ count: 1 });
+      const proxy: any = getValue(value);
+      const internalKeys = [
+        "isProxy",
+        "asyncUpdate",
+        "observe",
+        "getObservers",
+        "unobserve",
+      ];
+      let calls = 0;
+      const handler = () => calls++;
+      const stop = proxy.observe("count", handler);
+      const observed = proxy.getObservers().get("count")?.has(handler);
+      proxy.count = 2;
+      stop();
+      const condition =
+        proxy.isProxy === true &&
+        internalKeys.every((key) => key in proxy) &&
+        Object.keys(proxy).join(",") === "count" &&
+        JSON.stringify(proxy) === '{"count":2}' &&
+        observed &&
+        calls === 1 &&
+        !proxy.getObservers().has("count");
+      unset(value);
+      return condition;
+    });
+
     it("retains all handlers for one event until unmount", () => {
       let firstCalls = 0;
       let secondCalls = 0;
@@ -226,6 +254,62 @@ export function registerAdditionalTests(
       unset(data);
       setReuseElements(true);
       return condition;
+    });
+
+    it("wires appended html rows without rescanning the full view root", async () => {
+      setReuseElements(false);
+      const data = reactive([]);
+      const list = html`<ul id="viewAppendScopedScan"></ul>` as HTMLUListElement;
+      const unmount = render(list, "", false);
+      const originalIterator = document.createNodeIterator;
+      let fullRootScans = 0;
+      document.createNodeIterator = ((
+        root: Node,
+        whatToShow: number,
+        filter?: NodeFilter | null,
+      ) => {
+        if (root === list) fullRootScans++;
+        return originalIterator.call(document, root, whatToShow, filter);
+      }) as typeof document.createNodeIterator;
+      let clicks = 0;
+      try {
+        view("#viewAppendScopedScan", data, (_item: any, index: number) =>
+          html`<li onclick=${() => clicks++}>${data[index].id}${document.createTextNode("tail")}</li>`,
+        );
+        data([{ id: 1 }]);
+        await sleep(5);
+        fullRootScans = 0;
+        data((current: any[]) => [...current, { id: 2 }]);
+        await sleep(5);
+        (list.lastElementChild as HTMLLIElement).click();
+        return fullRootScans === 0 && clicks === 1;
+      } finally {
+        document.createNodeIterator = originalIterator;
+        unmount();
+        unset(data);
+        setReuseElements(true);
+      }
+    });
+
+    it("reuses view rows with arbitrary enumerable fields", async () => {
+      setReuseElements(true);
+      const data = reactive([{ id: 1, label: "old", extra: "first" }]);
+      const list = html`<ul id="viewReuseGeneric"></ul>` as HTMLUListElement;
+      const unmount = render(list, "", false);
+      view(
+        "#viewReuseGeneric",
+        data,
+        (_item: any, index: number) =>
+          html`<li>${data[index].id}/${data[index].label}/${data[index].extra}</li>`,
+      );
+
+      data([{ id: 2, label: "new", extra: "second" }]);
+      await sleep(2);
+      const updated = list.textContent === "2/new/second";
+      unmount();
+      unset(data);
+      setReuseElements(true);
+      return updated;
     });
 
     it("runs every lifecycle callback", () => {
