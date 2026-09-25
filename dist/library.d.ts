@@ -37,13 +37,8 @@ export interface hydroObject extends Record<PropertyKey, any> {
     getObservers: () => Map<string, Set<Function>>;
     unobserve: (key?: PropertyKey, handler?: Function) => undefined;
 }
-type nodeChanges = Array<[
-    number,
-    number,
-    string | undefined,
-    hydroObject,
-    string
-]>;
+type nodeChange = [number, number, string | undefined, hydroObject, string];
+type nodeChanges = nodeChange | nodeChange[];
 interface EventObject {
     event: EventListener;
     options: AddEventListenerOptions;
@@ -103,6 +98,6 @@ declare const internals: {
     compare: typeof compare;
     allNodeChanges: WeakMap<Element | Text, nodeChanges>;
     hydroToReactive: WeakMap<hydroObject, any>;
-    boolAttrList: string[];
+    readonly boolAttrList: string[];
 };
 export { render, html, h, hydro, setGlobalSchedule, setReuseElements, setInsertDiffing, setShouldSetReactivity, setIgnoreIsConnected, reactive, unset, setAsyncUpdate, unobserve, observe, ternary, emit, watchEffect, internals, getValue, onRender, onCleanup, onAttributeChange, onTreeChange, disposeServerRenders, setReactivity, $, $$, view, isServerSide, };

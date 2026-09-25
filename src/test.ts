@@ -3596,5 +3596,49 @@ export function registerTestSuite(
         return bodyElementCount() === 0;
       });
     });
+
+    describe("regression guards", () => {
+      it("unmounts a scheduled DocumentFragment render", async () => {
+        const initialCount = bodyElementCount();
+        setGlobalSchedule(true);
+        const fragment = html`<p>scheduled one</p>
+          <p>scheduled two</p>`;
+        const children = Array.from(fragment.childNodes);
+        const unmount = render(fragment);
+        await new Promise<void>((resolvePromise) => {
+          if ("scheduler" in window) {
+            (window as any).scheduler.postTask(resolvePromise, {
+              priority: "user-blocking",
+            });
+          } else {
+            (window as any).setTimeout(resolvePromise, 0);
+          }
+        });
+        unmount();
+        const detached = children.every((child) => !child.isConnected);
+        for (const child of children) child.parentNode?.removeChild(child);
+        setGlobalSchedule(false);
+        return detached && bodyElementCount() === initialCount;
+      });
+
+      it("restores dependency tracking when watchEffect throws", () => {
+        const value = reactive({ count: 0 });
+        try {
+          watchEffect(() => {
+            throw new Error("expected test error");
+          });
+        } catch {
+          // Expected: the test checks that the failure doesn't poison tracking.
+        }
+
+        getValue(value).count;
+        let runs = 0;
+        const stop = watchEffect(() => runs++);
+        getValue(value).count = 1;
+        stop();
+        unset(value);
+        return runs === 1;
+      });
+    });
   });
 }

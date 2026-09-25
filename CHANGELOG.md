@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.10.2 2026-09-25
+
+- fix: preserve scheduled DocumentFragment children in unmount handles
+- fix: restore dependency tracking when `watchEffect` callbacks throw
+- fix: restore view wiring state when a row renderer throws
+- fix: clean detached view rows and dispose owned ternary subscriptions
+- perf: reduce proxy slots and compact the common reactive-trace record
+- perf: wire only newly-added view rows and simplify event marker generation
+- perf: remove the global `requestIdleCallback` polyfill
+- test: add leak regression guards (scheduled fragment unmount, scoped view wiring, generic reuse, proxy virtualization)
+- perf: create the HTML parser `Range` on first `html()` parse instead of at module evaluation, so `h()`-only apps skip it during script bootup before first paint
+- perf: build the `internals` boolean-attribute list on first access instead of at module evaluation
+
 ## 1.10.1 2026-09-07
 
 - feat: track and dispose server-side render unmounts for SSR integrations

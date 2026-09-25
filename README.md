@@ -76,7 +76,7 @@ args:
 
 returns: `function` that unmounts the new Element
 
-Accepts the return value of `html` and replaces it with <em>old Element</em>. If it is a string, it will be resolved with `querySelector`. If there is no second parameter, the Element will be appended to the `body`.
+Accepts the return value of `html` and replaces it with <em>old Element</em>. If it is a string, it will be resolved with `querySelector`. If there is no second parameter, the Element will be appended to the `body`. Use the returned unmount function to detach and clean up the rendered nodes. Removing a reactive node directly with native DOM APIs bypasses lifecycle cleanup; stale reactive-node traces are purged on the next update to their source key.
 
 #### Example
 
@@ -321,14 +321,20 @@ args:
 
 returns: `ReturnType<typeof reactive>`
 
-In order to track a ternary in a template literal, this function has to be used. The proxy parameter (4th) is optional, if the first parameter is a reactive Proxy. Otherwise, the condition function is being executed, whenever the Proxy value changes, which will update the DOM to either the trueVal or the falseVal, depening on the return value. If trueVal is a function, then it will be executed. The same applies for falseVal.
+In order to track a ternary in a template literal, this function has to be used. The proxy parameter (4th) is optional, if the first parameter is a reactive Proxy. Otherwise, the condition function is being executed, whenever the Proxy value changes, which will update the DOM to either the trueVal or the falseVal, depending on the return value. If trueVal is a function, then it will be executed. The same applies for falseVal.
+
+A ternary subscribes to its condition until its returned reactive value is unset. If it is owned by a DOM element, dispose it from that element's cleanup hook; otherwise call `unset()` when the derived value is no longer needed.
 
 #### Example
 
 ```js
 const toggleValue = reactive(true);
-render(html` <button>${ternary(toggleValue, "ON", "OFF")}</button> `);
+const state = ternary(toggleValue, "ON", "OFF");
+const button = html`<button>${state}</button>`;
+onCleanup(unset, button, state);
+const unmount = render(button);
 setTimeout(() => toggleValue(false), 1e3); // Will re-validate the ternary after 1s
+// Later: unmount(); // runs onCleanup and disposes the ternary subscription
 ```
 
 ### hydro
