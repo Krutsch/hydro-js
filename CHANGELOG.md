@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.10.3 2026-11-09
+
+- fix: initialize the custom element registry for Firefox 159 template parsing
+
 ## 1.10.2 2026-09-25
 
 - fix: preserve scheduled DocumentFragment children in unmount handles

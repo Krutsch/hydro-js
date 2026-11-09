@@ -112,7 +112,11 @@ function defaultParser(DOMString: string): DocumentFragment {
         .lastChild!,
     );
   }
-  return fragmentRange.createContextualFragment(DOMString);
+  const fragment = fragmentRange.createContextualFragment(DOMString);
+  // Firefox 159 leaves template-context nodes without a custom element registry.
+  if (fragment.ownerDocument === document)
+    window.customElements.initialize?.(fragment);
+  return fragment;
 }
 
 const allNodeChanges = new WeakMap<Text | Element, nodeChanges>(); // Each Node starts with one inline change and upgrades only when needed.
@@ -180,7 +184,7 @@ const serverRenderUnmounts = new Set<() => void>();
 // legitimately evaluate the module more than once per realm.
 // Keep VERSION in sync with package.json — the build is a plain `tsc`, so
 // there is no define step to inject it.
-const VERSION = "1.10.2";
+const VERSION = "1.10.3";
 /* c8 ignore start */
 if (!isServerSideCached) {
   const instanceKey = Symbol.for("hydro-js.instance");

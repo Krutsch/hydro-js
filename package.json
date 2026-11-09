@@ -1,6 +1,6 @@
 {
   "name": "hydro-js",
-  "version": "1.10.2",
+  "version": "1.10.3",
   "description": "A lightweight reactive library",
   "type": "module",
   "main": "./dist/library.js",
@@ -49,13 +49,13 @@
     "@types/jsdom": "^30.0.0",
     "@web/test-runner": "^1.0.0",
     "@web/test-runner-playwright": "^1.0.0",
-    "concurrently": "^10.0.5",
+    "concurrently": "^10.0.7",
     "esbuild": "^0.28.2",
-    "happy-dom": "^21.0.1",
-    "jsdom": "^30.0.1",
-    "playwright": "^1.63.0",
-    "playwright-core": "^1.63.0",
-    "serve": "^14.2.6",
+    "happy-dom": "^21.0.4",
+    "jsdom": "^31.0.0",
+    "playwright": "^1.65.0",
+    "playwright-core": "^1.65.0",
+    "serve": "^14.2.7",
     "typescript": "^7.0.2"
   },
   "repository": {

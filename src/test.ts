@@ -313,6 +313,88 @@ export function registerTestSuite(
       });
 
       describe("html", () => {
+        it("upgrades custom elements and preserves reactive attributes across reconnects", () => {
+          let connections = 0;
+          let disconnections = 0;
+          class HtmlComponent extends window.HTMLElement {
+            static observedAttributes = ["value"];
+
+            connectedCallback() {
+              connections++;
+              this.textContent = this.getAttribute("value");
+            }
+
+            disconnectedCallback() {
+              disconnections++;
+            }
+
+            attributeChangedCallback() {
+              if (this.isConnected)
+                this.textContent = this.getAttribute("value");
+            }
+          }
+          window.customElements.define("hydro-html-component", HtmlComponent);
+          const props = reactive({ value: "initial" });
+          const value = props.value;
+          const makeComponent = () =>
+            html`<hydro-html-component value=${value}></hydro-html-component>`;
+          const first = makeComponent() as HTMLElement;
+          const second = makeComponent() as HTMLElement;
+          const nested = html`<div>
+            <hydro-html-component value=${value}></hydro-html-component>
+          </div>` as HTMLElement;
+          const spread = html`<hydro-html-component
+            ${props}
+          ></hydro-html-component>` as HTMLElement;
+          const row = html`<tr><td>
+            <hydro-html-component value=${value}></hydro-html-component>
+          </td></tr>` as HTMLTableRowElement;
+          const unmountFirst = render(first);
+          const unmountSecond = render(second);
+          const unmountNested = render(nested);
+          const unmountSpread = render(spread);
+          const unmountRow = render(row);
+
+          try {
+            const child = nested.firstElementChild!;
+            const components = [
+              first,
+              second,
+              child,
+              spread,
+              row.querySelector("hydro-html-component")!,
+            ];
+            const initialized = components.every(
+              (component) =>
+                component instanceof HtmlComponent &&
+                component.textContent === "initial",
+            );
+            value.setter("updated");
+            const updated = components.every(
+              (component) => component.textContent === "updated",
+            );
+            first.remove();
+            document.body.append(first);
+            value.setter("reconnected");
+            return (
+              initialized &&
+              updated &&
+              components.every(
+                (component) => component.textContent === "reconnected",
+              ) &&
+              connections === 6 &&
+              disconnections === 1
+            );
+          } finally {
+            unmountFirst();
+            unmountSecond();
+            unmountNested();
+            unmountSpread();
+            unmountRow();
+            unset(props);
+          }
+        });
+
         it("parses table rows without a table wrapper", () => {
           let clicked = false;
           const row = html`<tr>
